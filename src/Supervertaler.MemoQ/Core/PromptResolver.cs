@@ -12,9 +12,9 @@ namespace Supervertaler.MemoQ.Core
     ///
     /// The settings store a prompt's <em>relative path</em>, not its text. That is
     /// the whole point of pointing at the shared library rather than copying out
-    /// of it: edit a prompt in the Trados plugin, in Workbench, or in a text
-    /// editor, and memoQ picks up the change on the next segment. A copy would
-    /// have gone stale the first time you improved it somewhere else.
+    /// of it: edit a prompt in the Trados plugin or in a text editor and memoQ
+    /// picks up the change on the next segment. A copy would have gone stale the
+    /// first time you improved it somewhere else.
     ///
     /// Falls back to the inline instructions whenever the library has nothing to
     /// offer — no prompt selected, the file deleted, the shared folder missing.
