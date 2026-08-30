@@ -134,7 +134,7 @@ namespace Supervertaler.MemoQ
         /// without breaking existing projects, whereas the Core constants are
         /// shared with the Trados plugin.
         /// </summary>
-        private static string MapProvider(string provider)
+        internal static string MapProviderForCore(string provider)
         {
             switch (provider)
             {
@@ -149,7 +149,7 @@ namespace Supervertaler.MemoQ
         /// register and the recurring terms of a document; small enough that a
         /// 2,000-segment pre-translate does not turn every request into an essay.
         /// </summary>
-        private const int MaxRecalledPairs = 5;
+        internal const int MaxRecalledPairs = 5;
 
         public static async Task<TranslationResult> TranslateAsync(
             TranslationBundle bundle,
@@ -209,7 +209,7 @@ namespace Supervertaler.MemoQ
             // provider handling, model catalogue, pricing and usage accounting,
             // rather than the ~250-line stub this replaces.
             using (var client = new global::Supervertaler.Core.LlmClient(
-                       MapProvider(general.Provider),
+                       MapProviderForCore(general.Provider),
                        general.Model,
                        apiKey,
                        string.IsNullOrWhiteSpace(general.Endpoint) ? null : general.Endpoint.Trim()))

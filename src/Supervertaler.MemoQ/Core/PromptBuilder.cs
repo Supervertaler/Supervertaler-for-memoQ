@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Text;
+using MemoQ.Addins.Common.DataStructures;
 using MemoQ.MTInterfaces;
 using Supervertaler.MemoQ.Settings;
 
@@ -80,6 +81,37 @@ namespace Supervertaler.MemoQ.Core
             sb.AppendLine(TagBridge.ToTaggedText(bundle.Source));
 
             return new BuiltPrompt { System = system, User = sb.ToString() };
+        }
+
+        /// <summary>
+        /// The system half of a request, without a source segment.
+        ///
+        /// A batch puts every segment in the user message, so the context —
+        /// project metadata, recalled pairs, terminology — belongs in the system
+        /// prompt where it applies to all of them at once. Same sections, same
+        /// order, so a prompt reads the same either way.
+        /// </summary>
+        public static string BuildSystemOnly(
+            SupervertalerGeneralSettings settings,
+            string sourceLangCode,
+            string targetLangCode,
+            MTRequestMetadata metadata,
+            IReadOnlyList<DocumentMemory.Pair> recalled,
+            IReadOnlyList<TermIndex.Match> ownTerms,
+            string instructions)
+        {
+            var built = Build(new TranslationBundle { Source = SegmentBuilder.CreateFromString(" ") },
+                settings, sourceLangCode, targetLangCode, metadata, recalled, ownTerms, instructions);
+
+            // Build appends a "Source segment:" trailer; a batch supplies its own
+            // segments, so drop it.
+            var user = built.User ?? string.Empty;
+            var cut = user.LastIndexOf("Source segment:", StringComparison.Ordinal);
+            if (cut >= 0) user = user.Substring(0, cut).TrimEnd();
+
+            return string.IsNullOrWhiteSpace(user)
+                ? built.System
+                : built.System + Environment.NewLine + Environment.NewLine + user;
         }
 
         // ---- context sections -------------------------------------------------

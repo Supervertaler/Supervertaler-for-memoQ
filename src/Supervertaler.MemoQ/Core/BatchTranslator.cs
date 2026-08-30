@@ -1,0 +1,200 @@
+using System;
+using System.Collections.Generic;
+using System.Linq;
+using System.Threading;
+using System.Threading.Tasks;
+using MemoQ.Addins.Common.DataStructures;
+using MemoQ.MTInterfaces;
+using Supervertaler.Core;
+
+namespace Supervertaler.MemoQ.Core
+{
+    /// <summary>
+    /// Translates several segments in one request, using the same numbered
+    /// request format the Trados plugin uses.
+    ///
+    /// The format is not an implementation detail — it is a contract with the
+    /// prompt library. Prompts written for batch translation tell the model
+    /// things like "segment numbers match the [SEGMENT XXXX] numbers in this
+    /// batch"; against a one-segment-at-a-time request those instructions point
+    /// at nothing, and the model quietly ignores the better half of a carefully
+    /// tuned prompt. In a real library, 15 of 17 translate prompts were written
+    /// that way.
+    ///
+    /// So both the request builder and the response parser come from
+    /// <see cref="TranslationPrompt"/> in Supervertaler.Core rather than being
+    /// written again here. One format, one parser, both plugins.
+    ///
+    /// <para>Batching only applies to the array overload memoQ uses for
+    /// Pre-translate. Interactive lookup is one segment by definition and stays on
+    /// the single-segment path.</para>
+    /// </summary>
+    internal static class BatchTranslator
+    {
+        /// <summary>
+        /// Translates an array of segments, in chunks.
+        ///
+        /// A failed chunk falls back to translating its segments one at a time
+        /// rather than failing them all: a batch can fail for reasons that have
+        /// nothing to do with an individual segment — a truncated reply, a
+        /// miscounted response — and losing twenty good segments to one bad reply
+        /// is not a trade a translator would accept.
+        /// </summary>
+        public static async Task<TranslationResult[]> TranslateAsync(
+            Segment[] segments,
+            EngineContext context,
+            Func<Segment, CancellationToken, Task<TranslationResult>> translateOne,
+            CancellationToken cancellationToken)
+        {
+            var results = new TranslationResult[segments.Length];
+            var batchSize = Math.Max(1, Math.Min(100, context.General.BatchSize));
+
+            // Empty segments never reach the model; they are filled in directly so
+            // the numbering the model sees has no gaps in it.
+            var pending = new List<int>();
+            for (var i = 0; i < segments.Length; i++)
+            {
+                if (segments[i] == null || segments[i].IsEmptyText)
+                    results[i] = new TranslationResult { Translation = Segment.Empty, Confidence = 0 };
+                else
+                    pending.Add(i);
+            }
+
+            if (pending.Count == 0) return results;
+
+            if (batchSize == 1 || pending.Count == 1)
+            {
+                foreach (var i in pending)
+                    results[i] = await translateOne(segments[i], cancellationToken).ConfigureAwait(false);
+                return results;
+            }
+
+            for (var offset = 0; offset < pending.Count; offset += batchSize)
+            {
+                cancellationToken.ThrowIfCancellationRequested();
+
+                var chunk = pending.Skip(offset).Take(batchSize).ToList();
+
+                try
+                {
+                    var translated = await TranslateChunkAsync(
+                        chunk.Select(i => segments[i]).ToList(), context, cancellationToken)
+                        .ConfigureAwait(false);
+
+                    for (var k = 0; k < chunk.Count; k++) results[chunk[k]] = translated[k];
+                }
+                catch (OperationCanceledException)
+                {
+                    throw;
+                }
+                catch (Exception ex)
+                {
+                    PluginLog.Write($"Batch of {chunk.Count} failed; retrying them individually", ex);
+
+                    foreach (var i in chunk)
+                    {
+                        try
+                        {
+                            results[i] = await translateOne(segments[i], cancellationToken).ConfigureAwait(false);
+                        }
+                        catch (Exception single)
+                        {
+                            results[i] = new TranslationResult { Exception = single };
+                        }
+                    }
+                }
+            }
+
+            return results;
+        }
+
+        private static async Task<TranslationResult[]> TranslateChunkAsync(
+            List<Segment> chunk,
+            EngineContext context,
+            CancellationToken cancellationToken)
+        {
+            var general = context.General;
+
+            // Numbering is 1-based and local to the request, which is what
+            // BuildBatchUserPrompt and ParseBatchResponse agree on.
+            var inputs = chunk
+                .Select((s, i) => new BatchSegmentInput
+                {
+                    Number = i + 1,
+                    SourceText = TagBridge.ToTaggedText(s)
+                })
+                .ToList();
+
+            var userPrompt = TranslationPrompt.BuildBatchUserPrompt(inputs);
+
+            // Context is gathered once for the whole chunk. Terminology is the
+            // union of every segment's matches; recalled pairs are keyed on the
+            // chunk's text so the examples suit what is actually being translated.
+            var joined = string.Join(" ", chunk.Select(s => s.PlainText));
+            var ownTerms = general.UseTerminologyContext
+                ? TermIndex.Find(SharedSettings.GlossaryPath, joined)
+                : null;
+
+            var recalled = general.UseDocumentContext
+                ? DocumentMemory.GetRelevant(context.MemoryKey, chunk[0], SessionRunner.MaxRecalledPairs)
+                : null;
+
+            var instructions = PromptResolver.Resolve(general.PromptPath, general.SystemPrompt);
+
+            var system = PromptBuilder.BuildSystemOnly(
+                general, context.SourceLangCode, context.TargetLangCode,
+                context.LastMetadata, recalled, ownTerms, instructions);
+
+            var apiKey = context.Settings.SecureSettings?.ApiKey;
+            var cacheKey = TranslationCache.Key(
+                general.Provider, general.Model, general.Endpoint, system, userPrompt);
+
+            string raw;
+            if (TranslationCache.TryGet(cacheKey, out var cached))
+            {
+                raw = cached;
+                PluginLog.Write($"batch of {chunk.Count}: served from cache");
+            }
+            else
+            {
+                using (var client = new LlmClient(
+                           SessionRunner.MapProviderForCore(general.Provider),
+                           general.Model,
+                           apiKey,
+                           string.IsNullOrWhiteSpace(general.Endpoint) ? null : general.Endpoint.Trim()))
+                {
+                    raw = await client.SendPromptAsync(userPrompt, system, cancellationToken: cancellationToken)
+                        .ConfigureAwait(false);
+                }
+
+                TranslationCache.Set(cacheKey, raw);
+            }
+
+            var parsed = TranslationPrompt.ParseBatchResponse(raw, chunk.Count);
+
+            PluginLog.Write($"batch: {chunk.Count} segment(s) sent, {parsed.Count} returned | "
+                + $"terms: {ownTerms?.Count ?? 0} | recall: {recalled?.Count ?? 0}");
+
+            // A short reply is the failure worth catching: silently leaving the
+            // tail untranslated would look like the model declining to translate
+            // those segments rather than like a broken response.
+            if (parsed.Count < chunk.Count)
+                throw new InvalidOperationException(
+                    $"The model returned {parsed.Count} translations for {chunk.Count} segments.");
+
+            var results = new TranslationResult[chunk.Count];
+            for (var i = 0; i < chunk.Count; i++)
+            {
+                var match = parsed.FirstOrDefault(p => p.Number == i + 1);
+
+                results[i] = new TranslationResult
+                {
+                    Translation = TagBridge.FromTaggedText(match?.Translation?.Trim(), chunk[i]),
+                    Info = general.Provider + " / " + general.Model
+                };
+            }
+
+            return results;
+        }
+    }
+}

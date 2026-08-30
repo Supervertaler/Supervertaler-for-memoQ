@@ -65,15 +65,33 @@ namespace Supervertaler.MemoQ
 
         // ---- shared -----------------------------------------------------------
 
+        /// <summary>
+        /// The array overload, which memoQ uses for Pre-translate. Segments go to
+        /// the model in batches so that prompts written for batch translation —
+        /// the ones that refer to segment numbers — are given the shape they
+        /// expect. Set Parallel requests' companion BatchSize to 1 to send them
+        /// one at a time.
+        /// </summary>
         private TranslationResult[] TranslateMany(Segment[] segs)
         {
             if (segs == null) return new TranslationResult[0];
 
-            var results = new TranslationResult[segs.Length];
-            for (var i = 0; i < segs.Length; i++)
-                results[i] = TranslateOne(segs[i]);
+            try
+            {
+                return Task.Run(() => BatchTranslator.TranslateAsync(
+                        segs, _context,
+                        (segment, ct) => Task.FromResult(TranslateOne(segment)),
+                        CancellationToken.None))
+                    .GetAwaiter().GetResult();
+            }
+            catch (Exception ex)
+            {
+                PluginLog.Write("Batch translation failed entirely; falling back to one at a time", ex);
 
-            return results;
+                var results = new TranslationResult[segs.Length];
+                for (var i = 0; i < segs.Length; i++) results[i] = TranslateOne(segs[i]);
+                return results;
+            }
         }
 
         private TranslationResult TranslateOne(Segment source)

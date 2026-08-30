@@ -32,6 +32,7 @@ namespace Supervertaler.MemoQ.Settings
         private readonly ComboBox _promptPick = new ComboBox();
         private readonly TextBox _systemPrompt = new TextBox();
         private readonly NumericUpDown _maxParallel = new NumericUpDown();
+        private readonly NumericUpDown _batchSize = new NumericUpDown();
         private readonly CheckBox _useTerminology = new CheckBox();
         private readonly CheckBox _useDocumentContext = new CheckBox();
         private readonly Button _test = new Button();
@@ -57,7 +58,7 @@ namespace Supervertaler.MemoQ.Settings
             MinimizeBox = false;
             StartPosition = FormStartPosition.CenterParent;
             AutoScaleMode = AutoScaleMode.Font;
-            ClientSize = new Size(660, 574);
+            ClientSize = new Size(660, 608);
 
             // The ? in the title bar. This dialog is most of the plugin's UI, so
             // it is also the only place the documentation can be reached from
@@ -113,6 +114,23 @@ namespace Supervertaler.MemoQ.Settings
             _maxParallel.Left = fieldX; _maxParallel.Top = y; _maxParallel.Width = 70;
             _maxParallel.Minimum = 1; _maxParallel.Maximum = 16;
             Controls.Add(_maxParallel);
+            y += rowH;
+
+            // Segments per request during Pre-translate. Matters beyond cost:
+            // prompts written for batch translation refer to segment numbers, and
+            // only get them when several segments travel together.
+            Caption("Segments per request", y);
+            _batchSize.Left = fieldX; _batchSize.Top = y; _batchSize.Width = 70;
+            _batchSize.Minimum = 1; _batchSize.Maximum = 100;
+            Controls.Add(_batchSize);
+
+            var batchHint = new Label
+            {
+                Text = "Pre-translate only. 1 sends each segment on its own.",
+                Left = fieldX + 82, Top = y + 3, AutoSize = true,
+                ForeColor = SystemColors.GrayText
+            };
+            Controls.Add(batchHint);
             y += rowH;
 
             _useTerminology.Text = "Send memoQ's termbase hits and forbidden terms to the model";
@@ -245,6 +263,7 @@ namespace Supervertaler.MemoQ.Settings
             _systemPrompt.Text = _inlineInstructions;
             PopulatePrompts(g.PromptPath);
             _maxParallel.Value = Math.Max(1, Math.Min(16, g.MaxParallelRequests));
+            _batchSize.Value = Math.Max(1, Math.Min(100, g.BatchSize));
             _useTerminology.Checked = g.UseTerminologyContext;
             _useDocumentContext.Checked = g.UseDocumentContext;
         }
@@ -262,7 +281,7 @@ namespace Supervertaler.MemoQ.Settings
                     MaxParallelRequests = (int)_maxParallel.Value,
                     UseTerminologyContext = _useTerminology.Checked,
                     UseDocumentContext = _useDocumentContext.Checked,
-                    BatchSize = Result?.GeneralSettings?.BatchSize ?? 20
+                    BatchSize = (int)_batchSize.Value
                 },
                 new SupervertalerSecureSettings
                 {
