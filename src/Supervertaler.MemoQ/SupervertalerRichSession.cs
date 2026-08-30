@@ -128,6 +128,23 @@ namespace Supervertaler.MemoQ
     internal static class SessionRunner
     {
         /// <summary>
+        /// Maps this plugin's provider names onto Supervertaler.Core's provider
+        /// constants. The two lists are deliberately separate: the settings value
+        /// is persisted in memoQ's MT settings resource and cannot be renamed
+        /// without breaking existing projects, whereas the Core constants are
+        /// shared with the Trados plugin.
+        /// </summary>
+        private static string MapProvider(string provider)
+        {
+            switch (provider)
+            {
+                case LlmProviders.OpenAI: return global::Supervertaler.Core.LlmModels.ProviderOpenAi;
+                case LlmProviders.Google: return global::Supervertaler.Core.LlmModels.ProviderGemini;
+                default: return global::Supervertaler.Core.LlmModels.ProviderClaude;
+            }
+        }
+
+        /// <summary>
         /// How many confirmed pairs to show the model. Enough to establish a
         /// register and the recurring terms of a document; small enough that a
         /// 2,000-segment pre-translate does not turn every request into an essay.
@@ -183,9 +200,19 @@ namespace Supervertaler.MemoQ
                 };
             }
 
-            using (var client = new LlmClient(general, apiKey))
+            // Supervertaler.Core's client, shared with the Trados plugin: the same
+            // provider handling, model catalogue, pricing and usage accounting,
+            // rather than the ~250-line stub this replaces.
+            using (var client = new global::Supervertaler.Core.LlmClient(
+                       MapProvider(general.Provider),
+                       general.Model,
+                       apiKey,
+                       string.IsNullOrWhiteSpace(general.Endpoint) ? null : general.Endpoint.Trim()))
             {
-                var raw = await client.TranslateAsync(prompt, cancellationToken).ConfigureAwait(false);
+                var raw = await client.SendPromptAsync(
+                    prompt.User,
+                    prompt.System,
+                    cancellationToken: cancellationToken).ConfigureAwait(false);
 
                 TranslationCache.Set(cacheKey, raw?.Trim());
 

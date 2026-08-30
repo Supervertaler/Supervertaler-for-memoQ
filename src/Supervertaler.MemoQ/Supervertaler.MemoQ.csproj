@@ -70,4 +70,8 @@
     </EmbeddedResource>
   </ItemGroup>
 
+  <!-- Shared Supervertaler code, compiled in from the core/ submodule rather than
+       referenced as a DLL. See core/README.md for why. -->
+  <Import Project="..\..\core\Supervertaler.Core.props" />
+
 </Project>

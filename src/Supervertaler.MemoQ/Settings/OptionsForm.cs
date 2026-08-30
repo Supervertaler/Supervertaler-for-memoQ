@@ -164,30 +164,45 @@ namespace Supervertaler.MemoQ.Settings
             forget.Click += OnForgetClicked;
             Controls.Add(forget);
 
+            // OK / Cancel / Help, in that order: the same button row memoQ's own
+            // dialogs use, so Help is where a memoQ user looks for it.
+            //
+            // Laid out right-to-left from the form edge rather than with three
+            // hardcoded offsets. Adding Help pushed OK 92px left into the
+            // stored-context label, whose transparent box then clipped the "O" —
+            // deriving both from the same numbers stops that recurring.
+            const int btnW = 85;
+            const int btnH = 27;
+            const int btnGap = 7;
+
+            var rowTop = ClientSize.Height - 40;
+            var helpLeft = ClientSize.Width - labelX - btnW;
+            var cancelLeft = helpLeft - btnW - btnGap;
+            var okLeft = cancelLeft - btnW - btnGap;
+
             _storedInfo.Left = labelX + 158; _storedInfo.Top = ClientSize.Height - 34;
-            _storedInfo.Width = 250; _storedInfo.Height = 20;
+            _storedInfo.Width = okLeft - _storedInfo.Left - 12; _storedInfo.Height = 20;
             _storedInfo.ForeColor = SystemColors.GrayText;
+            _storedInfo.AutoEllipsis = true;
             Controls.Add(_storedInfo);
             UpdateStoredInfo();
 
-            // OK / Cancel / Help, in that order: the same button row memoQ's own
-            // dialogs use, so the Help button is where a memoQ user looks for it.
             var ok = new Button
             {
                 Text = "OK", DialogResult = DialogResult.OK,
-                Left = ClientSize.Width - 282, Top = ClientSize.Height - 40, Width = 85, Height = 27
+                Left = okLeft, Top = rowTop, Width = btnW, Height = btnH
             };
             ok.Click += OnOkClicked;
 
             var cancel = new Button
             {
                 Text = "Cancel", DialogResult = DialogResult.Cancel,
-                Left = ClientSize.Width - 190, Top = ClientSize.Height - 40, Width = 85, Height = 27
+                Left = cancelLeft, Top = rowTop, Width = btnW, Height = btnH
             };
 
             var help = HelpLinks.CreateButton(HelpLinks.GettingStarted);
-            help.Left = ClientSize.Width - 98;
-            help.Top = ClientSize.Height - 40;
+            help.Left = helpLeft;
+            help.Top = rowTop;
 
             Controls.Add(ok);
             Controls.Add(cancel);
