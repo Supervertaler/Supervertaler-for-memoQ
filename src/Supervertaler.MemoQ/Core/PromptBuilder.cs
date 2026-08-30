@@ -42,9 +42,13 @@ namespace Supervertaler.MemoQ.Core
             string targetLangCode,
             MTRequestMetadata metadata = null,
             IReadOnlyList<DocumentMemory.Pair> recalled = null,
-            IReadOnlyList<TermIndex.Match> ownTerms = null)
+            IReadOnlyList<TermIndex.Match> ownTerms = null,
+            string instructions = null)
         {
-            var system = (settings.SystemPrompt ?? SupervertalerGeneralSettings.DefaultSystemPrompt)
+            // `instructions` is the resolved prompt — a library prompt when one is
+            // selected, otherwise the settings' own text. The settings fallback
+            // keeps the Test-connection path and any direct caller working.
+            var system = (instructions ?? settings.SystemPrompt ?? SupervertalerGeneralSettings.DefaultSystemPrompt)
                 .Replace("{SOURCE_LANG}", DescribeLanguage(sourceLangCode))
                 .Replace("{TARGET_LANG}", DescribeLanguage(targetLangCode));
 

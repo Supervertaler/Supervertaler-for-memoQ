@@ -176,9 +176,14 @@ namespace Supervertaler.MemoQ
                 ? TermIndex.Find(SharedSettings.GlossaryPath, bundle.Source.PlainText)
                 : null;
 
+            // A selected library prompt wins over the typed instructions; the
+            // typed ones are the fallback when nothing is selected or the prompt
+            // has gone missing.
+            var instructions = PromptResolver.Resolve(general.PromptPath, general.SystemPrompt);
+
             var prompt = PromptBuilder.Build(
                 bundle, general, context.SourceLangCode, context.TargetLangCode,
-                context.LastMetadata, recalled, ownTerms);
+                context.LastMetadata, recalled, ownTerms, instructions);
 
             // memoQ asks for the same segment more than once — twice within two
             // seconds merely for landing on it — so an identical prompt is served

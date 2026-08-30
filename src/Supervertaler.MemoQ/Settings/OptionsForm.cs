@@ -1,5 +1,6 @@
 using System;
 using System.Drawing;
+using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
 using System.Windows.Forms;
@@ -28,6 +29,7 @@ namespace Supervertaler.MemoQ.Settings
         private readonly TextBox _model = new TextBox();
         private readonly TextBox _endpoint = new TextBox();
         private readonly TextBox _apiKey = new TextBox();
+        private readonly ComboBox _promptPick = new ComboBox();
         private readonly TextBox _systemPrompt = new TextBox();
         private readonly NumericUpDown _maxParallel = new NumericUpDown();
         private readonly CheckBox _useTerminology = new CheckBox();
@@ -55,7 +57,7 @@ namespace Supervertaler.MemoQ.Settings
             MinimizeBox = false;
             StartPosition = FormStartPosition.CenterParent;
             AutoScaleMode = AutoScaleMode.Font;
-            ClientSize = new Size(660, 540);
+            ClientSize = new Size(660, 574);
 
             // The ? in the title bar. This dialog is most of the plugin's UI, so
             // it is also the only place the documentation can be reached from
@@ -122,6 +124,16 @@ namespace Supervertaler.MemoQ.Settings
             _useDocumentContext.Left = fieldX; _useDocumentContext.Top = y; _useDocumentContext.AutoSize = true;
             Controls.Add(_useDocumentContext);
             y += 30;
+
+            // The shared prompt library, the same folder the Trados plugin and
+            // Workbench read. Selecting one stores its path, not its text, so a
+            // prompt edited anywhere takes effect here on the next segment.
+            Caption("Prompt", y);
+            _promptPick.Left = fieldX; _promptPick.Top = y; _promptPick.Width = fieldW;
+            _promptPick.DropDownStyle = ComboBoxStyle.DropDownList;
+            _promptPick.SelectedIndexChanged += OnPromptPicked;
+            Controls.Add(_promptPick);
+            y += rowH;
 
             Caption("Instructions", y);
             _systemPrompt.Left = fieldX; _systemPrompt.Top = y; _systemPrompt.Width = fieldW;
@@ -229,7 +241,9 @@ namespace Supervertaler.MemoQ.Settings
             var prompt = string.IsNullOrWhiteSpace(g.SystemPrompt)
                 ? SupervertalerGeneralSettings.DefaultSystemPrompt
                 : g.SystemPrompt;
-            _systemPrompt.Text = prompt.Replace("\r\n", "\n").Replace("\n", "\r\n");
+            _inlineInstructions = NormaliseForDisplay(prompt);
+            _systemPrompt.Text = _inlineInstructions;
+            PopulatePrompts(g.PromptPath);
             _maxParallel.Value = Math.Max(1, Math.Min(16, g.MaxParallelRequests));
             _useTerminology.Checked = g.UseTerminologyContext;
             _useDocumentContext.Checked = g.UseDocumentContext;
@@ -243,7 +257,8 @@ namespace Supervertaler.MemoQ.Settings
                     Provider = (_provider.SelectedItem as string) ?? LlmProviders.Anthropic,
                     Model = _model.Text.Trim(),
                     Endpoint = _endpoint.Text.Trim(),
-                    SystemPrompt = _systemPrompt.Text,
+                    PromptPath = SelectedPromptPath(),
+                    SystemPrompt = _systemPrompt.ReadOnly ? _inlineInstructions : _systemPrompt.Text,
                     MaxParallelRequests = (int)_maxParallel.Value,
                     UseTerminologyContext = _useTerminology.Checked,
                     UseDocumentContext = _useDocumentContext.Checked,
@@ -291,6 +306,99 @@ namespace Supervertaler.MemoQ.Settings
             var removed = DocumentMemory.ForgetEverything();
             Core.PluginLog.Write($"User cleared stored document context ({removed} file(s))");
             UpdateStoredInfo();
+        }
+
+        /// <summary>
+        /// Wraps a library prompt for the combo. The path is the identity; the
+        /// display text is category plus name, since two folders may hold prompts
+        /// with the same name.
+        /// </summary>
+        private sealed class PromptChoice
+        {
+            public string Path;
+            public string Display;
+            public string Content;
+            public override string ToString() => Display;
+        }
+
+        private void PopulatePrompts(string selectedPath)
+        {
+            _promptPick.Items.Clear();
+
+            // First entry is always the escape hatch: whatever is typed below.
+            _promptPick.Items.Add(new PromptChoice
+            {
+                Path = PromptResolver.InlineInstructions,
+                Display = "(use the instructions below)"
+            });
+
+            foreach (var p in PromptResolver.Available())
+            {
+                var category = string.IsNullOrWhiteSpace(p.Category) ? "" : p.Category + "  —  ";
+                _promptPick.Items.Add(new PromptChoice
+                {
+                    Path = p.RelativePath,
+                    Display = category + p.Name,
+                    Content = p.Content
+                });
+            }
+
+            var match = _promptPick.Items.Cast<PromptChoice>()
+                .FirstOrDefault(c => string.Equals(c.Path, selectedPath, StringComparison.OrdinalIgnoreCase));
+
+            _promptPick.SelectedItem = match ?? _promptPick.Items[0];
+            UpdatePromptDisplay();
+        }
+
+        private string SelectedPromptPath()
+        {
+            return (_promptPick.SelectedItem as PromptChoice)?.Path ?? PromptResolver.InlineInstructions;
+        }
+
+        private void OnPromptPicked(object sender, EventArgs e)
+        {
+            UpdatePromptDisplay();
+        }
+
+        /// <summary>
+        /// Shows the selected prompt's text read-only, or hands the box back when
+        /// the inline instructions are chosen.
+        ///
+        /// Read-only on purpose: the library file is the original, and letting
+        /// someone edit a copy here that silently does nothing would be worse than
+        /// not offering it. Editing happens where the prompt lives.
+        /// </summary>
+        private void UpdatePromptDisplay()
+        {
+            var choice = _promptPick.SelectedItem as PromptChoice;
+
+            if (choice == null || string.IsNullOrEmpty(choice.Path))
+            {
+                _systemPrompt.ReadOnly = false;
+                _systemPrompt.BackColor = SystemColors.Window;
+                _systemPrompt.Text = _inlineInstructions;
+                return;
+            }
+
+            // Remember what was typed, so switching back does not lose it.
+            if (!_systemPrompt.ReadOnly) _inlineInstructions = _systemPrompt.Text;
+
+            _systemPrompt.ReadOnly = true;
+            _systemPrompt.BackColor = SystemColors.Control;
+            _systemPrompt.Text = NormaliseForDisplay(choice.Content);
+        }
+
+        private string _inlineInstructions = "";
+
+        /// <summary>
+        /// CRLF for the Instructions box. A multiline TextBox does not treat a
+        /// bare LF as a line break, and prompt files — Markdown written on any
+        /// platform, plus settings that XML has normalised — routinely arrive
+        /// LF-only, which renders as one run-on paragraph.
+        /// </summary>
+        private static string NormaliseForDisplay(string text)
+        {
+            return (text ?? string.Empty).Replace("\r\n", "\n").Replace("\n", "\r\n");
         }
 
         private void OnOkClicked(object sender, EventArgs e)

@@ -20,9 +20,19 @@ namespace Supervertaler.MemoQ.Settings
         public string Endpoint { get; set; } = string.Empty;
 
         /// <summary>
-        /// The translation instruction. memoQ supplies the language pair, so the
-        /// prompt does not name languages — <see cref="Core.PromptBuilder"/>
-        /// substitutes them per request.
+        /// Relative path of a prompt in the shared Supervertaler library, or empty
+        /// to use <see cref="SystemPrompt"/>.
+        ///
+        /// A path rather than the text: the library is the source of truth, so a
+        /// prompt improved in the Trados plugin or in a text editor takes effect
+        /// here on the next segment. See <see cref="Core.PromptResolver"/>.
+        /// </summary>
+        public string PromptPath { get; set; } = "";
+
+        /// <summary>
+        /// The translation instruction used when no library prompt is selected.
+        /// memoQ supplies the language pair, so it does not name languages —
+        /// <see cref="Core.PromptBuilder"/> substitutes them per request.
         /// </summary>
         public string SystemPrompt { get; set; } = DefaultSystemPrompt;
 
