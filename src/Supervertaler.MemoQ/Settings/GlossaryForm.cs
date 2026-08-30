@@ -28,6 +28,10 @@ namespace Supervertaler.MemoQ.Settings
             AutoScaleMode = AutoScaleMode.Font;
             ClientSize = new Size(620, 250);
 
+            // Straight to the file format: that is what someone opening this
+            // dialog needs, and getting the tabs wrong is the usual first mistake.
+            HelpLinks.Attach(this, HelpLinks.GlossaryFormat);
+
             Controls.Add(new Label
             {
                 Text = "Glossary file", Left = 14, Top = 20, Width = 110

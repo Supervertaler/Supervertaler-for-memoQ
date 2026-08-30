@@ -57,6 +57,11 @@ namespace Supervertaler.MemoQ.Settings
             AutoScaleMode = AutoScaleMode.Font;
             ClientSize = new Size(660, 540);
 
+            // The ? in the title bar. This dialog is most of the plugin's UI, so
+            // it is also the only place the documentation can be reached from
+            // inside memoQ.
+            HelpLinks.Attach(this, HelpLinks.GettingStarted);
+
             var y = 14;
             const int labelX = 14;
             const int fieldX = 150;
@@ -195,9 +200,14 @@ namespace Supervertaler.MemoQ.Settings
             _model.Text = g.Model;
             _endpoint.Text = g.Endpoint;
             _apiKey.Text = s.ApiKey;
-            _systemPrompt.Text = string.IsNullOrWhiteSpace(g.SystemPrompt)
+            // Normalise to CRLF for display. A multiline TextBox does not treat a
+            // bare LF as a line break, and the stored prompt reliably has them:
+            // XML normalises CRLF to LF on read, so however the settings were
+            // saved they come back LF-only and the box shows one run-on paragraph.
+            var prompt = string.IsNullOrWhiteSpace(g.SystemPrompt)
                 ? SupervertalerGeneralSettings.DefaultSystemPrompt
                 : g.SystemPrompt;
+            _systemPrompt.Text = prompt.Replace("\r\n", "\n").Replace("\n", "\r\n");
             _maxParallel.Value = Math.Max(1, Math.Min(16, g.MaxParallelRequests));
             _useTerminology.Checked = g.UseTerminologyContext;
             _useDocumentContext.Checked = g.UseDocumentContext;
