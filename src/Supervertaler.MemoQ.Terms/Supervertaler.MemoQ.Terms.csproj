@@ -1,0 +1,56 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <!--
+    The terminology provider, in its own assembly because memoQ requires it.
+
+    ModuleManager.tryGetModuleAttribute returns a SINGLE ModuleAttribute and
+    loadAssemblyModules loads exactly one module per assembly — so despite
+    ModuleAttribute being AllowMultiple, a second [assembly: Module(...)] in the
+    MT assembly is silently ignored. One director per DLL is the real rule.
+
+    This assembly therefore holds only the TB director and references the MT
+    assembly for everything else. Both DLLs sit in memoQ's Addins folder and are
+    loaded into the same AppDomain, so TermIndex's statics are genuinely shared
+    between them — which is the whole point: the glossary the terminology pane
+    shows is the same one that reaches the AI prompt.
+  -->
+
+  <PropertyGroup>
+    <TargetFramework>net48</TargetFramework>
+    <PlatformTarget>x64</PlatformTarget>
+    <UseWindowsForms>true</UseWindowsForms>
+    <RootNamespace>Supervertaler.MemoQ</RootNamespace>
+    <AssemblyName>Supervertaler.MemoQ.Terms</AssemblyName>
+    <LangVersion>latest</LangVersion>
+    <AppendTargetFrameworkToOutputPath>false</AppendTargetFrameworkToOutputPath>
+    <Authors>Michael Beijer</Authors>
+    <Company>Supervertaler</Company>
+    <Description>Supervertaler for memoQ — terminology provider</Description>
+    <Copyright>Copyright (c) 2026 Michael Beijer</Copyright>
+    <Version>0.1.0</Version>
+  </PropertyGroup>
+
+  <PropertyGroup>
+    <MemoQPath Condition="'$(MemoQPath)' == ''">C:\Program Files\memoQ\memoQ-12</MemoQPath>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <Reference Include="MemoQ.TBInterfaces">
+      <HintPath>$(MemoQPath)\MemoQ.TBInterfaces.dll</HintPath>
+      <Private>false</Private>
+    </Reference>
+    <Reference Include="MemoQ.Addins.Common">
+      <HintPath>$(MemoQPath)\MemoQ.Addins.Common.dll</HintPath>
+      <Private>false</Private>
+    </Reference>
+  </ItemGroup>
+
+  <!-- Private=false: the MT assembly is deployed to Addins in its own right, and
+       a second copy alongside would give the CLR two candidates for one identity. -->
+  <ItemGroup>
+    <ProjectReference Include="..\Supervertaler.MemoQ\Supervertaler.MemoQ.csproj">
+      <Private>false</Private>
+    </ProjectReference>
+  </ItemGroup>
+
+</Project>

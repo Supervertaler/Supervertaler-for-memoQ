@@ -1,0 +1,28 @@
+Microsoft Visual Studio Solution File, Format Version 12.00
+# Visual Studio Version 17
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Supervertaler.MemoQ", "src\Supervertaler.MemoQ\Supervertaler.MemoQ.csproj", "{4789D76C-8C67-5D7B-B85F-2537512B09E9}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Supervertaler.MemoQ.Terms", "src\Supervertaler.MemoQ.Terms\Supervertaler.MemoQ.Terms.csproj", "{993CF4C0-E5AB-5641-9C45-C51305FBEE50}"
+EndProject
+Global
+	GlobalSection(SolutionConfigurationPlatforms) = preSolution
+		Debug|x64 = Debug|x64
+		Release|x64 = Release|x64
+	EndGlobalSection
+	GlobalSection(ProjectConfigurationPlatforms) = postSolution
+		{4789D76C-8C67-5D7B-B85F-2537512B09E9}.Debug|x64.ActiveCfg = Debug|x64
+		{4789D76C-8C67-5D7B-B85F-2537512B09E9}.Debug|x64.Build.0 = Debug|x64
+		{4789D76C-8C67-5D7B-B85F-2537512B09E9}.Release|x64.ActiveCfg = Release|x64
+		{4789D76C-8C67-5D7B-B85F-2537512B09E9}.Release|x64.Build.0 = Release|x64
+		{993CF4C0-E5AB-5641-9C45-C51305FBEE50}.Debug|x64.ActiveCfg = Debug|x64
+		{993CF4C0-E5AB-5641-9C45-C51305FBEE50}.Debug|x64.Build.0 = Debug|x64
+		{993CF4C0-E5AB-5641-9C45-C51305FBEE50}.Release|x64.ActiveCfg = Release|x64
+		{993CF4C0-E5AB-5641-9C45-C51305FBEE50}.Release|x64.Build.0 = Release|x64
+	EndGlobalSection
+	GlobalSection(SolutionProperties) = preSolution
+		HideSolutionNode = FALSE
+	EndGlobalSection
+	GlobalSection(ExtensibilityGlobals) = postSolution
+		SolutionGuid = {709D87E1-77EB-5B79-A7AF-1C8F25D6637F}
+	EndGlobalSection
+EndGlobal

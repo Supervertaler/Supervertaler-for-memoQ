@@ -1,0 +1,18 @@
+# Supervertaler glossary — tab-separated, one term per line.
+#
+# Columns:  source <TAB> target <TAB> [forbidden]
+#
+# A third column containing "forbidden" (or "!") marks a target that must NOT be
+# used. Blank lines and lines starting with # are ignored. The file is re-read
+# automatically whenever you save it, so you can edit it with memoQ open.
+#
+# Terms appear in memoQ's Translation results pane, AND are sent to the AI as
+# required / forbidden terminology.
+
+elektrische module	electric module
+elektrische module	electrical module	forbidden
+montagemantel	mounting sleeve
+koppelmechanisme	coupling mechanism
+ontkoppelen	decouple
+werkwijze	method
+uitvinding	invention

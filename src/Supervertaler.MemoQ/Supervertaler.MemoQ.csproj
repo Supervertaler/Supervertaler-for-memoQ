@@ -1,0 +1,69 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <!-- memoQ 12 is .NET Framework 4.8, x64, WinForms. An add-in is loaded
+         straight into memoQ.exe's AppDomain, so all three must match exactly. -->
+    <TargetFramework>net48</TargetFramework>
+    <PlatformTarget>x64</PlatformTarget>
+    <UseWindowsForms>true</UseWindowsForms>
+    <RootNamespace>Supervertaler.MemoQ</RootNamespace>
+    <AssemblyName>Supervertaler.MemoQ</AssemblyName>
+    <LangVersion>latest</LangVersion>
+    <AppendTargetFrameworkToOutputPath>false</AppendTargetFrameworkToOutputPath>
+    <GenerateAssemblyInfo>true</GenerateAssemblyInfo>
+    <Authors>Michael Beijer</Authors>
+    <Company>Supervertaler</Company>
+    <Description>Supervertaler for memoQ — AI translation engine for memoQ</Description>
+    <Copyright>Copyright (c) 2026 Michael Beijer</Copyright>
+    <Version>0.1.0</Version>
+    <InformationalVersion>0.1.0</InformationalVersion>
+  </PropertyGroup>
+
+  <!--
+    memoQ install directory. Override with /p:MemoQPath=... when memoQ 13 lands
+    (the folder is version-stamped: memoQ-12, memoQ-13, ...). build.sh detects
+    the newest installed version and passes it in.
+  -->
+  <PropertyGroup>
+    <MemoQPath Condition="'$(MemoQPath)' == ''">C:\Program Files\memoQ\memoQ-12</MemoQPath>
+  </PropertyGroup>
+
+  <!--
+    Private=false throughout: every one of these assemblies is already loaded in
+    memoQ.exe's process. Copying our own into the Addins folder would give the
+    CLR two candidates for the same identity, which is exactly the class of bug
+    the Trados plugin hit with SQLite.Interop.dll.
+  -->
+  <ItemGroup>
+    <Reference Include="MemoQ.MTInterfaces">
+      <HintPath>$(MemoQPath)\MemoQ.MTInterfaces.dll</HintPath>
+      <Private>false</Private>
+    </Reference>
+    <!-- Terminology provider SDK: the TB director, so Supervertaler terms show up
+         in memoQ's own terminology pane and can be fed to our own prompts. -->
+    <Reference Include="MemoQ.TBInterfaces">
+      <HintPath>$(MemoQPath)\MemoQ.TBInterfaces.dll</HintPath>
+      <Private>false</Private>
+    </Reference>
+    <Reference Include="MemoQ.Addins.Common">
+      <HintPath>$(MemoQPath)\MemoQ.Addins.Common.dll</HintPath>
+      <Private>false</Private>
+    </Reference>
+    <Reference Include="MemoQ.Languages">
+      <HintPath>$(MemoQPath)\MemoQ.Languages.dll</HintPath>
+      <Private>false</Private>
+    </Reference>
+  </ItemGroup>
+
+  <ItemGroup>
+    <Reference Include="System.Net.Http" />
+    <Reference Include="System.Runtime.Serialization" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <EmbeddedResource Include="Resources\sv-icon.ico">
+      <LogicalName>Supervertaler.MemoQ.Resources.sv-icon.ico</LogicalName>
+    </EmbeddedResource>
+  </ItemGroup>
+
+</Project>
