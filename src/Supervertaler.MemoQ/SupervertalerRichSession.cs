@@ -163,9 +163,31 @@ namespace Supervertaler.MemoQ
                 bundle, general, context.SourceLangCode, context.TargetLangCode,
                 context.LastMetadata, recalled, ownTerms);
 
+            // memoQ asks for the same segment more than once — twice within two
+            // seconds merely for landing on it — so an identical prompt is served
+            // from memory rather than paid for again. Keyed on the whole prompt,
+            // so a segment whose terminology or recalled context has changed still
+            // gets a fresh answer.
+            var cacheKey = TranslationCache.Key(
+                general.Provider, general.Model, general.Endpoint, prompt.System, prompt.User);
+
+            if (TranslationCache.TryGet(cacheKey, out var cached))
+            {
+                PluginLog.Write($"translate: {bundle.Source.PlainText?.Length ?? 0} src chars — "
+                    + $"served from cache (hits {TranslationCache.Hits}, misses {TranslationCache.Misses})");
+
+                return new TranslationResult
+                {
+                    Translation = TagBridge.FromTaggedText(cached, bundle.Source),
+                    Info = general.Provider + " / " + general.Model
+                };
+            }
+
             using (var client = new LlmClient(general, apiKey))
             {
                 var raw = await client.TranslateAsync(prompt, cancellationToken).ConfigureAwait(false);
+
+                TranslationCache.Set(cacheKey, raw?.Trim());
 
                 var translation = TagBridge.FromTaggedText(raw?.Trim(), bundle.Source);
 

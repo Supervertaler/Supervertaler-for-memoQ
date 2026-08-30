@@ -52,8 +52,9 @@ namespace Supervertaler.MemoQ.Settings
             "- Reproduce every inline tag exactly as it appears in the source, in the\r\n" +
             "  equivalent position in the target. Never invent, drop or renumber a tag.\r\n" +
             "- Preserve leading and trailing whitespace.\r\n" +
-            "- If terminology is supplied, use the given target term verbatim.\r\n" +
-            "- If a forbidden term is supplied, do not use it.";
+            "- Supplied terminology is the client's preferred wording: follow it unless it\r\n" +
+            "  is clearly wrong for the sentence at hand.\r\n" +
+            "- Forbidden terms are absolute: never use one, in any form.";
     }
 
     /// <summary>

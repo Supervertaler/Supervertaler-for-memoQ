@@ -214,7 +214,21 @@ namespace Supervertaler.MemoQ.Core
 
             if (terms.Count == 0) return;
 
-            sb.AppendLine("Required terminology (use the target term exactly as given):");
+            // Deliberately "preferred", not "required". A glossary entry can be
+            // correct in general and wrong in a particular sentence: a real patent
+            // termbase renders "applications" as "aanvragen", which is right for a
+            // filing and wrong for "Mashup applications". Told the term was
+            // mandatory, the model dutifully produced "Mashup-aanvragen".
+            //
+            // A human translator treats a termbase as a strong steer they may
+            // override with reason, and the model should too. Forbidden terms are
+            // the opposite and stay absolute — see AppendForbiddenTerms.
+            //
+            // This wording lives here rather than in the user's editable
+            // instructions on purpose: it must hold however they have rewritten
+            // their prompt.
+            sb.AppendLine("Client terminology. Use these renderings unless one is clearly wrong for");
+            sb.AppendLine("this particular sentence — an entry can be right in general and wrong in context:");
             foreach (var t in terms.Distinct()) sb.AppendLine(t);
             sb.AppendLine();
         }
@@ -236,7 +250,8 @@ namespace Supervertaler.MemoQ.Core
 
             if (forbidden.Count == 0) return;
 
-            sb.AppendLine("Forbidden terms (never use these in the translation):");
+            sb.AppendLine("Forbidden terms. These are absolute — never use them, in any form,");
+            sb.AppendLine("even if they seem to fit:");
             foreach (var t in forbidden) sb.AppendLine("- " + t);
             sb.AppendLine();
         }
