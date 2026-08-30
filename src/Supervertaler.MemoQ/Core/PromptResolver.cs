@@ -56,6 +56,7 @@ namespace Supervertaler.MemoQ.Core
                     var library = new global::Supervertaler.Core.PromptLibrary();
                     _cache = library.GetAllPrompts()
                         .Where(p => p != null && !p.IsQuickLauncher)
+                        .Where(IsTranslationPrompt)
                         .Where(p => IsForMemoQ(p.App))
                         .OrderBy(p => p.Category ?? string.Empty, StringComparer.OrdinalIgnoreCase)
                         .ThenBy(p => p.SortOrder)
@@ -73,6 +74,35 @@ namespace Supervertaler.MemoQ.Core
 
                 return _cache;
             }
+        }
+
+        /// <summary>
+        /// Translation prompts only.
+        ///
+        /// The library holds three kinds side by side — Translate, Proofread and
+        /// QuickLauncher — and this dropdown sets the instructions for
+        /// *translating a segment*. Offering "Default Proofreading Prompt" here
+        /// would produce review commentary where a translation belongs, and the
+        /// user would have no way to tell from the name that it could not work.
+        ///
+        /// Keyed on Category rather than the folder, because a prompt can be
+        /// filed anywhere; the folder is used only when Category is unset.
+        /// </summary>
+        private static bool IsTranslationPrompt(PromptTemplate p)
+        {
+            var category = p.Category;
+
+            if (string.IsNullOrWhiteSpace(category))
+            {
+                // Fall back to the top folder of the relative path.
+                var rel = p.RelativePath ?? string.Empty;
+                var slash = rel.IndexOfAny(new[] { '/', '\\' });
+                category = slash > 0 ? rel.Substring(0, slash) : rel;
+            }
+
+            return category.Equals("Translate", StringComparison.OrdinalIgnoreCase)
+                || category.StartsWith("Translate/", StringComparison.OrdinalIgnoreCase)
+                || category.StartsWith("Translate\\", StringComparison.OrdinalIgnoreCase);
         }
 
         private static bool IsForMemoQ(string app)
