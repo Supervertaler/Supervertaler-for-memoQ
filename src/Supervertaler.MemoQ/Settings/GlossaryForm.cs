@@ -55,9 +55,13 @@ namespace Supervertaler.MemoQ.Settings
                 Left = 130, Top = 74, Width = 473, Height = 110,
                 ForeColor = SystemColors.GrayText,
                 Text =
+                    // [TAB] spelled out rather than a real tab character: a
+                    // WinForms Label does not expand \t, so the example rendered
+                    // as "source termtarget term" — advice demonstrating the
+                    // exact mistake it was warning against.
                     "Tab-separated, one term per line:" + Environment.NewLine + Environment.NewLine +
-                    "    source term\ttarget term" + Environment.NewLine +
-                    "    source term\tbad target\tforbidden" + Environment.NewLine + Environment.NewLine +
+                    "    source term  [TAB]  target term" + Environment.NewLine +
+                    "    source term  [TAB]  bad target  [TAB]  forbidden" + Environment.NewLine + Environment.NewLine +
                     "Blank lines and lines starting with # are ignored. Terms appear in memoQ's " +
                     "Translation results, and are also sent to the AI as required or forbidden " +
                     "terminology. The file is re-read whenever you change it."
@@ -66,18 +70,23 @@ namespace Supervertaler.MemoQ.Settings
             var ok = new Button
             {
                 Text = "OK", DialogResult = DialogResult.OK,
-                Left = ClientSize.Width - 190, Top = ClientSize.Height - 40, Width = 85, Height = 27
+                Left = ClientSize.Width - 282, Top = ClientSize.Height - 40, Width = 85, Height = 27
             };
             ok.Click += (s, e) => SharedSettings.GlossaryPath = _path.Text.Trim();
 
             var cancel = new Button
             {
                 Text = "Cancel", DialogResult = DialogResult.Cancel,
-                Left = ClientSize.Width - 98, Top = ClientSize.Height - 40, Width = 85, Height = 27
+                Left = ClientSize.Width - 190, Top = ClientSize.Height - 40, Width = 85, Height = 27
             };
+
+            var help = HelpLinks.CreateButton(HelpLinks.GlossaryFormat);
+            help.Left = ClientSize.Width - 98;
+            help.Top = ClientSize.Height - 40;
 
             Controls.Add(ok);
             Controls.Add(cancel);
+            Controls.Add(help);
             AcceptButton = ok;
             CancelButton = cancel;
 

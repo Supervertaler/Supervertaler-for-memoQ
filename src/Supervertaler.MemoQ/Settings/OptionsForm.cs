@@ -170,21 +170,28 @@ namespace Supervertaler.MemoQ.Settings
             Controls.Add(_storedInfo);
             UpdateStoredInfo();
 
+            // OK / Cancel / Help, in that order: the same button row memoQ's own
+            // dialogs use, so the Help button is where a memoQ user looks for it.
             var ok = new Button
             {
                 Text = "OK", DialogResult = DialogResult.OK,
-                Left = ClientSize.Width - 190, Top = ClientSize.Height - 40, Width = 85, Height = 27
+                Left = ClientSize.Width - 282, Top = ClientSize.Height - 40, Width = 85, Height = 27
             };
             ok.Click += OnOkClicked;
 
             var cancel = new Button
             {
                 Text = "Cancel", DialogResult = DialogResult.Cancel,
-                Left = ClientSize.Width - 98, Top = ClientSize.Height - 40, Width = 85, Height = 27
+                Left = ClientSize.Width - 190, Top = ClientSize.Height - 40, Width = 85, Height = 27
             };
+
+            var help = HelpLinks.CreateButton(HelpLinks.GettingStarted);
+            help.Left = ClientSize.Width - 98;
+            help.Top = ClientSize.Height - 40;
 
             Controls.Add(ok);
             Controls.Add(cancel);
+            Controls.Add(help);
             AcceptButton = ok;
             CancelButton = cancel;
         }

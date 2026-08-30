@@ -45,6 +45,22 @@ namespace Supervertaler.MemoQ.Core
             };
         }
 
+        /// <summary>
+        /// A Help button for a dialog's button row.
+        ///
+        /// memoQ's own dialogs put Help there — "Edit machine translation
+        /// settings" ends with OK, Cancel, Help — so this is the convention a
+        /// memoQ user already reads. The title-bar ? from <see cref="Attach"/>
+        /// does not always render on Windows 11, which makes a visible button the
+        /// only version that can be relied on.
+        /// </summary>
+        public static Button CreateButton(string url)
+        {
+            var button = new Button { Text = "Help", Width = 85, Height = 27 };
+            button.Click += (sender, e) => Open(url);
+            return button;
+        }
+
         public static void Open(string url)
         {
             try
