@@ -23,6 +23,10 @@
     <AssemblyName>Supervertaler.MemoQ.Terms</AssemblyName>
     <LangVersion>latest</LangVersion>
     <AppendTargetFrameworkToOutputPath>false</AppendTargetFrameworkToOutputPath>
+    <!-- Solution builds pass Platform=x64 and would otherwise output to
+         bin/x64/Release/ while project builds use bin/Release/. One path,
+         so build.sh cannot deploy a stale copy from the other. -->
+    <AppendPlatformToOutputPath>false</AppendPlatformToOutputPath>
     <Authors>Michael Beijer</Authors>
     <Company>Supervertaler</Company>
     <Description>Supervertaler for memoQ — terminology provider</Description>

@@ -67,6 +67,23 @@ for f in "$OUTPUT" "$OUTPUT_TB"; do
     [[ -f "$f" ]] || { echo "ERROR: build produced no DLL at $f" >&2; exit 1; }
 done
 
+# Assert the build actually rebuilt. MSBuild happily prints "Build succeeded"
+# without producing anything when it thinks a project is up to date, or when the
+# output landed somewhere else — which is exactly what happened when the solution
+# started emitting to bin/x64/Release while this script read bin/Release. The
+# result was over an hour of deploying a stale DLL and testing the wrong build.
+# -print -quit rather than a pipeline: piping find into head closes the pipe
+# early, and under `set -o pipefail` that SIGPIPE takes the whole script down
+# silently — which it duly did the first time this guard was written.
+# obj/ is excluded: MSBuild writes AssemblyAttributes.cs there during every
+# build, so it is always newer than the output and would trip this on principle.
+STALE="$(find "$ROOT/src" -path '*/obj' -prune -o     \( -name '*.cs' -o -name '*.csproj' \) -newer "$OUTPUT" -print -quit)"
+if [[ -n "$STALE" ]]; then
+    echo "ERROR: $(basename "$OUTPUT") is older than $STALE" >&2
+    echo "       The build produced no fresh output — refusing to deploy a stale DLL." >&2
+    exit 1
+fi
+
 # --- smoke test -------------------------------------------------------------
 # Catches the silent failure mode: memoQ lists nothing and says nothing when a
 # plugin type cannot be discovered or constructed.
