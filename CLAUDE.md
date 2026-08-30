@@ -119,6 +119,40 @@ Terminology proper still has no route through the MT SDK. If memoQ confirms that
 TermLens belongs on the **TB SDK** (`MemoQ.TBInterfaces`) instead.
 
 
+## Reading memoQ's own data off disk
+
+Surveyed 2026-08-31, because AutoPrompt needs project context the MT SDK does not
+give us. Findings, from most to least usable:
+
+**Resource registries — usable.** `C:\ProgramData\MemoQ\Termbases.xml` and
+`TranslationMemories.xml` are plain XML, one entry per resource, carrying `<Name>`,
+`<Directory>`, `<ClientID>`, `<DefaultDomain>`, `<DefaultSubject>`. A project's
+`project.mprx` (also plain XML, under `Documents\My memoQ Projects\<name>\`) lists
+the `<TBGuid>` of every attached term base plus `<SourceLangCode>`, `<Subject>`,
+`<Domain>`. So *which* resources are attached, and what they are called, is
+readable. Note the registry may point outside `ProgramData` — entries here are
+symlinks to `D:\Google Drive\Software\memoQ\`, and stale `<Directory>` values
+survive in the file, so resolve and existence-check rather than trusting the path.
+
+**Translation memories — effectively closed.** A TM folder is a pile of `.sst`
+files: RocksDB/LevelDB SSTables. Reading one means a native RocksDB binding *and*
+memoQ's undocumented key schema, re-verified every release. Not worth it — see
+below for what to use instead.
+
+**Documents — recoverable but fragile.** The per-document store at
+`Documents/<docGuid>/ver1/majorVersionStore.dat` (backslashes on disk) is an
+undocumented length-prefixed binary format, but the
+segment text sits in it in the clear, keyed `trans-units / trans-unit#N`. Verified
+against the example patent: all 21 source segments extracted. Usable as a fallback,
+never as the primary route — the format has no compatibility promise.
+
+**The conclusion that matters:** do not build on any of this if the SDK already
+carries it. `MTRequestMetadata` gives Client/Domain/Subject; `DocumentMemory` gives
+real confirmed translation pairs for the document in hand; the glossary gives terms;
+and every source segment passes through `TranslateMany` anyway. Disk reading is for
+the one thing none of those provide — *which* term bases and TMs the project has
+attached, by name.
+
 ## Tech stack
 
 - **C# / .NET Framework 4.8, x64, WinForms** — must match memoQ.exe exactly; the
