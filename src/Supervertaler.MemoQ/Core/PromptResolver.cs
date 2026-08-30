@@ -116,14 +116,28 @@ namespace Supervertaler.MemoQ.Core
         /// The instructions to send, given the configured prompt path and the
         /// typed fallback.
         /// </summary>
-        public static string Resolve(string promptRelativePath, string inlineInstructions)
+        public static string Resolve(
+            string promptRelativePath,
+            string inlineInstructions,
+            string sourceLanguage = null,
+            string targetLanguage = null)
         {
             if (string.IsNullOrWhiteSpace(promptRelativePath)) return inlineInstructions;
 
             var match = Available().FirstOrDefault(p =>
                 string.Equals(p.RelativePath, promptRelativePath, StringComparison.OrdinalIgnoreCase));
 
-            if (match != null && !string.IsNullOrWhiteSpace(match.Content)) return match.Content;
+            if (match != null && !string.IsNullOrWhiteSpace(match.Content))
+            {
+                // Library prompts use the library's placeholders — {{SOURCE_LANGUAGE}},
+                // {{TARGET_LANGUAGE}} and friends — not this plugin's {SOURCE_LANG}.
+                // Without this the placeholder reached the model verbatim, so a
+                // prompt that opened "You are a professional translator working
+                // from {{SOURCE_LANGUAGE}} to {{TARGET_LANGUAGE}}" told it nothing
+                // at all about the languages.
+                return global::Supervertaler.Core.PromptLibrary.ApplyVariables(
+                    match.Content, sourceLanguage, targetLanguage);
+            }
 
             PluginLog.Write($"PromptResolver: '{promptRelativePath}' not found in the library — "
                 + "using the instructions from the options dialog instead");

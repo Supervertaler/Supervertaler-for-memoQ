@@ -179,7 +179,10 @@ namespace Supervertaler.MemoQ
             // A selected library prompt wins over the typed instructions; the
             // typed ones are the fallback when nothing is selected or the prompt
             // has gone missing.
-            var instructions = PromptResolver.Resolve(general.PromptPath, general.SystemPrompt);
+            var instructions = PromptResolver.Resolve(
+                general.PromptPath, general.SystemPrompt,
+                PromptBuilder.DescribeLanguage(context.SourceLangCode),
+                PromptBuilder.DescribeLanguage(context.TargetLangCode));
 
             var prompt = PromptBuilder.Build(
                 bundle, general, context.SourceLangCode, context.TargetLangCode,

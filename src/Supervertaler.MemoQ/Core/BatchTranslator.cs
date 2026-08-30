@@ -139,7 +139,10 @@ namespace Supervertaler.MemoQ.Core
                 ? DocumentMemory.GetRelevant(context.MemoryKey, chunk[0], SessionRunner.MaxRecalledPairs)
                 : null;
 
-            var instructions = PromptResolver.Resolve(general.PromptPath, general.SystemPrompt);
+            var instructions = PromptResolver.Resolve(
+                general.PromptPath, general.SystemPrompt,
+                PromptBuilder.DescribeLanguage(context.SourceLangCode),
+                PromptBuilder.DescribeLanguage(context.TargetLangCode));
 
             var system = PromptBuilder.BuildSystemOnly(
                 general, context.SourceLangCode, context.TargetLangCode,
