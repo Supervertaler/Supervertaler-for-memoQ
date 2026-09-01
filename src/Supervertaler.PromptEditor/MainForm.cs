@@ -204,10 +204,14 @@ namespace Supervertaler.PromptEditor
             right.Controls.Add(fields);
             _editor.BringToFront();
 
+            // SplitterDistance is NOT set here. In the initializer the container
+            // still has its default size, so the value is clamped and then
+            // re-scaled by DPI autoscaling — which is why the tree opened at a
+            // third of its intended width. It is applied in OnShown, when the
+            // layout is real, from the saved geometry or the default.
             _split = new SplitContainer
             {
                 Dock = DockStyle.Fill,
-                SplitterDistance = 320,
                 FixedPanel = FixedPanel.Panel1
             };
             _split.Panel1.Controls.Add(_tree);
@@ -236,10 +240,103 @@ namespace Supervertaler.PromptEditor
                 if (e.Control && e.KeyCode == Keys.S) { Save(); e.Handled = true; }
             };
 
-            FormClosing += (s, e) => { if (!ConfirmDiscard()) e.Cancel = true; };
+            FormClosing += (s, e) =>
+            {
+                if (!ConfirmDiscard()) { e.Cancel = true; return; }
+                SaveWindowGeometry();
+            };
+
+            Shown += (s, e) => ApplyWindowGeometry();
 
             SetEditingEnabled(false);
             _status.Text = SupervertalerPaths.PromptLibraryDir;
+        }
+
+        // -- window geometry -----------------------------------------------
+
+        /// <summary>
+        /// %LocalAppData%\Supervertaler.PromptEditor\window.txt — five integers:
+        /// left, top, width, height, splitter, plus 1/0 for maximised.
+        /// A plain line of numbers rather than JSON: there is nothing here worth
+        /// a parser, and a corrupt file must only ever cost the default layout.
+        /// </summary>
+        private static string GeometryFile => Path.Combine(
+            Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
+            "Supervertaler.PromptEditor", "window.txt");
+
+        /// <summary>
+        /// Applies the saved size, position and splitter — or the defaults on a
+        /// first run. Runs from Shown, after layout and DPI scaling are real;
+        /// setting SplitterDistance any earlier is what made the tree open at a
+        /// third of its width.
+        /// </summary>
+        private void ApplyWindowGeometry()
+        {
+            var applied = false;
+
+            try
+            {
+                if (File.Exists(GeometryFile))
+                {
+                    var parts = File.ReadAllText(GeometryFile).Split(',');
+                    if (parts.Length >= 6)
+                    {
+                        var v = new int[6];
+                        for (var i = 0; i < 6; i++) v[i] = int.Parse(parts[i].Trim());
+
+                        var bounds = new Rectangle(v[0], v[1], v[2], v[3]);
+
+                        // A monitor that has since been unplugged must not leave
+                        // the window stranded somewhere unreachable.
+                        if (Screen.AllScreens.Any(sc => sc.WorkingArea.IntersectsWith(bounds)))
+                        {
+                            StartPosition = FormStartPosition.Manual;
+                            Bounds = bounds;
+                        }
+
+                        if (v[5] == 1) WindowState = FormWindowState.Maximized;
+
+                        _split.SplitterDistance = Math.Max(
+                            _split.Panel1MinSize,
+                            Math.Min(v[4], _split.Width - _split.Panel2MinSize - _split.SplitterWidth));
+
+                        applied = true;
+                    }
+                }
+            }
+            catch
+            {
+                // Fall through to the default below.
+            }
+
+            if (!applied)
+            {
+                // Wide enough for the longest prompt names in a real library
+                // ("Explain selection (within context of surrounding segments)")
+                // without giving up the editor's share of a 1180px window.
+                _split.SplitterDistance = Math.Min(360, _split.Width / 3);
+            }
+        }
+
+        private void SaveWindowGeometry()
+        {
+            try
+            {
+                var bounds = WindowState == FormWindowState.Normal ? Bounds : RestoreBounds;
+                var maximized = WindowState == FormWindowState.Maximized ? 1 : 0;
+
+                Directory.CreateDirectory(Path.GetDirectoryName(GeometryFile));
+                File.WriteAllText(GeometryFile, string.Join(",", new[]
+                {
+                    bounds.Left, bounds.Top, bounds.Width, bounds.Height,
+                    _split.SplitterDistance, maximized
+                }));
+            }
+            catch
+            {
+                // Losing the geometry costs one resize next launch; failing the
+                // close would cost unsaved work.
+            }
         }
 
         private void BuildInsertMenu()
