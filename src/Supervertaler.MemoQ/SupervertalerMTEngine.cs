@@ -23,6 +23,11 @@ namespace Supervertaler.MemoQ
         public SupervertalerMTEngine(SupervertalerSettings settings, string sourceLangCode, string targetLangCode)
         {
             _context = new EngineContext(settings, sourceLangCode, targetLangCode);
+
+            // The MCP bridge starts with the first engine and re-aims at each
+            // newer one: memoQ rebuilds engines on settings or project changes,
+            // and the latest is the project the user is actually in.
+            MemoQBridge.EnsureStarted(_context);
         }
 
         public override Image SmallIcon => IconLoader.Small;

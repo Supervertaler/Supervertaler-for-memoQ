@@ -289,11 +289,25 @@ locates the current memoQ directory is a real requirement, not a nicety.
    visible text — it silently becomes nothing. The editor colours unknown
    placeholders red and warns when a prompt targeting memoQ uses one memoQ will
    not fill.
-7. Bridge + MCP server. `Supervertaler.McpServer` is a standalone net8.0 exe that
-   talks HTTP to an `HttpListener` bridge inside the plugin and fetches its tool
-   registry from it — it does not know Trados exists, so it works here unchanged.
-   The tool *set* shrinks: anything that drives the UI (`go_to_segment`,
-   `update_segments`, `insert_into_active_segment`) has no memoQ equivalent.
+7. ~~Bridge + MCP server~~ — shipped 2026-09-01. `Core/MemoQBridge.cs` is an
+   `HttpListener` inside the plugin speaking the same protocol as the Trados
+   bridge; the unmodified `SupervertalerMcpServer.exe` drives it when pinned via
+   `SUPERVERTALER_BRIDGE_FILE` to `<root>\memoquntimeridge.json`. Verified
+   end to end: initialize, tools/list (12 memoQ tools), get_project,
+   stage_translations, all through the real exe.
+
+   The tool set is the honest subset — no `go_to_segment`, no `update_segments`:
+   memoQ gives a plugin no UI access. Instead the write channel is
+   `stage_translations` + `Core/StagedTranslations.cs`: Claude stages pairs
+   keyed on source text, and they reach the grid when the user runs
+   Pre-translate or lands on the segment (checked before cache and LLM in
+   SessionRunner and BatchTranslator, so a fully staged document costs zero
+   LLM calls and needs no API key). `Core/CaptureStore.cs` records every
+   source segment the plugin sees, which after one Pre-translate pass is the
+   whole document — that is what get_project/get_segments serve. The bridge
+   also exposes the glossary (lookup/add) and the shared prompt library
+   (list/get/save), so Claude can draft a project prompt and the user selects
+   it in the options dialog.
 
 ## Confidentiality
 

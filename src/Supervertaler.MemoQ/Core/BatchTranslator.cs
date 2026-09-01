@@ -60,6 +60,34 @@ namespace Supervertaler.MemoQ.Core
                     pending.Add(i);
             }
 
+            // Capture everything, and serve anything already staged over the MCP
+            // bridge before it costs a request. Staged segments leave the pending
+            // list entirely, so a fully staged document translates with zero LLM
+            // calls — Claude already did the work, this run just delivers it.
+            var langPair = (context.SourceLangCode ?? "?") + "-" + (context.TargetLangCode ?? "?");
+            var servedFromStaging = 0;
+            for (var k = pending.Count - 1; k >= 0; k--)
+            {
+                var i = pending[k];
+                var tagged = TagBridge.ToTaggedText(segments[i]);
+                CaptureStore.Record(context, tagged);
+
+                var staged = StagedTranslations.TryGet(tagged, langPair);
+                if (staged != null)
+                {
+                    results[i] = new TranslationResult
+                    {
+                        Translation = TagBridge.FromTaggedText(staged.Target, segments[i]),
+                        Info = staged.Label + " (staged via Supervertaler MCP)"
+                    };
+                    pending.RemoveAt(k);
+                    servedFromStaging++;
+                }
+            }
+
+            if (servedFromStaging > 0)
+                PluginLog.Write($"batch: {servedFromStaging} segment(s) served from staging, {pending.Count} left for the model");
+
             if (pending.Count == 0) return results;
 
             if (batchSize == 1 || pending.Count == 1)

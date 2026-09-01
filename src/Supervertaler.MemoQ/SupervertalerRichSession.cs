@@ -162,6 +162,27 @@ namespace Supervertaler.MemoQ
             var general = context.General;
             var apiKey = context.Settings.SecureSettings?.ApiKey;
 
+            var taggedSource = TagBridge.ToTaggedText(bundle.Source);
+
+            // Write down what memoQ showed us — the only full-document view a
+            // memoQ plugin can ever have. The MCP bridge and AutoPrompt read it.
+            CaptureStore.Record(context, taggedSource);
+
+            // A translation staged over the MCP bridge wins over cache and LLM
+            // both: someone who could see the whole document already decided
+            // what this segment should say.
+            var staged = StagedTranslations.TryGet(
+                taggedSource, (context.SourceLangCode ?? "?") + "-" + (context.TargetLangCode ?? "?"));
+            if (staged != null)
+            {
+                PluginLog.Write($"translate: served staged translation ({staged.Label})");
+                return new TranslationResult
+                {
+                    Translation = TagBridge.FromTaggedText(staged.Target, bundle.Source),
+                    Info = staged.Label + " (staged via Supervertaler MCP)"
+                };
+            }
+
             // What the translator has already confirmed in this document, most
             // similar first. This is the substitute for the terminology and
             // neighbouring-segment context that IRichSession2 would have carried:

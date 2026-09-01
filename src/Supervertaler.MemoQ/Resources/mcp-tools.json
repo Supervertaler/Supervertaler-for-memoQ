@@ -1,0 +1,197 @@
+{
+  "schemaVersion": 1,
+  "tools": [
+    {
+      "name": "help",
+      "access": "read",
+      "description": "Show the user a curated menu of what they can ask this memoQ assistant to do. ALWAYS call this when the user asks what they can do, what you can do, what commands or tools are available, or asks for help - then present the returned card verbatim (it is Markdown). It also explains the one thing that surprises everyone: translations are STAGED, not written, and reach memoQ when the user runs Pre-translate.",
+      "inputSchema": { "type": "object", "properties": {} },
+      "method": "GET",
+      "path": "/v1/help",
+      "paramMap": {},
+      "fixedQuery": {},
+      "fixedBody": {}
+    },
+    {
+      "name": "get_project",
+      "access": "read",
+      "description": "What the plugin knows about the memoQ project: language pair, client/domain/subject, each captured document with its segment and confirmed-pair counts, and how many translations are currently staged. The plugin only sees what memoQ sends it - if this comes back empty, ask the user to run Pre-translate once (any model, even a cheap one) or visit some segments, and the picture fills in.",
+      "inputSchema": { "type": "object", "properties": {} },
+      "method": "GET",
+      "path": "/v1/project",
+      "paramMap": {},
+      "fixedQuery": {},
+      "fixedBody": {}
+    },
+    {
+      "name": "get_segments",
+      "access": "read",
+      "description": "The captured source segments of a document, in the order memoQ first showed them, with any staged translation alongside. Tags appear as <t1>...</t1> markers - reproduce them exactly in translations. Use offset/limit to page through long documents.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "document": { "type": ["string", "null"], "description": "Document key from get_project. Omit for the most recently active document.", "default": null },
+          "offset": { "type": ["integer", "null"], "description": "First segment to return (0-based).", "default": null },
+          "limit": { "type": ["integer", "null"], "description": "Maximum segments to return (default 200, cap 500).", "default": null }
+        }
+      },
+      "method": "GET",
+      "path": "/v1/segments",
+      "paramMap": { "document": "document", "offset": "offset", "limit": "limit" },
+      "fixedQuery": {},
+      "fixedBody": {}
+    },
+    {
+      "name": "get_confirmed_pairs",
+      "access": "read",
+      "description": "Source/target pairs the translator has personally confirmed in this document, newest last. This is the gold standard: match their terminology and register in anything you stage. Requires the plugin to be selected under Self-learning MT in memoQ; if always empty, tell the user to check that setting.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "document": { "type": ["string", "null"], "description": "Document key from get_project. Omit for the most recently active document.", "default": null },
+          "limit": { "type": ["integer", "null"], "description": "Maximum pairs (default 100, cap 500).", "default": null }
+        }
+      },
+      "method": "GET",
+      "path": "/v1/confirmed",
+      "paramMap": { "document": "document", "limit": "limit" },
+      "fixedQuery": {},
+      "fixedBody": {}
+    },
+    {
+      "name": "lookup_term",
+      "access": "read",
+      "description": "Search the Supervertaler glossary for terms occurring in the given text. Returns each match with its approved target and whether it is forbidden. Forbidden terms must never appear in a translation, in any form.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "text": { "type": "string", "description": "Text to scan for glossary terms - a segment, a phrase, or a single word." }
+        },
+        "required": ["text"]
+      },
+      "method": "GET",
+      "path": "/v1/terms",
+      "paramMap": { "text": "text" },
+      "fixedQuery": {},
+      "fixedBody": {}
+    },
+    {
+      "name": "add_term",
+      "access": "write",
+      "description": "Add a term to the Supervertaler glossary. It appears in memoQ's terminology pane and is enforced in every later translation request within seconds. Set forbidden=true to ban a target term instead of approving one. Confirm with the user before adding terms they did not explicitly approve.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "source": { "type": "string", "description": "Source-language term." },
+          "target": { "type": "string", "description": "Approved target-language term (or the banned term when forbidden=true)." },
+          "forbidden": { "type": ["boolean", "null"], "description": "True to mark the target as forbidden rather than preferred.", "default": null }
+        },
+        "required": ["source", "target"]
+      },
+      "method": "POST",
+      "path": "/v1/terms",
+      "paramMap": { "source": "source", "target": "target", "forbidden": "forbidden" },
+      "fixedQuery": {},
+      "fixedBody": {}
+    },
+    {
+      "name": "stage_translations",
+      "access": "write",
+      "description": "Stage translations for memoQ segments. NOTHING is written into memoQ by this call: staged pairs wait until the user runs Pre-translate or lands on the segment, at which point memoQ asks the plugin and receives your staged text - matched by source text, so 'source' must be the segment's source EXACTLY as get_segments returned it, tags included. Reproduce every <tN>...</tN> tag in the target. Stage in batches; then tell the user to run Pre-translate to pull them in.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "pairs": {
+            "type": "array",
+            "description": "Source/target pairs to stage.",
+            "items": {
+              "type": "object",
+              "properties": {
+                "source": { "type": "string", "description": "Segment source text, verbatim from get_segments." },
+                "target": { "type": "string", "description": "Your translation, tags reproduced." }
+              },
+              "required": ["source", "target"]
+            }
+          },
+          "label": { "type": ["string", "null"], "description": "Shown to the user as the origin of these translations (default \"Claude\").", "default": null }
+        },
+        "required": ["pairs"]
+      },
+      "method": "POST",
+      "path": "/v1/stage",
+      "paramMap": { "pairs": "pairs", "label": "label" },
+      "fixedQuery": {},
+      "fixedBody": {}
+    },
+    {
+      "name": "get_staged",
+      "access": "read",
+      "description": "List everything currently staged, with how many times memoQ has already pulled each one (timesServed > 0 means it reached the grid at least once).",
+      "inputSchema": { "type": "object", "properties": {} },
+      "method": "GET",
+      "path": "/v1/staged",
+      "paramMap": {},
+      "fixedQuery": {},
+      "fixedBody": {}
+    },
+    {
+      "name": "clear_staged",
+      "access": "write",
+      "description": "Clear the staging area. Use when the user wants to start over, or after a job is delivered. Does not touch anything already pulled into memoQ.",
+      "inputSchema": { "type": "object", "properties": {} },
+      "method": "POST",
+      "path": "/v1/staged/clear",
+      "paramMap": {},
+      "fixedQuery": {},
+      "fixedBody": {}
+    },
+    {
+      "name": "list_prompts",
+      "access": "read",
+      "description": "List the prompts in the shared Supervertaler prompt library (name, path, category, description). The same library the Trados plugin and the prompt editor use.",
+      "inputSchema": { "type": "object", "properties": {} },
+      "method": "GET",
+      "path": "/v1/prompts",
+      "paramMap": {},
+      "fixedQuery": {},
+      "fixedBody": {}
+    },
+    {
+      "name": "get_prompt",
+      "access": "read",
+      "description": "Read one prompt's full content by its relative path (from list_prompts).",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "path": { "type": "string", "description": "Relative path of the prompt, e.g. \"Translate/Default/Default Translation Prompt.md\"." }
+        },
+        "required": ["path"]
+      },
+      "method": "GET",
+      "path": "/v1/prompt",
+      "paramMap": { "path": "path" },
+      "fixedQuery": {},
+      "fixedBody": {}
+    },
+    {
+      "name": "save_prompt",
+      "access": "write",
+      "description": "Create or update a prompt in the shared Supervertaler library. Use this to draft a project-specific translation prompt from what get_project, get_segments, get_confirmed_pairs and lookup_term tell you - then the user selects it in memoQ under Resources > Settings > MT > Supervertaler > Prompt. A prompt with the same name and category is updated in place. Use {{SOURCE_LANGUAGE}} and {{TARGET_LANGUAGE}} placeholders rather than naming languages.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "name": { "type": "string", "description": "Prompt name, e.g. \"Acme patent EN-NL\"." },
+          "category": { "type": ["string", "null"], "description": "Library folder (default \"Translate\"). Must start with \"Translate\" to appear in memoQ's dropdown.", "default": null },
+          "description": { "type": ["string", "null"], "description": "One-line description shown in pickers.", "default": null },
+          "content": { "type": "string", "description": "The prompt body (Markdown)." }
+        },
+        "required": ["name", "content"]
+      },
+      "method": "POST",
+      "path": "/v1/prompt",
+      "paramMap": { "name": "name", "category": "category", "description": "description", "content": "content" },
+      "fixedQuery": {},
+      "fixedBody": {}
+    }
+  ]
+}

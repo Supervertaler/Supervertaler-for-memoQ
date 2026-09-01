@@ -141,6 +141,22 @@ namespace Supervertaler.MemoQ.Core
             lock (_lock) return EnsureLoaded(key).Count;
         }
 
+        /// <summary>
+        /// Every confirmed pair for a document, newest last, capped. For the MCP
+        /// bridge: Claude asks "what has the translator confirmed?", and unlike
+        /// <see cref="GetRelevant"/> there is no query segment to rank against.
+        /// </summary>
+        public static List<Pair> GetAll(string key, int max)
+        {
+            if (string.IsNullOrEmpty(key) || max <= 0) return new List<Pair>();
+
+            lock (_lock)
+            {
+                var pairs = EnsureLoaded(key);
+                return pairs.Skip(Math.Max(0, pairs.Count - max)).ToList();
+            }
+        }
+
         /// <summary>Drops everything, memory and disk. Wired to a button in the options dialog.</summary>
         public static int ForgetEverything()
         {

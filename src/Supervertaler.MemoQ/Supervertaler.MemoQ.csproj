@@ -68,6 +68,9 @@
     <EmbeddedResource Include="Resources\sv-icon.ico">
       <LogicalName>Supervertaler.MemoQ.Resources.sv-icon.ico</LogicalName>
     </EmbeddedResource>
+    <EmbeddedResource Include="Resources\mcp-tools.json">
+      <LogicalName>Supervertaler.MemoQ.Resources.mcp-tools.json</LogicalName>
+    </EmbeddedResource>
   </ItemGroup>
 
   <!-- Shared Supervertaler code, compiled in from the core/ submodule rather than
