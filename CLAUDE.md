@@ -292,7 +292,7 @@ locates the current memoQ directory is a real requirement, not a nicety.
 7. ~~Bridge + MCP server~~ — shipped 2026-09-01. `Core/MemoQBridge.cs` is an
    `HttpListener` inside the plugin speaking the same protocol as the Trados
    bridge; the unmodified `SupervertalerMcpServer.exe` drives it when pinned via
-   `SUPERVERTALER_BRIDGE_FILE` to `<root>\memoquntimeridge.json`. Verified
+   `SUPERVERTALER_BRIDGE_FILE` to `<root>/memoq/runtime/bridge.json` (backslashes on disk). Verified
    end to end: initialize, tools/list (12 memoQ tools), get_project,
    stage_translations, all through the real exe.
 
