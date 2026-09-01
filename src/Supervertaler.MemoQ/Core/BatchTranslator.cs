@@ -90,6 +90,17 @@ namespace Supervertaler.MemoQ.Core
 
             if (pending.Count == 0) return results;
 
+            // Bridge mode: the rest have been captured for Claude to see, and
+            // that is the whole job of this pass. Nothing goes to the model.
+            if (context.General.BridgeMode)
+            {
+                foreach (var i in pending)
+                    results[i] = new TranslationResult { Translation = Segment.Empty, Confidence = 0 };
+
+                PluginLog.Write($"batch: bridge mode — captured {pending.Count} segment(s), not translated");
+                return results;
+            }
+
             if (batchSize == 1 || pending.Count == 1)
             {
                 foreach (var i in pending)

@@ -241,6 +241,9 @@ namespace Supervertaler.MemoQ.Core
                 Documents = docs.Select(d => new ProjectDocumentBody
                 {
                     Key = d.Key,
+                    Origin = d.ViaTerminology
+                        ? "rows the cursor has visited (via terminology lookups; document identity unknown, so this is one bucket per language pair)"
+                        : "translation requests (Pre-translate or MT lookup with Supervertaler as provider)",
                     Client = d.Client,
                     Domain = d.Domain,
                     Subject = d.Subject,
@@ -605,6 +608,7 @@ namespace Supervertaler.MemoQ.Core
         internal class ProjectDocumentBody
         {
             [DataMember(Name = "key")] public string Key { get; set; }
+            [DataMember(Name = "origin")] public string Origin { get; set; }
             [DataMember(Name = "client", EmitDefaultValue = false)] public string Client { get; set; }
             [DataMember(Name = "domain", EmitDefaultValue = false)] public string Domain { get; set; }
             [DataMember(Name = "subject", EmitDefaultValue = false)] public string Subject { get; set; }

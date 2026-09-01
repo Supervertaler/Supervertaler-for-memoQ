@@ -183,6 +183,15 @@ namespace Supervertaler.MemoQ
                 };
             }
 
+            // Bridge mode: captured, nothing staged, and the model is off limits.
+            // An empty result is the honest answer — memoQ shows no hit for the
+            // row, and the segment is now visible to Claude over the bridge.
+            if (general.BridgeMode)
+            {
+                PluginLog.Write("translate: bridge mode — captured, not translated");
+                return new TranslationResult { Translation = Segment.Empty, Confidence = 0 };
+            }
+
             // What the translator has already confirmed in this document, most
             // similar first. This is the substitute for the terminology and
             // neighbouring-segment context that IRichSession2 would have carried:

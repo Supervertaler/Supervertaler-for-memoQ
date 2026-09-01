@@ -33,6 +33,14 @@ namespace Supervertaler.MemoQ.Core
             public string ProjectGuid;
             public DateTime LastSeenUtc;
 
+            /// <summary>
+            /// True when the segments arrived through terminology lookups rather
+            /// than translation requests. That channel carries no document
+            /// identity, so these buckets are per language pair and hold only
+            /// the rows the cursor has visited.
+            /// </summary>
+            public bool ViaTerminology;
+
             /// <summary>Tagged source texts, in first-seen order.</summary>
             public List<string> Sources = new List<string>();
 
@@ -101,6 +109,56 @@ namespace Supervertaler.MemoQ.Core
             }
         }
 
+        /// <summary>
+        /// Records a segment seen through the terminology plugin. memoQ asks the
+        /// TB plugin about every row the cursor lands on, whatever the MT
+        /// provider is — so this channel captures a Google-translated or TM-only
+        /// document as the translator walks through it. No document GUID
+        /// arrives on this path, so the bucket is per language pair, keyed the
+        /// same way EngineContext.MemoryKey degrades when it has no document.
+        /// </summary>
+        public static void RecordVisited(string sourceLangCode, string targetLangCode, string taggedSource)
+        {
+            if (string.IsNullOrWhiteSpace(taggedSource)) return;
+
+            // Its own prefix, not the MT path's "nodoc_": the two channels must
+            // never share a bucket, or the origin reported over the bridge
+            // depends on which one happened to create it first.
+            var key = "visited_" + (sourceLangCode ?? "?") + "-" + (targetLangCode ?? "?");
+
+            lock (_lock)
+            {
+                DocumentCapture doc;
+                if (!_docs.TryGetValue(key, out doc))
+                {
+                    if (_docs.Count >= MaxDocuments)
+                    {
+                        var oldest = _docs.Values.OrderBy(d => d.LastSeenUtc).First();
+                        _docs.Remove(oldest.Key);
+                    }
+
+                    doc = new DocumentCapture
+                    {
+                        Key = key,
+                        SourceLangCode = sourceLangCode,
+                        TargetLangCode = targetLangCode,
+                        ViaTerminology = true
+                    };
+                    _docs[key] = doc;
+                }
+
+                doc.LastSeenUtc = DateTime.UtcNow;
+
+                if (doc.Seen.Add(taggedSource))
+                {
+                    if (doc.Sources.Count < MaxSourcesPerDocument)
+                        doc.Sources.Add(taggedSource);
+                    else
+                        doc.Seen.Remove(taggedSource);
+                }
+            }
+        }
+
         /// <summary>All captured documents, most recently active first. Snapshots — safe to hand across threads.</summary>
         public static List<DocumentCapture> Snapshot()
         {
@@ -138,6 +196,7 @@ namespace Supervertaler.MemoQ.Core
                 Subject = d.Subject,
                 ProjectGuid = d.ProjectGuid,
                 LastSeenUtc = d.LastSeenUtc,
+                ViaTerminology = d.ViaTerminology,
                 Sources = new List<string>(d.Sources)
             };
         }

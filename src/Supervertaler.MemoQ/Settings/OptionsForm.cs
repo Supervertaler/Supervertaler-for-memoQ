@@ -37,6 +37,7 @@ namespace Supervertaler.MemoQ.Settings
         private readonly NumericUpDown _batchSize = new NumericUpDown();
         private readonly CheckBox _useTerminology = new CheckBox();
         private readonly CheckBox _useDocumentContext = new CheckBox();
+        private readonly CheckBox _bridgeMode = new CheckBox();
         private readonly Button _test = new Button();
         private readonly Label _status = new Label();
         private readonly Label _storedInfo = new Label();
@@ -148,6 +149,11 @@ namespace Supervertaler.MemoQ.Settings
             _useDocumentContext.Text = "Send surrounding segments and project metadata to the model";
             _useDocumentContext.Left = fieldX; _useDocumentContext.Top = y; _useDocumentContext.AutoSize = true;
             Controls.Add(_useDocumentContext);
+            y += 24;
+
+            _bridgeMode.Text = "Bridge mode – never call the model; capture segments and serve translations staged from Claude";
+            _bridgeMode.Left = fieldX; _bridgeMode.Top = y; _bridgeMode.AutoSize = true;
+            Controls.Add(_bridgeMode);
             y += 30;
 
             // The shared prompt library, the same folder the Trados plugin reads.
@@ -290,6 +296,7 @@ namespace Supervertaler.MemoQ.Settings
             _batchSize.Value = Math.Max(1, Math.Min(100, g.BatchSize));
             _useTerminology.Checked = g.UseTerminologyContext;
             _useDocumentContext.Checked = g.UseDocumentContext;
+            _bridgeMode.Checked = g.BridgeMode;
         }
 
         private SupervertalerSettings Collect()
@@ -305,6 +312,7 @@ namespace Supervertaler.MemoQ.Settings
                     MaxParallelRequests = (int)_maxParallel.Value,
                     UseTerminologyContext = _useTerminology.Checked,
                     UseDocumentContext = _useDocumentContext.Checked,
+                    BridgeMode = _bridgeMode.Checked,
                     BatchSize = (int)_batchSize.Value
                 },
                 new SupervertalerSecureSettings

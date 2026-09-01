@@ -48,6 +48,18 @@ namespace Supervertaler.MemoQ.Settings
         /// <summary>Feed memoQ's surrounding segments into the prompt (ContextKinds.TextFlowContext / TranslationPair).</summary>
         public bool UseDocumentContext { get; set; } = true;
 
+        /// <summary>
+        /// Never call the model. The plugin still captures every segment memoQ
+        /// shows it and still serves translations staged over the MCP bridge —
+        /// it just produces nothing of its own.
+        ///
+        /// For the workflow where Claude does the translating: one Pre-translate
+        /// captures the document for free, Claude stages translations, a second
+        /// Pre-translate pulls them in. Zero API calls; the tokens are billed to
+        /// the chat subscription instead.
+        /// </summary>
+        public bool BridgeMode { get; set; } = false;
+
         // CRLF, not LF. A WinForms multiline TextBox does not treat a bare \n as a
         // line break, so an LF-separated default renders as one run-on paragraph
         // in the options dialog — "…translator.Translate the source…". The prompt

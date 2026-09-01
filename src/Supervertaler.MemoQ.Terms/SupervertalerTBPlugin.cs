@@ -104,7 +104,7 @@ namespace Supervertaler.MemoQ
         {
             PluginLog.Write($"TB CreateEngine: {srcLangName} -> {trgLangName}, "
                 + $"glossary={(string.IsNullOrWhiteSpace(SharedSettings.GlossaryPath) ? "(none)" : "set")}");
-            return new SupervertalerTBEngine(trgLangName);
+            return new SupervertalerTBEngine(srcLangName, trgLangName);
         }
 
         public override void ShowOptionsForm(Form parentForm)
@@ -118,14 +118,16 @@ namespace Supervertaler.MemoQ
 
     internal sealed class SupervertalerTBEngine : EngineBase
     {
+        private readonly string _sourceLangName;
         private readonly string _targetLangName;
 
-        public SupervertalerTBEngine(string targetLangName)
+        public SupervertalerTBEngine(string sourceLangName, string targetLangName)
         {
+            _sourceLangName = sourceLangName;
             _targetLangName = targetLangName;
         }
 
-        public override ISession CreateSession() => new SupervertalerTBSession(_targetLangName);
+        public override ISession CreateSession() => new SupervertalerTBSession(_sourceLangName, _targetLangName);
 
         public override void Dispose() { }
     }
@@ -137,10 +139,12 @@ namespace Supervertaler.MemoQ
     /// </summary>
     internal sealed class SupervertalerTBSession : SessionBase
     {
+        private readonly string _sourceLangName;
         private readonly string _targetLangName;
 
-        public SupervertalerTBSession(string targetLangName)
+        public SupervertalerTBSession(string sourceLangName, string targetLangName)
         {
+            _sourceLangName = sourceLangName;
             _targetLangName = targetLangName;
         }
 
@@ -156,6 +160,13 @@ namespace Supervertaler.MemoQ
             {
                 var plain = segment?.PlainText;
                 if (string.IsNullOrWhiteSpace(plain)) return new TerminologyResult[0];
+
+                // Second capture channel for the MCP bridge. memoQ asks this
+                // plugin about every row the cursor lands on regardless of which
+                // MT provider is selected — so a document pre-translated with
+                // Google or from TM alone still becomes visible to Claude, one
+                // visited row at a time. Costs a dictionary insert.
+                CaptureStore.RecordVisited(_sourceLangName, _targetLangName, TagBridge.ToTaggedText(segment));
 
                 var matches = TermIndex.Find(SharedSettings.GlossaryPath, plain);
                 if (matches.Count == 0) return new TerminologyResult[0];
