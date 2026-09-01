@@ -162,20 +162,35 @@ namespace Supervertaler.MemoQ
 
                 var results = new List<TerminologyResult>(matches.Count);
 
+                // The exclusive end of the segment in formatted coordinates —
+                // the hard bound no span may cross.
+                var formattedEnd = segment.FormattedTextPosFromPlain(plain.Length, false);
+
                 foreach (var m in matches)
                 {
                     // TermIndex works in plain-text offsets; memoQ addresses the
                     // segment in its own coordinates, which differ whenever the
                     // segment carries inline tags.
                     //
-                    // The "+ 1" on the length is not an accident and not mine: it is
-                    // what memoQ's own EuroTermBank plugin does. LengthInSegment is
-                    // evidently inclusive of the end position, so a plain end-start
-                    // under-highlights every term by one character. Verified by
-                    // decompiling MemoQ.EuroTermBank.ETBSession.Lookup.
+                    // The "+ 1" on the length is EuroTermBank's convention
+                    // (decompiled from MemoQ.EuroTermBank.ETBSession.Lookup), but
+                    // it belongs on the LAST CHARACTER's position, not on the
+                    // exclusive end. Mapping the exclusive end and then adding one
+                    // put the span one position past the segment whenever a term
+                    // ended exactly at the segment's end — harmless most of the
+                    // time, but on a row with tracked changes memoQ converts every
+                    // span through convertToChangeTrackedPos, which throws
+                    // ArgumentOutOfRangeException("pos") instead of clamping, and
+                    // the user gets an "Error processing terminology results"
+                    // dialog mid-job.
                     var start = segment.FormattedTextPosFromPlain(m.Start, false);
-                    var end = segment.FormattedTextPosFromPlain(m.Start + m.Length, false);
-                    var length = end - start + 1;
+                    var lastChar = segment.FormattedTextPosFromPlain(m.Start + m.Length - 1, false);
+                    var length = lastChar - start + 1;
+
+                    // Belt and braces: whatever the mapping did, never hand memoQ
+                    // a span that leaves the segment.
+                    if (start < 0 || start >= formattedEnd) continue;
+                    length = Math.Min(length, formattedEnd - start);
 
                     results.Add(new TerminologyResult
                     {
