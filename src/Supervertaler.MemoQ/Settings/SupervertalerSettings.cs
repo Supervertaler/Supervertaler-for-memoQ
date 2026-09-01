@@ -49,14 +49,17 @@ namespace Supervertaler.MemoQ.Settings
         public bool UseDocumentContext { get; set; } = true;
 
         /// <summary>
-        /// Never call the model. The plugin still captures every segment memoQ
-        /// shows it and still serves translations staged over the MCP bridge —
-        /// it just produces nothing of its own.
+        /// Pre-translate never calls the model. It still captures every segment
+        /// memoQ shows it and still delivers translations staged over the MCP
+        /// bridge — it just produces nothing of its own.
         ///
-        /// For the workflow where Claude does the translating: one Pre-translate
-        /// captures the document for free, Claude stages translations, a second
-        /// Pre-translate pulls them in. Zero API calls; the tokens are billed to
-        /// the chat subscription instead.
+        /// Scoped to Pre-translate (the batch path) on purpose. Segment-by-segment
+        /// lookups keep using the model, so a chat-driven job still gets live
+        /// suggestions in the results pane for rows Claude has not staged. The
+        /// setting therefore never needs toggling mid-job: one Pre-translate
+        /// captures the document for free, Claude stages, a second Pre-translate
+        /// pulls the translations in, and walking the document afterwards works
+        /// as it always did.
         /// </summary>
         public bool BridgeMode { get; set; } = false;
 

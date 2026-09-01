@@ -183,14 +183,13 @@ namespace Supervertaler.MemoQ
                 };
             }
 
-            // Bridge mode: captured, nothing staged, and the model is off limits.
-            // An empty result is the honest answer — memoQ shows no hit for the
-            // row, and the segment is now visible to Claude over the bridge.
-            if (general.BridgeMode)
-            {
-                PluginLog.Write("translate: bridge mode — captured, not translated");
-                return new TranslationResult { Translation = Segment.Empty, Confidence = 0 };
-            }
+            // Deliberately NOT gated on BridgeMode. That setting scopes to
+            // Pre-translate (the batch path in BatchTranslator): it makes the
+            // capture pass free. This single-segment path is what memoQ calls
+            // when the translator lands on a row, and a live suggestion there is
+            // wanted even in a chat-driven job — Claude's staged translation was
+            // already served above if there was one; this is the fallback for
+            // rows Claude has not covered.
 
             // What the translator has already confirmed in this document, most
             // similar first. This is the substitute for the terminology and

@@ -266,11 +266,18 @@ locates the current memoQ directory is a real requirement, not a nicety.
    *Edit machine translation settings > Settings > Self-learning MT*, and the engine
    is rebuilt (restart memoQ after changing it). Until then every request logs
    `held=0` and nothing is captured — with no indication why.
-3. Batch several segments per LLM call (`BatchSize` is already in settings).
-4. Extract `Supervertaler.Core` from the Trados plugin — 71 of its 83 `Core/` files
-   (~32,500 lines) have zero `Sdl.` references, as do 40 of 45 `Controls/` files.
-5. TB plugin for TermLens (`TerminologyResult` supports `Color`, `Confidence`,
-   `PrettyPrintHtml`, and source-span highlighting).
+3. ~~Batch several segments per LLM call~~ — shipped. `Core/BatchTranslator.cs`,
+   using Core's `TranslationPrompt` batch format so library prompts written for
+   numbered batches work here. memoQ hands the array overload about 10 segments
+   at a time, so `BatchSize` above 10 has no effect.
+4. ~~Extract `Supervertaler.Core` from the Trados plugin~~ — in progress as the
+   `core/` submodule (Supervertaler-Plugin-Core): LlmClient, prompt library,
+   TranslationPrompt, PromptGenerator, DocumentAnalyzer and friends. Both plugins
+   compile the same sources in.
+5. ~~TB plugin for TermLens~~ — shipped as `Supervertaler.MemoQ.Terms.dll`.
+   Span arithmetic: map the LAST character's position and add one; mapping the
+   exclusive end and adding one put spans one past the segment, which memoQ's
+   tracked-changes converter turns into an ArgumentOutOfRangeException dialog.
 6. Companion app for everything memoQ will not host. First piece shipped:
    `src/Supervertaler.PromptEditor`, a standalone WinForms exe launched from the
    options dialog's **Edit…** button beside the prompt picker. It deploys into
@@ -308,6 +315,27 @@ locates the current memoQ directory is a real requirement, not a nicety.
    also exposes the glossary (lookup/add) and the shared prompt library
    (list/get/save), so Claude can draft a project prompt and the user selects
    it in the options dialog.
+
+   **Bridge mode** (`BridgeMode` setting, user-facing label "Pre-translate only
+   captures and delivers staged translations") is scoped to the batch path only.
+   Pre-translate then costs nothing — capture on the first pass, delivery of
+   staged translations on the second — while single-segment lookups keep calling
+   the model, so a chat-driven job still gets live suggestions for rows Claude
+   has not staged. It never needs toggling mid-job.
+
+   **Second capture channel:** the TB plugin's `Lookup` records every visited row
+   into `CaptureStore` under a `visited_<pair>` bucket, regardless of MT provider.
+   Its own key prefix, not the MT path's `nodoc_`: sharing a bucket made the
+   origin reported over the bridge depend on which channel created it first.
+
+   **Handshake ownership:** the bridge writes `bridge.json` only when the file is
+   missing, ours, or owned by a dead PID. A test harness that loaded the DLL once
+   overwrote memoQ's live handshake and exited, leaving memoQ listening on a port
+   nothing could find. The harnesses now refuse to run while memoQ is open.
+
+   **Language pair for staging** comes from the most recently active capture
+   bucket, not the latest engine: memoQ builds one engine per target language in
+   an order of its own, and the "latest" was German on a Dutch job.
 
 ## Confidentiality
 
