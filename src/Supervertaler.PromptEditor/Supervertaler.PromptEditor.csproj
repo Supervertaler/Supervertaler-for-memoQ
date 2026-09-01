@@ -23,6 +23,9 @@
     <Version>0.1.0</Version>
     <InformationalVersion>0.1.0</InformationalVersion>
     <ApplicationIcon>..\Supervertaler.MemoQ\Resources\sv-icon.ico</ApplicationIcon>
+    <!-- Declares DPI awareness, so the window is not bitmap-stretched into
+         blur on a scaled display. See app.manifest. -->
+    <ApplicationManifest>app.manifest</ApplicationManifest>
   </PropertyGroup>
 
   <!--

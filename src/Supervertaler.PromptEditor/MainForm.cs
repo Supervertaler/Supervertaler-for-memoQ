@@ -58,6 +58,16 @@ namespace Supervertaler.PromptEditor
 
         private void BuildUi()
         {
+            // Scale from an explicit 96 DPI baseline. The manifest declares the
+            // process DPI-aware, which stops Windows stretching the window into
+            // blur — but it also means nothing scales the layout for us any
+            // more. A designer-generated form would carry AutoScaleDimensions
+            // from its .Designer.cs; this one is built in code, so it says so
+            // here. Without both halves the window is crisp and half-size on a
+            // 150% display.
+            AutoScaleDimensions = new SizeF(96F, 96F);
+            AutoScaleMode = AutoScaleMode.Dpi;
+
             Text = "Supervertaler — Prompt Library";
             Width = 1180;
             Height = 760;

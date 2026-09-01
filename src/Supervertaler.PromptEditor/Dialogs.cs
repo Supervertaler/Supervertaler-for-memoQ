@@ -14,6 +14,9 @@ namespace Supervertaler.PromptEditor
 
         public TextInputDialog(string title, string label, string initial)
         {
+            AutoScaleDimensions = new SizeF(96F, 96F);
+            AutoScaleMode = AutoScaleMode.Dpi;
+
             Text = title;
             FormBorderStyle = FormBorderStyle.FixedDialog;
             StartPosition = FormStartPosition.CenterParent;
@@ -71,6 +74,9 @@ namespace Supervertaler.PromptEditor
         public FolderPickerDialog(List<string> folders, string current)
         {
             _folders = folders;
+
+            AutoScaleDimensions = new SizeF(96F, 96F);
+            AutoScaleMode = AutoScaleMode.Dpi;
 
             Text = "Move to folder";
             FormBorderStyle = FormBorderStyle.SizableToolWindow;

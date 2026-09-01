@@ -1,0 +1,40 @@
+<?xml version="1.0" encoding="utf-8"?>
+<assembly manifestVersion="1.0" xmlns="urn:schemas-microsoft-com:asm.v1">
+
+  <assemblyIdentity version="1.0.0.0" name="Supervertaler.PromptEditor" />
+
+  <!--
+    Declares the app DPI-aware so Windows stops bitmap-stretching it.
+
+    Without this, a process that never says otherwise is treated as written for
+    96 DPI: Windows renders it at 96 and scales the result up, which is why the
+    text goes soft on a scaled display. Setting it here is the same thing as
+    ticking "Override high DPI scaling behaviour — Scaling performed by:
+    Application" in the exe's Compatibility tab, except that it ships with the
+    build and applies on every machine rather than one file on one PC.
+
+    System-aware ("true") rather than PerMonitorV2, deliberately. Per-monitor
+    means re-laying out on every DPI change, and WinForms only does that well
+    for designer-generated forms carrying AutoScaleDimensions. These forms are
+    built in code, so they scale from an explicit 96 DPI baseline instead (see
+    AutoScaleMode.Dpi in MainForm) — correct at launch on any display, and
+    blurry only in the uncommon case of dragging the window to a second monitor
+    at a different scale factor.
+  -->
+  <application xmlns="urn:schemas-microsoft-com:asm.v3">
+    <windowsSettings>
+      <dpiAware xmlns="http://schemas.microsoft.com/SMI/2005/WindowsSettings">true</dpiAware>
+      <longPathAware xmlns="http://schemas.microsoft.com/SMI/2016/WindowsSettings">true</longPathAware>
+    </windowsSettings>
+  </application>
+
+  <!-- Required for the Windows 10/11 settings above to be honoured at all. -->
+  <compatibility xmlns="urn:schemas-microsoft-com:compatibility.v1">
+    <application>
+      <supportedOS Id="{8e0f7a12-bfb3-4fe8-b9a5-48fd50a15a9a}" />
+      <supportedOS Id="{1f676c76-80e1-4239-95bb-83d0f6d0da78}" />
+      <supportedOS Id="{4a2f28e3-53b9-4441-ba9c-d69d4a4a6e38}" />
+    </application>
+  </compatibility>
+
+</assembly>
