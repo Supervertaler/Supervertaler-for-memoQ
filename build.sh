@@ -63,8 +63,13 @@ MSYS2_ARG_CONV_EXCL="-p:" dotnet build "$(cygpath -w "$SOLUTION")"     -c "$CONF
 OUTPUT="$ROOT/src/Supervertaler.MemoQ/bin/$CONFIG/Supervertaler.MemoQ.dll"
 OUTPUT_TB="$ROOT/src/Supervertaler.MemoQ.Terms/bin/$CONFIG/Supervertaler.MemoQ.Terms.dll"
 
-for f in "$OUTPUT" "$OUTPUT_TB"; do
-    [[ -f "$f" ]] || { echo "ERROR: build produced no DLL at $f" >&2; exit 1; }
+# The prompt editor. Not an add-in — memoQ never loads it — but it ships beside
+# them because the options dialog launches it by looking next to its own
+# assembly, and that is the only UI surface a memoQ add-in has to offer it from.
+OUTPUT_ED="$ROOT/src/Supervertaler.PromptEditor/bin/$CONFIG/Supervertaler.PromptEditor.exe"
+
+for f in "$OUTPUT" "$OUTPUT_TB" "$OUTPUT_ED"; do
+    [[ -f "$f" ]] || { echo "ERROR: build produced no output at $f" >&2; exit 1; }
 done
 
 # Assert the build actually rebuilt. MSBuild happily prints "Build succeeded"
@@ -113,7 +118,7 @@ ADDINS="$MEMOQ_DIR/Addins"
 
 STAGE="/c/Temp/sv-deploy"
 mkdir -p "$STAGE"
-cp "$OUTPUT" "$OUTPUT_TB" "$STAGE/"
+cp "$OUTPUT" "$OUTPUT_TB" "$OUTPUT_ED" "$STAGE/"
 cp "$ROOT/tools/deploy.ps1" "$STAGE/"
 rm -f "$STAGE/deploy.log"
 

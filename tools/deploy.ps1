@@ -56,6 +56,23 @@ try {
         Say "OK  $target"
         Say "    $($info.Length) bytes, written $($info.LastWriteTime)"
     }
+
+    # The prompt editor, if it was staged. memoQ never loads this one — it is a
+    # standalone exe — but it lives in Addins so the options dialog can find it
+    # next to its own assembly. Not fatal when absent: the dialog says so, and a
+    # deploy that skipped it still leaves a working add-in.
+    $editor = Join-Path $stage 'Supervertaler.PromptEditor.exe'
+    if (Test-Path -LiteralPath $editor) {
+        $target = Join-Path $addins 'Supervertaler.PromptEditor.exe'
+        Copy-Item -LiteralPath $editor -Destination $target -Force
+        $info = Get-Item -LiteralPath $target
+        Say "OK  $target"
+        Say "    $($info.Length) bytes, written $($info.LastWriteTime)"
+    }
+    else {
+        Say "--  prompt editor not staged; skipped"
+    }
+
     exit 0
 }
 catch {

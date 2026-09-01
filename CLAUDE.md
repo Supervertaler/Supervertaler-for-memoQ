@@ -271,7 +271,24 @@ locates the current memoQ directory is a real requirement, not a nicety.
    (~32,500 lines) have zero `Sdl.` references, as do 40 of 45 `Controls/` files.
 5. TB plugin for TermLens (`TerminologyResult` supports `Color`, `Confidence`,
    `PrettyPrintHtml`, and source-span highlighting).
-6. Companion app for everything memoQ will not host.
+6. Companion app for everything memoQ will not host. First piece shipped:
+   `src/Supervertaler.PromptEditor`, a standalone WinForms exe launched from the
+   options dialog's **Edit…** button beside the prompt picker. It deploys into
+   `Addins` next to the DLLs — not because memoQ loads it (it never does) but
+   because that is where the dialog looks for it.
+
+   Written in C# against Core's `PromptLibrary` rather than in the companion's
+   own language, deliberately. The format has 17 frontmatter keys in live use,
+   ordered, with legacy aliases; a second implementation of it is exactly how
+   nine of those keys came to be silently deleted on save. One parser, one
+   writer, three consumers.
+
+   It knows one thing the plugins do not: **which placeholders each host fills.**
+   `ApplyVariables` substitutes an empty string for anything the caller had no
+   value for, so `{{SOURCE_SEGMENT}}` in a memoQ prompt does not survive as
+   visible text — it silently becomes nothing. The editor colours unknown
+   placeholders red and warns when a prompt targeting memoQ uses one memoQ will
+   not fill.
 7. Bridge + MCP server. `Supervertaler.McpServer` is a standalone net8.0 exe that
    talks HTTP to an `HttpListener` bridge inside the plugin and fetches its tool
    registry from it — it does not know Trados exists, so it works here unchanged.

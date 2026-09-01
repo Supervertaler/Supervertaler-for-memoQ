@@ -1,5 +1,7 @@
 using System;
+using System.Diagnostics;
 using System.Drawing;
+using System.IO;
 using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
@@ -124,9 +126,14 @@ namespace Supervertaler.MemoQ.Settings
             _batchSize.Minimum = 1; _batchSize.Maximum = 100;
             Controls.Add(_batchSize);
 
+            // memoQ decides how many segments it hands the plugin at a time — 10
+            // on a measured Pre-translate run — and this setting can only
+            // subdivide that array, never combine across calls. Above memoQ's own
+            // chunk size it therefore does nothing, which is worth saying rather
+            // than letting someone set 100 and wonder why nothing changed.
             var batchHint = new Label
             {
-                Text = "Pre-translate only. 1 sends each segment on its own.",
+                Text = "Pre-translate only. 1 sends each segment on its own; memoQ caps a batch at about 10.",
                 Left = fieldX + 82, Top = y + 3, AutoSize = true,
                 ForeColor = SystemColors.GrayText
             };
@@ -143,14 +150,31 @@ namespace Supervertaler.MemoQ.Settings
             Controls.Add(_useDocumentContext);
             y += 30;
 
-            // The shared prompt library, the same folder the Trados plugin and
-            // Workbench read. Selecting one stores its path, not its text, so a
-            // prompt edited anywhere takes effect here on the next segment.
+            // The shared prompt library, the same folder the Trados plugin reads.
+            // Selecting one stores its path, not its text, so a prompt edited
+            // anywhere takes effect here on the next segment.
+            //
+            // The Edit button is the only way into the library from memoQ. An
+            // add-in owns no ribbon button, no menu item and no panel, so this
+            // dialog is the single UI surface available — without it a memoQ user
+            // could pick a prompt but never write or correct one.
             Caption("Prompt", y);
-            _promptPick.Left = fieldX; _promptPick.Top = y; _promptPick.Width = fieldW;
+            const int editW = 86;
+            _promptPick.Left = fieldX; _promptPick.Top = y; _promptPick.Width = fieldW - editW - 6;
             _promptPick.DropDownStyle = ComboBoxStyle.DropDownList;
             _promptPick.SelectedIndexChanged += OnPromptPicked;
             Controls.Add(_promptPick);
+
+            var editPrompts = new Button
+            {
+                Text = "Edit…",
+                Left = fieldX + fieldW - editW,
+                Top = y - 1,
+                Width = editW,
+                Height = _promptPick.Height + 2
+            };
+            editPrompts.Click += OnEditPrompts;
+            Controls.Add(editPrompts);
             y += rowH;
 
             Caption("Instructions", y);
@@ -377,6 +401,75 @@ namespace Supervertaler.MemoQ.Settings
         private void OnPromptPicked(object sender, EventArgs e)
         {
             UpdatePromptDisplay();
+        }
+
+        /// <summary>
+        /// Opens the prompt editor on whichever prompt is currently selected, and
+        /// re-reads the library when it closes so a prompt written or renamed in
+        /// there appears in the dropdown straight away.
+        ///
+        /// Run as a separate process rather than a form of our own: the editor is
+        /// shared with the Trados plugin, and hosting a second WinForms window
+        /// inside memoQ's UI thread means its bugs become memoQ's bugs. It also
+        /// keeps the add-in free of the editor's code entirely.
+        /// </summary>
+        private void OnEditPrompts(object sender, EventArgs e)
+        {
+            var exe = Path.Combine(
+                Path.GetDirectoryName(typeof(OptionsForm).Assembly.Location) ?? "",
+                "Supervertaler.PromptEditor.exe");
+
+            if (!File.Exists(exe))
+            {
+                MessageBox.Show(this,
+                    "The prompt editor is not installed next to the add-in.\r\n\r\nExpected:\r\n" + exe,
+                    "Supervertaler", MessageBoxButtons.OK, MessageBoxIcon.Information);
+                return;
+            }
+
+            var selected = _promptPick.SelectedItem as PromptChoice;
+
+            try
+            {
+                using (var process = Process.Start(new ProcessStartInfo(exe)
+                {
+                    Arguments = selected != null && !string.IsNullOrEmpty(selected.Path)
+                        ? "\"" + selected.Path + "\""
+                        : "",
+                    UseShellExecute = false
+                }))
+                {
+                    if (process == null) return;
+
+                    // Modal by waiting: the library is a folder of files with no
+                    // locking, and letting the user edit a prompt in one window
+                    // while changing which prompt is selected in another is a way
+                    // to save a stale choice.
+                    Enabled = false;
+                    try
+                    {
+                        while (!process.WaitForExit(50))
+                            Application.DoEvents();
+                    }
+                    finally
+                    {
+                        Enabled = true;
+                    }
+                }
+            }
+            catch (Exception ex)
+            {
+                PluginLog.Write("Could not start the prompt editor", ex);
+                MessageBox.Show(this, "Could not start the prompt editor.\r\n\r\n" + ex.Message,
+                    "Supervertaler", MessageBoxButtons.OK, MessageBoxIcon.Error);
+                return;
+            }
+
+            // The dropdown caches for ten seconds; the user has almost certainly
+            // been in the editor longer, but say so explicitly rather than rely
+            // on that.
+            PromptResolver.Invalidate();
+            PopulatePrompts(SelectedPromptPath());
         }
 
         /// <summary>

@@ -1,8 +1,12 @@
-Microsoft Visual Studio Solution File, Format Version 12.00
+﻿Microsoft Visual Studio Solution File, Format Version 12.00
 # Visual Studio Version 17
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Supervertaler.MemoQ", "src\Supervertaler.MemoQ\Supervertaler.MemoQ.csproj", "{4789D76C-8C67-5D7B-B85F-2537512B09E9}"
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Supervertaler.MemoQ.Terms", "src\Supervertaler.MemoQ.Terms\Supervertaler.MemoQ.Terms.csproj", "{993CF4C0-E5AB-5641-9C45-C51305FBEE50}"
+EndProject
+Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "src", "src", "{B0EC1F39-CEB4-4971-B3BA-260F794B842D}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Supervertaler.PromptEditor", "src\Supervertaler.PromptEditor\Supervertaler.PromptEditor.csproj", "{06BFCE89-4C11-4849-8D2A-3F39A891B37B}"
 EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
@@ -18,11 +22,18 @@ Global
 		{993CF4C0-E5AB-5641-9C45-C51305FBEE50}.Debug|x64.Build.0 = Debug|x64
 		{993CF4C0-E5AB-5641-9C45-C51305FBEE50}.Release|x64.ActiveCfg = Release|x64
 		{993CF4C0-E5AB-5641-9C45-C51305FBEE50}.Release|x64.Build.0 = Release|x64
+		{06BFCE89-4C11-4849-8D2A-3F39A891B37B}.Debug|x64.ActiveCfg = Debug|Any CPU
+		{06BFCE89-4C11-4849-8D2A-3F39A891B37B}.Debug|x64.Build.0 = Debug|Any CPU
+		{06BFCE89-4C11-4849-8D2A-3F39A891B37B}.Release|x64.ActiveCfg = Release|Any CPU
+		{06BFCE89-4C11-4849-8D2A-3F39A891B37B}.Release|x64.Build.0 = Release|Any CPU
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE
 	EndGlobalSection
 	GlobalSection(ExtensibilityGlobals) = postSolution
 		SolutionGuid = {709D87E1-77EB-5B79-A7AF-1C8F25D6637F}
+	EndGlobalSection
+	GlobalSection(NestedProjects) = preSolution
+		{06BFCE89-4C11-4849-8D2A-3F39A891B37B} = {B0EC1F39-CEB4-4971-B3BA-260F794B842D}
 	EndGlobalSection
 EndGlobal
