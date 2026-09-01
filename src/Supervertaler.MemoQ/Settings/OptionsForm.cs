@@ -134,7 +134,7 @@ namespace Supervertaler.MemoQ.Settings
             // than letting someone set 100 and wonder why nothing changed.
             var batchHint = new Label
             {
-                Text = "Pre-translate only. 1 sends each segment on its own; memoQ caps a batch at about 10.",
+                Text = "Pre-translate only; memoQ caps a batch at about 10.",
                 Left = fieldX + 82, Top = y + 3, AutoSize = true,
                 ForeColor = SystemColors.GrayText
             };
@@ -151,7 +151,7 @@ namespace Supervertaler.MemoQ.Settings
             Controls.Add(_useDocumentContext);
             y += 24;
 
-            _bridgeMode.Text = "Bridge mode – never call the model; capture segments and serve translations staged from Claude";
+            _bridgeMode.Text = "Bridge mode – never call the model (Claude stages translations via MCP)";
             _bridgeMode.Left = fieldX; _bridgeMode.Top = y; _bridgeMode.AutoSize = true;
             Controls.Add(_bridgeMode);
             y += 30;

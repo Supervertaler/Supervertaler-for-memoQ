@@ -282,14 +282,21 @@ namespace Supervertaler.MemoQ.Core
 
         private void HandleProject(HttpListenerContext ctx)
         {
-            var context = _context;
             var docs = CaptureStore.Snapshot();
+
+            // Languages of the document actually being worked on (the most
+            // recently active bucket), falling back to the latest engine only
+            // when nothing has been seen yet. See HandleStage for why the
+            // latest engine is not a safe answer on its own.
+            var active = docs.FirstOrDefault();
+            var srcCode = active?.SourceLangCode ?? _context?.SourceLangCode;
+            var trgCode = active?.TargetLangCode ?? _context?.TargetLangCode;
 
             var body = new ProjectBody
             {
-                SourceLanguage = context == null ? null : PromptBuilder.DescribeLanguage(context.SourceLangCode),
-                TargetLanguage = context == null ? null : PromptBuilder.DescribeLanguage(context.TargetLangCode),
-                LangPair = LangPair(context),
+                SourceLanguage = srcCode == null ? null : PromptBuilder.DescribeLanguage(srcCode),
+                TargetLanguage = trgCode == null ? null : PromptBuilder.DescribeLanguage(trgCode),
+                LangPair = srcCode == null ? null : srcCode + "-" + (trgCode ?? "?"),
                 Documents = docs.Select(d => new ProjectDocumentBody
                 {
                     Key = d.Key,
@@ -427,13 +434,23 @@ namespace Supervertaler.MemoQ.Core
                 return;
             }
 
-            var context = _context;
-            var pair = LangPair(context);
+            // The pair comes from the document being worked on, not from the
+            // most recently created engine. memoQ builds one engine per target
+            // language in the project, in an order of its own choosing, so the
+            // "latest" engine can be the German one while every lookup is Dutch
+            // — and translations staged under the wrong pair never match.
+            // The most recently active capture bucket is the document the user
+            // actually has in front of them.
+            var active = CaptureStore.Get(null);
+            var pair = active != null
+                ? (active.SourceLangCode ?? "?") + "-" + (active.TargetLangCode ?? "?")
+                : LangPair(_context);
+
             if (pair == null)
             {
                 TryWrite(ctx, 409, Json(new ErrorBody
                 {
-                    Error = "No engine is active yet — the language pair is unknown. "
+                    Error = "No segments have been seen yet — the language pair is unknown. "
                           + "Ask the user to open their project and touch one segment (or run Pre-translate) first."
                 }));
                 return;
