@@ -61,7 +61,16 @@ namespace Supervertaler.MemoQ.Core
 
             lock (_instanceLock)
             {
-                if (_instance != null) return;
+                if (_instance != null)
+                {
+                    // Self-heal. The handshake can go missing or stale under us —
+                    // a test harness that started its own bridge wrote over it
+                    // with a PID that then exited, and memoQ was left listening
+                    // on a port nothing could find. Each engine creation is a
+                    // cheap moment to put it right.
+                    _instance.WriteHandshakeIfOurs();
+                    return;
+                }
 
                 try
                 {
@@ -110,8 +119,51 @@ namespace Supervertaler.MemoQ.Core
             _thread = new Thread(ListenLoop) { IsBackground = true, Name = "SupervertalerMemoQBridge" };
             _thread.Start();
 
-            WriteHandshake();
+            WriteHandshakeIfOurs();
             PluginLog.Write($"MCP bridge listening on 127.0.0.1:{_port}, handshake at {HandshakePath}");
+        }
+
+        /// <summary>
+        /// Rewrites the handshake unless a different, still-running process owns
+        /// it. One handshake path, many possible writers — a second memoQ, a
+        /// test harness loading the DLL — and the first version let the last
+        /// writer win, which meant a harness exiting left the live memoQ
+        /// unreachable. The live owner keeps the file; everyone else logs and
+        /// stands down.
+        /// </summary>
+        private void WriteHandshakeIfOurs()
+        {
+            try
+            {
+                var owner = HandshakeOwnerPid();
+                var me = Process.GetCurrentProcess().Id;
+
+                if (owner.HasValue && owner.Value != me && IsAlive(owner.Value))
+                {
+                    PluginLog.Write($"MCP bridge: handshake owned by live process {owner.Value}; not overwriting");
+                    return;
+                }
+
+                WriteHandshake();
+            }
+            catch (Exception ex)
+            {
+                PluginLog.Write("MCP bridge: handshake check failed", ex);
+            }
+        }
+
+        private static int? HandshakeOwnerPid()
+        {
+            if (!File.Exists(HandshakePath)) return null;
+            var text = File.ReadAllText(HandshakePath);
+            var m = System.Text.RegularExpressions.Regex.Match(text, "\"pid\"\\s*:\\s*(\\d+)");
+            return m.Success && int.TryParse(m.Groups[1].Value, out var pid) ? pid : (int?)null;
+        }
+
+        private static bool IsAlive(int pid)
+        {
+            try { return !Process.GetProcessById(pid).HasExited; }
+            catch (Exception) { return false; }
         }
 
         private void WriteHandshake()
