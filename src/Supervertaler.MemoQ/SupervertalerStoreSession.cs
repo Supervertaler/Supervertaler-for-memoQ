@@ -79,8 +79,8 @@ namespace Supervertaler.MemoQ
                 PluginLog.Write($"StoreTranslation: {tu.Source.PlainText?.Length ?? 0} src chars -> "
                     + $"{tu.Target.PlainText?.Length ?? 0} target chars, "
                     + (after > before ? $"{after} held for this document"
-                                      : $"{after} held (unchanged — re-confirmed or empty)")
-                    + (_context.CurrentDocument == Guid.Empty ? " [no document id — shared bucket]" : string.Empty));
+                                      : $"{after} held (unchanged – re-confirmed or empty)")
+                    + (_context.CurrentDocument == Guid.Empty ? " [no document id – shared bucket]" : string.Empty));
 
                 return true;
             }

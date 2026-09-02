@@ -97,7 +97,7 @@ namespace Supervertaler.MemoQ.Core
                 foreach (var i in pending)
                     results[i] = new TranslationResult { Translation = Segment.Empty, Confidence = 0 };
 
-                PluginLog.Write($"batch: bridge mode — captured {pending.Count} segment(s), not translated");
+                PluginLog.Write($"batch: bridge mode – captured {pending.Count} segment(s), not translated");
                 return results;
             }
 

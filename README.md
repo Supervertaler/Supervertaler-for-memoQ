@@ -1,6 +1,6 @@
 # Supervertaler for memoQ
 
-AI translation for memoQ — an LLM machine-translation engine that learns from the
+AI translation for memoQ – an LLM machine-translation engine that learns from the
 segments you confirm, a terminology provider that puts your own glossary into
 memoQ's Translation results *and* into the AI's prompt, and an MCP bridge that lets
 Claude Desktop translate your live project.
@@ -24,12 +24,12 @@ serialiser.
 **Learns from your confirmations.** Every segment you confirm is captured and the
 most relevant ones are shown to the model when it translates later segments in the
 same document. Confirm *electric module* once and the rest of the document follows
-— no configuration, no retraining, just your own approved choices fed forward.
+– no configuration, no retraining, just your own approved choices fed forward.
 Persisted to disk, so it survives closing memoQ.
 
 **Terminology.** A tab-separated glossary appears as a memoQ terminology provider
-— matched terms highlighted in the source, entries rendered in the Translation
-results pane — and the same terms are sent to the model as preferred or forbidden
+– matched terms highlighted in the source, entries rendered in the Translation
+results pane – and the same terms are sent to the model as preferred or forbidden
 terminology. Forbidden terms are enforced rather than merely displayed.
 
 **Translate with Claude Desktop.** The plugin hosts a bridge for the
@@ -38,11 +38,11 @@ Claude (or any local-MCP client) can read the document you are translating, your
 confirmed segments and your glossary, and *stage* translations that flow into the
 grid when you press Pre-translate. Tokens go on your Claude subscription, not an
 API key; every write into your document goes through your own hands. See
-[MCP Server](https://docs.supervertaler.com/memoq/mcp-server/) — including the
+[MCP Server](https://docs.supervertaler.com/memoq/mcp-server/) – including the
 honest table of which Trados tools do and do not exist for memoQ.
 
-**A live document link.** memoQ's Preview SDK — the interface its own PDF
-preview uses — is the one channel that shows a tool the target text, the row
+**A live document link.** memoQ's Preview SDK – the interface its own PDF
+preview uses – is the one channel that shows a tool the target text, the row
 the cursor is on and the document's real name. `Supervertaler.MemoQ.Preview.exe`
 registers as a preview tool and forwards that stream to the plugin, so Claude
 sees the document as it is, can tell which row you are on, and can ask memoQ
@@ -58,7 +58,7 @@ can draft prompts into it too.
 memoQ gives an add-in no window of its own and no API into the project, the editor
 or its TMs and term bases. A plugin is only ever *called*: asked for a translation,
 asked for terminology hits, handed a segment the user confirmed. Everything above
-is built on those three calls — which is why the AI's knowledge of your document
+is built on those three calls – which is why the AI's knowledge of your document
 is what has passed through the plugin's hands, why translations from Claude are
 staged rather than written, and why the glossary is a file rather than a memoQ
 term base. [`CLAUDE.md`](CLAUDE.md) records what the SDK does and does not allow,
@@ -67,7 +67,7 @@ including a number of things that fail silently.
 ## Installing
 
 memoQ has no plugin marketplace. Copy the DLLs (and the editor) into memoQ's
-`Addins` folder — inside the memoQ program directory, so this needs administrator
+`Addins` folder – inside the memoQ program directory, so this needs administrator
 rights:
 
 ```
@@ -80,20 +80,20 @@ memoQ may warn once that the plugin is unsigned.
 
 Then:
 
-- **MT engine** — Resource console → MT settings → edit → Services → enable
+- **MT engine** – Resource console → MT settings → edit → Services → enable
   *Supervertaler* → **Configure plugin** for provider, model, API key and prompt.
   To have it learn from confirmations, also set it under
   Settings → **Self-learning MT**.
-- **Terminology** — Options → Terminology plugins → tick *Perform terminology
+- **Terminology** – Options → Terminology plugins → tick *Perform terminology
   plugin lookups while working in the translation grid* → **Supervertaler terms**
   → Options → choose a glossary → **Enable plugin**.
-- **Claude Desktop** — install `Supervertaler-for-memoQ-MCP-Server.mcpb`
+- **Claude Desktop** – install `Supervertaler-for-memoQ-MCP-Server.mcpb`
   (Settings → Extensions → Advanced settings → Install extension…). It is the
   same MCP server exe as the Trados extension with `SUPERVERTALER_HOST=memoq`
   set; build it with `python tools/build_mcpb.py`. Other MCP clients: run the
   exe with that variable set. Steps in the
   [docs](https://docs.supervertaler.com/memoq/mcp-server/#setting-it-up).
-- **Live document link** — run `Supervertaler.MemoQ.Preview.exe` once (the deploy
+- **Live document link** – run `Supervertaler.MemoQ.Preview.exe` once (the deploy
   puts it in your Supervertaler data folder, `C:\Users\<you>\Supervertaler\memoq\preview\`)
   and accept memoQ's *Preview tool connection request*, leaving *Auto-start with
   memoQ* ticked. memoQ starts it itself from then on.
@@ -122,7 +122,7 @@ bash build.sh              # build, verify, deploy to the Addins folder
 bash build.sh --no-deploy  # build and verify only
 ```
 
-`build.sh` refuses to run while memoQ is open — it locks the DLLs — and runs
+`build.sh` refuses to run while memoQ is open – it locks the DLLs – and runs
 `tools/smoketest.ps1`, which loads the build through memoQ's *own* add-in loader
 before deploying. That check exists because memoQ's failure mode is silent: a
 plugin it cannot load simply never appears, with no error anywhere.

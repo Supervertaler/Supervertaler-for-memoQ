@@ -112,7 +112,7 @@ namespace Supervertaler.MemoQ.Core
 
             if (_listener == null)
             {
-                PluginLog.Write("MCP bridge: no free port after 16 attempts — bridge disabled this session");
+                PluginLog.Write("MCP bridge: no free port after 16 attempts – bridge disabled this session");
                 return;
             }
 
@@ -405,7 +405,7 @@ namespace Supervertaler.MemoQ.Core
                 {
                     Segments = new SegmentBody[0],
                     Total = 0,
-                    Note = "Nothing captured yet — run Pre-translate once, or visit segments in the editor."
+                    Note = "Nothing captured yet – run Pre-translate once, or visit segments in the editor."
                 }));
                 return;
             }
@@ -521,7 +521,7 @@ namespace Supervertaler.MemoQ.Core
             {
                 TryWrite(ctx, 409, Json(new ErrorBody
                 {
-                    Error = "No segments have been seen yet — the language pair is unknown. "
+                    Error = "No segments have been seen yet – the language pair is unknown. "
                           + "Ask the user to open their project and touch one segment (or run Pre-translate) first."
                 }));
                 return;
@@ -536,7 +536,7 @@ namespace Supervertaler.MemoQ.Core
             {
                 Ok = true,
                 Message = accepted + " translation(s) staged. They reach the grid when the user runs "
-                        + "Pre-translate or lands on the matching segments — matched by source text. "
+                        + "Pre-translate or lands on the matching segments – matched by source text. "
                         + "Nothing is written into memoQ until then."
             }));
         }
@@ -929,7 +929,7 @@ namespace Supervertaler.MemoQ.Core
             "own glossary where they conflict, because they are the translator's later decisions.\n" +
             "- Glossary terms supplied at request time are marked as either preferred or FORBIDDEN. Forbidden " +
             "terms are absolute. Preferred terms should be followed unless clearly wrong for the sentence.\n" +
-            "- IMPORTANT — the TERMINOLOGY DATA above did NOT come from a project termbase. It is the set of " +
+            "- IMPORTANT – the TERMINOLOGY DATA above did NOT come from a project termbase. It is the set of " +
             "hits from the user's GENERAL glossary (patents, legal, technical, all mixed) that happen to occur " +
             "in this document, and a general glossary carries senses that are wrong for a given text: " +
             "\"application\" as a patent application (aanvrage) in a document about software applications, " +
@@ -938,7 +938,7 @@ namespace Supervertaler.MemoQ.Core
             "uses; (b) where the document plainly uses a different sense, LOCK the document's sense and say " +
             "explicitly that the glossary rendering does not apply here; (c) present glossary-derived " +
             "mappings as \"preferred (from the general glossary)\", not as \"project termbase\", and never " +
-            "write \"never use X\" against a rendering merely because the glossary offered another — reserve " +
+            "write \"never use X\" against a rendering merely because the glossary offered another – reserve " +
             "prohibitions for terms actually marked FORBIDDEN. Getting this wrong locks a nonsense rendering " +
             "into every segment of the job.\n" +
             "- Because the whole prompt is re-sent with every ~10-segment request, aim for 1500-3000 words " +
@@ -1288,7 +1288,7 @@ namespace Supervertaler.MemoQ.Core
             var type = (ctx.Request.QueryString["type"] ?? "").ToLowerInvariant();
             if (type != "numbers" && type != "tags" && type != "nbsp" && type != "terminology")
             {
-                TryWrite(ctx, 400, Json(new ErrorBody { Error = "missing or unknown 'type' — use numbers, tags, nbsp or terminology" }));
+                TryWrite(ctx, 400, Json(new ErrorBody { Error = "missing or unknown 'type' – use numbers, tags, nbsp or terminology" }));
                 return;
             }
 
@@ -1306,7 +1306,7 @@ namespace Supervertaler.MemoQ.Core
                 Found = result.Found,
                 Truncated = result.Truncated,
                 Note = result.Note,
-                Unit = "paragraph — pass 'index' to go_to_segment to jump there",
+                Unit = "paragraph – pass 'index' to go_to_segment to jump there",
                 Issues = result.Issues.Select(i => new QaIssueBody
                 {
                     Index = i.Index, PartId = i.PartId, Detail = i.Detail, Source = i.Source, Target = i.Target
@@ -1327,7 +1327,7 @@ namespace Supervertaler.MemoQ.Core
             {
                 DocumentName = doc.DocumentName,
                 Total = groups.Count,
-                Unit = "paragraph — the same source paragraph translated differently",
+                Unit = "paragraph – the same source paragraph translated differently",
                 Note = groups.Count == 0 ? "No repeated source paragraph has more than one translation." : null,
                 Groups = groups.Skip(offset).Take(limit).Select(g => new InconsistencyGroupBody
                 {
@@ -1668,24 +1668,24 @@ namespace Supervertaler.MemoQ.Core
             [DataMember(Name = "content")] public string Content { get; set; }
         }
 
-        private const string HelpCard = @"# Supervertaler for memoQ — what you can ask
+        private const string HelpCard = @"# Supervertaler for memoQ – what you can ask
 
-**Reading the project** (the plugin sees what memoQ sends it — after one Pre-translate pass it has the whole document):
-- *What is this project about?* — languages, client, domain, captured documents
-- *Show me the segments* — the captured source text, with anything already staged
-- *What has the translator confirmed so far?* — human-approved pairs, the gold standard for style and terminology
+**Reading the project** (the plugin sees what memoQ sends it – after one Pre-translate pass it has the whole document):
+- *What is this project about?* – languages, client, domain, captured documents
+- *Show me the segments* – the captured source text, with anything already staged
+- *What has the translator confirmed so far?* – human-approved pairs, the gold standard for style and terminology
 
 **Terminology:**
-- *Look up a term* — search the Supervertaler glossary
-- *Add a term* — appended to the glossary; memoQ's terminology pane and every later translation request pick it up
+- *Look up a term* – search the Supervertaler glossary
+- *Add a term* – appended to the glossary; memoQ's terminology pane and every later translation request pick it up
 
 **Translating (the memoQ way):**
-- *Translate these segments* — translations are **staged**, not written. They reach the grid when the user runs Pre-translate or lands on the segment: memoQ asks the plugin, and the plugin serves your staged text. Nothing changes in memoQ until the user acts.
+- *Translate these segments* – translations are **staged**, not written. They reach the grid when the user runs Pre-translate or lands on the segment: memoQ asks the plugin, and the plugin serves your staged text. Nothing changes in memoQ until the user acts.
 - *What's staged?* / *Clear the staging area*
 
 **Prompts:**
 - *List / read / save prompts* in the shared Supervertaler library. Draft a project-specific prompt, save it, and the user selects it under Resources > Settings > MT > Supervertaler.
 
-**What this bridge cannot do:** move the cursor, edit segments directly, confirm anything, or read memoQ's own TMs and termbases — memoQ gives plugins no API for any of that. The translator stays the hands.";
+**What this bridge cannot do:** move the cursor, edit segments directly, confirm anything, or read memoQ's own TMs and termbases – memoQ gives plugins no API for any of that. The translator stays the hands.";
     }
 }

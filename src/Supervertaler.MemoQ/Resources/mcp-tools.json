@@ -44,7 +44,7 @@
     {
       "name": "get_active_segment",
       "access": "read",
-      "description": "Where the user's cursor is in memoQ right now. Returns the paragraph (part) it is in with full source and target, plus activeSource/activeTarget: the sentence within that paragraph that is actually selected — the memoQ grid row — when the paragraph has several. Needs the Supervertaler preview tool running (memoQ starts it automatically once registered); if it is not, this says so. Use before requests such as 'translate this one' or 'what does this segment say'.",
+      "description": "Where the user's cursor is in memoQ right now. Returns the paragraph (part) it is in with full source and target, plus activeSource/activeTarget: the sentence within that paragraph that is actually selected – the memoQ grid row – when the paragraph has several. Needs the Supervertaler preview tool running (memoQ starts it automatically once registered); if it is not, this says so. Use before requests such as 'translate this one' or 'what does this segment say'.",
       "inputSchema": { "type": "object", "properties": {} },
       "method": "GET",
       "path": "/v1/active",
@@ -92,7 +92,7 @@
     {
       "name": "check_tags",
       "access": "read",
-      "description": "QA check over the live document: paragraphs whose inline tag markers (<b>...</b>, <t1>...</t1>) differ from the source — by count, or by tag name as a multiset when counts agree. Needs the Supervertaler preview tool running. A count difference can be legitimate; a name mismatch with equal counts rarely is.",
+      "description": "QA check over the live document: paragraphs whose inline tag markers (<b>...</b>, <t1>...</t1>) differ from the source – by count, or by tag name as a multiset when counts agree. Needs the Supervertaler preview tool running. A count difference can be legitimate; a name mismatch with equal counts rarely is.",
       "inputSchema": {
         "type": "object",
         "properties": {
@@ -109,7 +109,7 @@
     {
       "name": "check_nbsp",
       "access": "read",
-      "description": "QA check over the live document: translated paragraphs with fewer non-breaking spaces (U+00A0) than their source. Invisible on screen and in every tool response, so this is the only way to see a lost one — relevant where a style guide wants a non-breaking space between a value and its unit. Needs the Supervertaler preview tool running.",
+      "description": "QA check over the live document: translated paragraphs with fewer non-breaking spaces (U+00A0) than their source. Invisible on screen and in every tool response, so this is the only way to see a lost one – relevant where a style guide wants a non-breaking space between a value and its unit. Needs the Supervertaler preview tool running.",
       "inputSchema": {
         "type": "object",
         "properties": {

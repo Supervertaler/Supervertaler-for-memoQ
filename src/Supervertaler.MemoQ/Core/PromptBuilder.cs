@@ -206,7 +206,7 @@ namespace Supervertaler.MemoQ.Core
 
             if (flow.Count > 0)
             {
-                sb.AppendLine("Surrounding source text (context only — do not translate):");
+                sb.AppendLine("Surrounding source text (context only – do not translate):");
                 foreach (var s in flow)
                     sb.AppendLine("- " + TagBridge.ToPlainText(s.SourceSegment));
                 sb.AppendLine();
@@ -264,7 +264,7 @@ namespace Supervertaler.MemoQ.Core
             // instructions on purpose: it must hold however they have rewritten
             // their prompt.
             sb.AppendLine("Client terminology. Use these renderings unless one is clearly wrong for");
-            sb.AppendLine("this particular sentence — an entry can be right in general and wrong in context:");
+            sb.AppendLine("this particular sentence – an entry can be right in general and wrong in context:");
             foreach (var t in terms.Distinct()) sb.AppendLine(t);
             sb.AppendLine();
         }
@@ -286,7 +286,7 @@ namespace Supervertaler.MemoQ.Core
 
             if (forbidden.Count == 0) return;
 
-            sb.AppendLine("Forbidden terms. These are absolute — never use them, in any form,");
+            sb.AppendLine("Forbidden terms. These are absolute – never use them, in any form,");
             sb.AppendLine("even if they seem to fit:");
             foreach (var t in forbidden) sb.AppendLine("- " + t);
             sb.AppendLine();

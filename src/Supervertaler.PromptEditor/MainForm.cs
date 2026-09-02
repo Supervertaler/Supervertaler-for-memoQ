@@ -69,7 +69,7 @@ namespace Supervertaler.PromptEditor
             AutoScaleDimensions = new SizeF(96F, 96F);
             AutoScaleMode = AutoScaleMode.Dpi;
 
-            Text = "Supervertaler — Prompt Library";
+            Text = "Supervertaler – Prompt Library";
             Width = 1180;
             Height = 760;
             StartPosition = FormStartPosition.CenterScreen;
@@ -364,14 +364,14 @@ namespace Supervertaler.PromptEditor
             foreach (var p in Placeholders.All)
             {
                 var label = p.Legacy
-                    ? p.Token + "   — " + p.Meaning + " (legacy)"
-                    : p.Token + "   — " + p.Meaning;
+                    ? p.Token + "   – " + p.Meaning + " (legacy)"
+                    : p.Token + "   – " + p.Meaning;
 
                 var item = new ToolStripMenuItem(label);
                 var token = p.Token;
                 item.Click += (s, e) => InsertAtCaret(token);
                 if (p.Legacy) item.ForeColor = SystemColors.GrayText;
-                if (!p.FilledByMemoQ) item.ToolTipText = "memoQ leaves this empty — see the warnings pane.";
+                if (!p.FilledByMemoQ) item.ToolTipText = "memoQ leaves this empty – see the warnings pane.";
                 _insert.DropDownItems.Add(item);
             }
         }
@@ -701,7 +701,7 @@ namespace Supervertaler.PromptEditor
             _status.Text = "Drafted from " + result.TermCount + " glossary term(s) and "
                 + result.ConfirmedPairCount + " confirmed segment(s)"
                 + (string.IsNullOrWhiteSpace(result.Domain) ? "" : " · domain: " + result.Domain)
-                + " — review, then select it in memoQ under Prompt.";
+                + " – review, then select it in memoQ under Prompt.";
         }
 
         /// <summary>
@@ -721,7 +721,7 @@ namespace Supervertaler.PromptEditor
             if (entries.Count == 0)
             {
                 MessageBox.Show(this,
-                    "No glossary table found in this prompt.\r\n\r\nThe export looks for a Markdown table whose header names a source and a target column — the PROJECT-SPECIFIC GLOSSARY that AutoPrompt writes, or any table laid out the same way.",
+                    "No glossary table found in this prompt.\r\n\r\nThe export looks for a Markdown table whose header names a source and a target column – the PROJECT-SPECIFIC GLOSSARY that AutoPrompt writes, or any table laid out the same way.",
                     "Export glossary", MessageBoxButtons.OK, MessageBoxIcon.Information);
                 return;
             }
@@ -979,7 +979,7 @@ namespace Supervertaler.PromptEditor
 
                 foreach (var token in distinct.Where(t => !Placeholders.IsKnown(t)))
                 {
-                    _warnings.Items.Add(token + " is not a placeholder Supervertaler substitutes — "
+                    _warnings.Items.Add(token + " is not a placeholder Supervertaler substitutes – "
                         + "it will reach the model literally.");
                 }
 

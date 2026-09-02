@@ -79,7 +79,7 @@ namespace Supervertaler.MemoQ
 
         public override string FriendlyName => "Supervertaler terms";
 
-        public override string CopyrightText => "Copyright (c) 2026 Michael Beijer — supervertaler.com";
+        public override string CopyrightText => "Copyright (c) 2026 Michael Beijer – supervertaler.com";
 
         public override Image DisplayIcon => IconLoader.Large;
 

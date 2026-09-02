@@ -47,12 +47,12 @@ namespace Supervertaler.MemoQ.Settings
             var path = Core.SharedSettings.GlossaryPath;
             if (string.IsNullOrWhiteSpace(path))
             {
-                _glossaryLabel.Text = "(none — terminology pane, prompts and QA checks have nothing to use)";
+                _glossaryLabel.Text = "(none – terminology pane, prompts and QA checks have nothing to use)";
                 _glossaryLabel.ForeColor = SystemColors.GrayText;
             }
             else
             {
-                _glossaryLabel.Text = System.IO.Path.GetFileName(path) + "   —   " + path;
+                _glossaryLabel.Text = System.IO.Path.GetFileName(path) + "   –   " + path;
                 _glossaryLabel.ForeColor = System.IO.File.Exists(path) ? SystemColors.ControlText : Color.Firebrick;
             }
         }
@@ -437,7 +437,7 @@ namespace Supervertaler.MemoQ.Settings
 
             foreach (var p in PromptResolver.Available())
             {
-                var category = string.IsNullOrWhiteSpace(p.Category) ? "" : p.Category + "  —  ";
+                var category = string.IsNullOrWhiteSpace(p.Category) ? "" : p.Category + "  –  ";
                 _promptPick.Items.Add(new PromptChoice
                 {
                     Path = p.RelativePath,
@@ -694,7 +694,7 @@ namespace Supervertaler.MemoQ.Settings
 
                 var text = result.Translation?.PlainText ?? string.Empty;
                 _status.ForeColor = Color.FromArgb(0, 120, 40);
-                _status.Text = "OK — " + (text.Length > 40 ? text.Substring(0, 40) + "…" : text);
+                _status.Text = "OK – " + (text.Length > 40 ? text.Substring(0, 40) + "…" : text);
             }
             catch (Exception ex)
             {

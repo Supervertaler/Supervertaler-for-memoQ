@@ -70,7 +70,7 @@ namespace Supervertaler.MemoQ
         /// </summary>
         public override IRichSession CreateRichLookupSession()
         {
-            PluginLog.Write("CreateRichLookupSession CALLED — memoQ is offering rich context. "
+            PluginLog.Write("CreateRichLookupSession CALLED – memoQ is offering rich context. "
                 + "This has not been seen before; check the 'context:' line that follows.");
             return new SupervertalerRichSession(_context);
         }

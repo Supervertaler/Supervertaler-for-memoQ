@@ -139,7 +139,7 @@ namespace Supervertaler.MemoQ.Core
                     match.Content, sourceLanguage, targetLanguage);
             }
 
-            PluginLog.Write($"PromptResolver: '{promptRelativePath}' not found in the library — "
+            PluginLog.Write($"PromptResolver: '{promptRelativePath}' not found in the library – "
                 + "using the instructions from the options dialog instead");
             return inlineInstructions;
         }

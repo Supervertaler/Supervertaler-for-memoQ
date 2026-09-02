@@ -142,7 +142,7 @@ namespace Supervertaler.MemoQ.Settings
                 if (count == 0)
                 {
                     _status.ForeColor = Color.Firebrick;
-                    _status.Text = "No terms parsed — check that columns are separated by TABs, not spaces.";
+                    _status.Text = "No terms parsed – check that columns are separated by TABs, not spaces.";
                 }
                 else
                 {

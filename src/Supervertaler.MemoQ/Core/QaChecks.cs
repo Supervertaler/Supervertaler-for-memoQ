@@ -134,7 +134,7 @@ namespace Supervertaler.MemoQ.Core
                     break;
 
                 default:
-                    r.Note = "unknown check '" + check + "' — use numbers, tags, nbsp or terminology";
+                    r.Note = "unknown check '" + check + "' – use numbers, tags, nbsp or terminology";
                     break;
             }
 
@@ -213,7 +213,7 @@ namespace Supervertaler.MemoQ.Core
             r.Note = r.Found == 0
                 ? "Every glossary term found in a source paragraph has its expected rendering in the target, and no forbidden term appears."
                 : "Matching allows inflection (the first four letters of each word, diacritics folded, must appear), so a listed miss is " +
-                  "usually a genuine substitution — but check compounds and reordered phrases by eye.";
+                  "usually a genuine substitution – but check compounds and reordered phrases by eye.";
         }
 
         /// <summary>

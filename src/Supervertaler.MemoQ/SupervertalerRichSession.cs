@@ -227,7 +227,7 @@ namespace Supervertaler.MemoQ
 
             if (TranslationCache.TryGet(cacheKey, out var cached))
             {
-                PluginLog.Write($"translate: {bundle.Source.PlainText?.Length ?? 0} src chars — "
+                PluginLog.Write($"translate: {bundle.Source.PlainText?.Length ?? 0} src chars – "
                     + $"served from cache (hits {TranslationCache.Hits}, misses {TranslationCache.Misses})");
 
                 return new TranslationResult
