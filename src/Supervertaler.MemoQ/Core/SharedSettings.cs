@@ -44,6 +44,7 @@ namespace Supervertaler.MemoQ.Core
         }
 
         private const string GlossaryKey = "glossary";
+        private const string BridgeModeKey = "bridgemode";
 
         internal static string Path
         {
@@ -65,6 +66,32 @@ namespace Supervertaler.MemoQ.Core
         {
             get => Read(GlossaryKey);
             set => Write(GlossaryKey, value);
+        }
+
+        /// <summary>
+        /// Whether Pre-translate hands the segments to Claude Desktop instead of
+        /// calling the model. Shared rather than kept in memoQ's MT settings
+        /// resource because it says how the translator is working right now, not
+        /// anything about a particular project, and because it has to be
+        /// reachable without opening memoQ's dialogs.
+        /// </summary>
+        public static bool BridgeMode
+        {
+            get => Read(BridgeModeKey) == "1";
+            set => Write(BridgeModeKey, value ? "1" : "0");
+        }
+
+        /// <summary>
+        /// The shared value once it has ever been set, otherwise the value passed
+        /// in. This is the migration: the switch used to live in the MT settings
+        /// resource, and a user who had it on there keeps it on until the first
+        /// time either dialog writes the shared file. No copying, no flag to
+        /// leak, and nothing to undo once every install has moved across.
+        /// </summary>
+        public static bool BridgeModeOr(bool fromResource)
+        {
+            var raw = Read(BridgeModeKey);
+            return raw.Length == 0 ? fromResource : raw == "1";
         }
 
         private static string _cache;

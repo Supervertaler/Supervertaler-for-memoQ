@@ -135,12 +135,38 @@ namespace Supervertaler.PromptEditor
             _glossary.Click += (s, e) => ChooseGlossary();
             RefreshGlossary();
 
+            // The first setting to move out of memoQ's dialog. It says how you are
+            // working at this moment, chat-driven or key-driven, which is not a
+            // property of any one project.
+            var bridgeMode = new ToolStripMenuItem("Pre-translate via Claude Desktop (MCP)")
+            {
+                CheckOnClick = true,
+                Checked = SharedSettings.BridgeMode,
+                ToolTipText = "On: Pre-translate hands the segments to the chat and inserts what it stages back. "
+                    + "Off: Pre-translate calls the model with the API key set in memoQ."
+            };
+            bridgeMode.CheckedChanged += (s, e) =>
+            {
+                if (SharedSettings.BridgeMode == bridgeMode.Checked) return;
+                SharedSettings.BridgeMode = bridgeMode.Checked;
+                _status.Text = bridgeMode.Checked
+                    ? "Pre-translate will hand segments to Claude Desktop."
+                    : "Pre-translate will call the model directly.";
+            };
+
+            var settings = new ToolStripDropDownButton("Settings") { DisplayStyle = ToolStripItemDisplayStyle.Text };
+            settings.DropDownItems.Add(bridgeMode);
+
+            // memoQ's dialog writes the same file, so re-read rather than trust
+            // what this menu was last showing.
+            settings.DropDownOpening += (s, e) => bridgeMode.Checked = SharedSettings.BridgeMode;
+
             toolbar.Items.AddRange(new ToolStripItem[]
             {
                 newPrompt, newFolder, delete, new ToolStripSeparator(),
                 _save, new ToolStripSeparator(),
                 _insert, new ToolStripSeparator(),
-                draft, exportGlossary, _glossary, new ToolStripSeparator(),
+                draft, exportGlossary, _glossary, settings, new ToolStripSeparator(),
                 reload, openFolder
             });
 

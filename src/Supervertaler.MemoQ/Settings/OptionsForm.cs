@@ -348,7 +348,7 @@ namespace Supervertaler.MemoQ.Settings
             _batchSize.Value = Math.Max(1, Math.Min(100, g.BatchSize));
             _useTerminology.Checked = g.UseTerminologyContext;
             _useDocumentContext.Checked = g.UseDocumentContext;
-            _bridgeMode.Checked = g.BridgeMode;
+            _bridgeMode.Checked = SharedSettings.BridgeModeOr(g.BridgeMode);
         }
 
         private SupervertalerSettings Collect()
@@ -661,6 +661,12 @@ namespace Supervertaler.MemoQ.Settings
                 DialogResult = DialogResult.None;
                 return;
             }
+
+            // Shared with the prompt editor, so it is written here rather than
+            // left to travel inside the settings blob memoQ persists. The blob
+            // still carries it, which keeps an older build reading this resource
+            // working.
+            SharedSettings.BridgeMode = _bridgeMode.Checked;
 
             Result = Collect();
         }
