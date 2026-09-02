@@ -37,4 +37,9 @@
   -->
   <Import Project="..\..\core\Supervertaler.Core.props" />
 
+  <ItemGroup>
+    <!-- For the bridge client (AutoPrompt): not in net48's default SDK reference set. -->
+    <Reference Include="System.Net.Http" />
+  </ItemGroup>
+
 </Project>

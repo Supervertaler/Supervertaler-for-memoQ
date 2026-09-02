@@ -251,6 +251,7 @@ namespace Supervertaler.MemoQ.Core
                 case "GET /v1/prompts": HandlePromptList(ctx); return;
                 case "GET /v1/prompt": HandlePromptGet(ctx); return;
                 case "POST /v1/prompt": HandlePromptSave(ctx); return;
+                case "POST /v1/autoprompt": HandleAutoPrompt(ctx); return;
                 default:
                     TryWrite(ctx, 404, Json(new ErrorBody { Error = "unknown endpoint " + method + " " + path }));
                     return;
@@ -573,6 +574,237 @@ namespace Supervertaler.MemoQ.Core
                 Message = "Saved to the shared prompt library as \"" + prompt.Name + "\" (" + prompt.RelativePath + "). "
                         + "The user selects it in memoQ under Resources > Settings > MT > Supervertaler > Prompt."
             }));
+        }
+
+        /// <summary>
+        /// AutoPrompt: draft a project-specific translation prompt from what
+        /// the plugin has seen, using the plugin's own provider, model and key.
+        ///
+        /// Lives in the bridge rather than in the prompt editor because this is
+        /// where the inputs are — captured segments, confirmed pairs, the
+        /// glossary — and where the API key is (memoQ stores it encrypted; an
+        /// external process cannot read it). The editor is a thin caller.
+        ///
+        /// Deliberately NOT in the MCP tool registry: when Claude is the client,
+        /// Claude is the model, and it drafts prompts with save_prompt directly.
+        /// This endpoint is for the button.
+        /// </summary>
+        private void HandleAutoPrompt(HttpListenerContext ctx)
+        {
+            var req = Read<AutoPromptRequest>(ctx) ?? new AutoPromptRequest();
+            var context = _context;
+            var general = context?.General;
+            var apiKey = context?.Settings?.SecureSettings?.ApiKey;
+
+            if (general == null || string.IsNullOrWhiteSpace(apiKey))
+            {
+                TryWrite(ctx, 409, Json(new ErrorBody
+                {
+                    Error = "No API key is configured in memoQ's Supervertaler settings. "
+                          + "AutoPrompt uses the plugin's provider and key; set them under "
+                          + "Resource console > MT settings > Supervertaler > Configure plugin."
+                }));
+                return;
+            }
+
+            var doc = CaptureStore.Get(req.Document);
+            if (doc == null || doc.Sources.Count == 0)
+            {
+                TryWrite(ctx, 409, Json(new ErrorBody
+                {
+                    Error = "Nothing captured yet. Run Pre-translate once (with the Pre-translate-only "
+                          + "box ticked it costs nothing), then try again."
+                }));
+                return;
+            }
+
+            try
+            {
+                var sources = doc.Sources.Select(TagBridge.StripTagMarkers).ToList();
+                var sourceLang = PromptBuilder.DescribeLanguage(doc.SourceLangCode);
+                var targetLang = PromptBuilder.DescribeLanguage(doc.TargetLangCode);
+
+                var analysis = global::Supervertaler.Core.DocumentAnalyzer.Analyze(sources);
+
+                // Glossary hits across the whole document, deduplicated.
+                var terms = new List<global::Supervertaler.Core.Models.TermEntry>();
+                if (req.IncludeTerms)
+                {
+                    var matches = TermIndex.Find(SharedSettings.GlossaryPath, string.Join("\n", sources))
+                                  ?? (IReadOnlyList<TermIndex.Match>)new TermIndex.Match[0];
+                    terms = matches
+                        .GroupBy(m => m.Entry.Source + "\t" + m.Entry.Target, StringComparer.OrdinalIgnoreCase)
+                        .Select(g => g.First().Entry)
+                        .Select(e => new global::Supervertaler.Core.Models.TermEntry
+                        {
+                            SourceTerm = e.Source,
+                            TargetTerm = e.Target,
+                            Forbidden = e.Forbidden,
+                            SourceLang = sourceLang,
+                            TargetLang = targetLang,
+                            TermbaseName = "Supervertaler glossary"
+                        })
+                        .ToList();
+                }
+
+                // The translator's confirmed pairs are the TM here: not fuzzy
+                // matches from an archive, but this document's own approved
+                // renderings.
+                var pairs = req.IncludeConfirmed
+                    ? DocumentMemory.GetAll(doc.Key, 60).Select(p => new global::Supervertaler.Core.Models.TmMatch
+                    {
+                        SourceText = p.Source,
+                        TargetText = p.Target,
+                        MatchPercentage = 100,
+                        TmName = "Confirmed in memoQ"
+                    }).ToList()
+                    : new List<global::Supervertaler.Core.Models.TmMatch>();
+
+                var provider = SessionRunner.MapProviderForCore(general.Provider);
+                var endpoint = string.IsNullOrWhiteSpace(general.Endpoint) ? null : general.Endpoint.Trim();
+
+                // Phase 1: a short classification call for domain and a one-line
+                // description — the same step the Trados plugin runs.
+                var detectedDomain = analysis.PrimaryDomain;
+                var description = "";
+                try
+                {
+                    var sample = global::Supervertaler.Core.DocumentContextClassifier.BuildSample(sources);
+                    if (!string.IsNullOrEmpty(sample))
+                    {
+                        string classified;
+                        using (var client = new global::Supervertaler.Core.LlmClient(provider, general.Model, apiKey, endpoint))
+                        {
+                            classified = client.SendPromptAsync(
+                                global::Supervertaler.Core.DocumentContextClassifier.BuildUserPrompt(sample),
+                                global::Supervertaler.Core.DocumentContextClassifier.SystemPrompt,
+                                maxTokens: 300, suppressLog: true).GetAwaiter().GetResult();
+                        }
+                        global::Supervertaler.Core.DocumentContextClassifier.Parse(classified, out var aiDomain, out var aiDesc);
+                        if (!string.IsNullOrEmpty(aiDomain)) { detectedDomain = aiDomain; description = aiDesc ?? ""; }
+                    }
+                }
+                catch (Exception ex)
+                {
+                    PluginLog.Write("AutoPrompt: classification failed; using keyword domain", ex);
+                }
+
+                if (!string.IsNullOrWhiteSpace(req.Domain)) detectedDomain = req.Domain.Trim();
+
+                var summary = string.IsNullOrEmpty(description)
+                    ? $"{analysis.SegmentCount:N0} segments | {analysis.WordCount:N0} words"
+                    : $"Context: {description} | {analysis.SegmentCount:N0} segments | {analysis.WordCount:N0} words";
+
+                var meta = new List<string>();
+                if (!string.IsNullOrWhiteSpace(doc.Client)) meta.Add("Client: " + doc.Client);
+                if (!string.IsNullOrWhiteSpace(doc.Domain)) meta.Add("memoQ domain: " + doc.Domain);
+                if (!string.IsNullOrWhiteSpace(doc.Subject)) meta.Add("memoQ subject: " + doc.Subject);
+                var hint = string.Join("\n", new[] { string.Join(" | ", meta), req.Hint ?? "" }
+                    .Where(s => !string.IsNullOrWhiteSpace(s)));
+
+                var generationContext = new global::Supervertaler.Core.PromptGenerationContext
+                {
+                    SourceLang = sourceLang,
+                    TargetLang = targetLang,
+                    DetectedDomain = detectedDomain,
+                    AnalysisSummary = summary,
+                    SegmentCount = sources.Count,
+                    SourceSegments = sources,
+                    TermbaseTerms = terms,
+                    TotalTermCount = terms.Count,
+                    TmPairs = pairs,
+                    UserContextHint = hint,
+                    HostConstraints = MemoQHostConstraints
+                };
+
+                // Phase 2: the generation itself.
+                string raw;
+                using (var client = new global::Supervertaler.Core.LlmClient(provider, general.Model, apiKey, endpoint))
+                {
+                    raw = client.SendPromptAsync(
+                        global::Supervertaler.Core.PromptGenerator.BuildMetaPrompt(generationContext),
+                        maxTokens: 32768).GetAwaiter().GetResult();
+                }
+
+                var content = global::Supervertaler.Core.PromptGenerator.ParseGeneratedPrompt(raw) ?? raw;
+
+                var nameBits = new List<string>();
+                if (!string.IsNullOrWhiteSpace(doc.Client)) nameBits.Add(doc.Client);
+                else if (!string.IsNullOrWhiteSpace(detectedDomain)) nameBits.Add(detectedDomain);
+                nameBits.Add((doc.SourceLangCode ?? "?") + "-" + (doc.TargetLangCode ?? "?"));
+
+                PluginLog.Write($"AutoPrompt: drafted {content.Length} chars for {doc.Key} "
+                    + $"(domain {detectedDomain}, {terms.Count} terms, {pairs.Count} confirmed pairs)");
+
+                TryWrite(ctx, 200, Json(new AutoPromptResponse
+                {
+                    Content = content,
+                    SuggestedName = string.Join(" ", nameBits),
+                    Domain = detectedDomain,
+                    Summary = summary,
+                    Description = "Generated by AutoPrompt from the memoQ project"
+                        + (terms.Count == 0 ? " – glossary derived from the document (no glossary hits)" : ""),
+                    TermCount = terms.Count,
+                    ConfirmedPairCount = pairs.Count
+                }));
+            }
+            catch (Exception ex)
+            {
+                PluginLog.Write("AutoPrompt failed", ex);
+                TryWrite(ctx, 500, Json(new ErrorBody { Error = "AutoPrompt failed: " + ex.Message }));
+            }
+        }
+
+        /// <summary>
+        /// What the memoQ runtime actually does with a prompt — the ways it
+        /// differs from the Trados plugin the meta-prompt was written for.
+        /// </summary>
+        private const string MemoQHostConstraints =
+            "This prompt will run inside memoQ, through the Supervertaler MT plugin. The runtime differs from " +
+            "the defaults described above in these ways, and the generated prompt MUST reflect them:\n" +
+            "- The prompt is the SYSTEM prompt of every request. During Pre-translate the runtime delivers " +
+            "numbered batches of about 10 segments in the format described above; during interactive work it " +
+            "delivers ONE segment at a time with no numbering. The prompt must handle both: when a single " +
+            "unnumbered segment is delivered, return only its translation.\n" +
+            "- EVERY character the model returns is written verbatim into the target cell. There is NO comment " +
+            "channel. The generated prompt must therefore FORBID inline translator comments, ⟦TC: ...⟧ markers, " +
+            "notes, defect flags, questions or any text that is not the translation itself. Omit the section " +
+            "on translator comments entirely; replace it with an explicit prohibition.\n" +
+            "- Inline formatting arrives as tag markers such as <t1>...</t1> or <b>...</b>. The prompt must " +
+            "require every marker to be reproduced exactly, in the equivalent position, never invented, dropped " +
+            "or renumbered.\n" +
+            "- The runtime appends, per request, the glossary terms found in that request's segments and up to " +
+            "five of the translator's own CONFIRMED translations from this document as reference. The prompt " +
+            "should say that confirmed translations supplied at request time take precedence over the prompt's " +
+            "own glossary where they conflict, because they are the translator's later decisions.\n" +
+            "- Glossary terms supplied at request time are marked as either preferred or FORBIDDEN. Forbidden " +
+            "terms are absolute. Preferred terms should be followed unless clearly wrong for the sentence.\n" +
+            "- Because the whole prompt is re-sent with every ~10-segment request, aim for 1500-3000 words " +
+            "rather than 2000-5000: complete, but no padding.\n" +
+            "- Use the placeholders {{SOURCE_LANGUAGE}} and {{TARGET_LANGUAGE}} for the language names wherever " +
+            "they occur, instead of writing the names out. Do NOT use any other {{PLACEHOLDER}}; the runtime " +
+            "fills only those two.";
+
+        [DataContract]
+        internal class AutoPromptRequest
+        {
+            [DataMember(Name = "document")] public string Document { get; set; }
+            [DataMember(Name = "hint")] public string Hint { get; set; }
+            [DataMember(Name = "domain")] public string Domain { get; set; }
+            [DataMember(Name = "includeTerms")] public bool IncludeTerms { get; set; } = true;
+            [DataMember(Name = "includeConfirmed")] public bool IncludeConfirmed { get; set; } = true;
+        }
+
+        [DataContract]
+        internal class AutoPromptResponse
+        {
+            [DataMember(Name = "content")] public string Content { get; set; }
+            [DataMember(Name = "suggestedName")] public string SuggestedName { get; set; }
+            [DataMember(Name = "domain")] public string Domain { get; set; }
+            [DataMember(Name = "summary")] public string Summary { get; set; }
+            [DataMember(Name = "description")] public string Description { get; set; }
+            [DataMember(Name = "termCount")] public int TermCount { get; set; }
+            [DataMember(Name = "confirmedPairCount")] public int ConfirmedPairCount { get; set; }
         }
 
         // ── plumbing ─────────────────────────────────────────────────────

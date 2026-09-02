@@ -66,6 +66,12 @@ namespace Supervertaler.MemoQ.Core
             }
         }
 
+        /// <summary>Tagged text with the tag markers removed. For analysis passes that want prose, not markup.</summary>
+        public static string StripTagMarkers(string taggedText)
+        {
+            return string.IsNullOrEmpty(taggedText) ? taggedText ?? "" : StripXmlTags(taggedText);
+        }
+
         private static string StripXmlTags(string s)
         {
             return System.Text.RegularExpressions.Regex.Replace(s, "<[^>]*>", string.Empty);
