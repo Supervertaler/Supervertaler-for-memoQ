@@ -3,3 +3,6 @@ obj/
 *.user
 *.suo
 .vs/
+
+# Built bundles (the .mcpb is 29 MB)
+dist/
