@@ -92,7 +92,7 @@ namespace Supervertaler.MemoQ.Core
 
             // Bridge mode: the rest have been captured for Claude to see, and
             // that is the whole job of this pass. Nothing goes to the model.
-            if (SharedSettings.BridgeModeOr(context.General.BridgeMode))
+            if (context.General.BridgeMode)
             {
                 foreach (var i in pending)
                     results[i] = new TranslationResult { Translation = Segment.Empty, Confidence = 0 };

@@ -328,26 +328,31 @@ namespace Supervertaler.MemoQ.Settings
             var g = settings.GeneralSettings ?? new SupervertalerGeneralSettings();
             var s = settings.SecureSettings ?? new SupervertalerSecureSettings();
 
-            _provider.SelectedItem = Array.IndexOf(LlmProviders.All, g.Provider) >= 0
-                ? g.Provider
+            // Shown as they are actually in force: the shared file over the top
+            // of whatever memoQ stored in this MT settings resource. Editing here
+            // and editing in the prompt editor therefore cannot disagree.
+            var provider = SharedSettings.ProviderOr(g.Provider);
+            _provider.SelectedItem = Array.IndexOf(LlmProviders.All, provider) >= 0
+                ? provider
                 : LlmProviders.Anthropic;
-            _model.Text = g.Model;
-            _endpoint.Text = g.Endpoint;
+            _model.Text = SharedSettings.ModelOr(g.Model);
+            _endpoint.Text = SharedSettings.EndpointOr(g.Endpoint);
             _apiKey.Text = s.ApiKey;
             // Normalise to CRLF for display. A multiline TextBox does not treat a
             // bare LF as a line break, and the stored prompt reliably has them:
             // XML normalises CRLF to LF on read, so however the settings were
             // saved they come back LF-only and the box shows one run-on paragraph.
-            var prompt = string.IsNullOrWhiteSpace(g.SystemPrompt)
+            var stored = SharedSettings.InstructionsOr(g.SystemPrompt);
+            var prompt = string.IsNullOrWhiteSpace(stored)
                 ? SupervertalerGeneralSettings.DefaultSystemPrompt
-                : g.SystemPrompt;
+                : stored;
             _inlineInstructions = NormaliseForDisplay(prompt);
             _systemPrompt.Text = _inlineInstructions;
-            PopulatePrompts(g.PromptPath);
-            _maxParallel.Value = Math.Max(1, Math.Min(16, g.MaxParallelRequests));
-            _batchSize.Value = Math.Max(1, Math.Min(100, g.BatchSize));
-            _useTerminology.Checked = g.UseTerminologyContext;
-            _useDocumentContext.Checked = g.UseDocumentContext;
+            PopulatePrompts(SharedSettings.PromptPathOr(g.PromptPath));
+            _maxParallel.Value = Math.Max(1, Math.Min(16, SharedSettings.ParallelOr(g.MaxParallelRequests)));
+            _batchSize.Value = Math.Max(1, Math.Min(100, SharedSettings.BatchSizeOr(g.BatchSize)));
+            _useTerminology.Checked = SharedSettings.UseTerminologyContextOr(g.UseTerminologyContext);
+            _useDocumentContext.Checked = SharedSettings.UseDocumentContextOr(g.UseDocumentContext);
             _bridgeMode.Checked = SharedSettings.BridgeModeOr(g.BridgeMode);
         }
 
@@ -662,11 +667,20 @@ namespace Supervertaler.MemoQ.Settings
                 return;
             }
 
-            // Shared with the prompt editor, so it is written here rather than
-            // left to travel inside the settings blob memoQ persists. The blob
-            // still carries it, which keeps an older build reading this resource
-            // working.
+            // Written to the shared file as well as into the blob memoQ persists.
+            // The shared copy is what the plugin and the prompt editor read; the
+            // blob is kept in step so that an older build, or a copy of this
+            // resource opened somewhere else, still finds sensible values.
+            SharedSettings.Provider = (_provider.SelectedItem as string) ?? LlmProviders.Anthropic;
+            SharedSettings.Model = _model.Text.Trim();
+            SharedSettings.Endpoint = _endpoint.Text.Trim();
+            SharedSettings.PromptPath = SelectedPromptPath();
+            SharedSettings.Parallel = (int)_maxParallel.Value;
+            SharedSettings.BatchSize = (int)_batchSize.Value;
+            SharedSettings.UseTerminologyContext = _useTerminology.Checked;
+            SharedSettings.UseDocumentContext = _useDocumentContext.Checked;
             SharedSettings.BridgeMode = _bridgeMode.Checked;
+            SharedSettings.WriteInstructions(_systemPrompt.ReadOnly ? _inlineInstructions : _systemPrompt.Text);
 
             Result = Collect();
         }

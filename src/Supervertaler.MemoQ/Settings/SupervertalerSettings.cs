@@ -144,14 +144,4 @@ namespace Supervertaler.MemoQ.Settings
             }
         }
     }
-
-    /// <summary>Provider identifiers. Strings, not an enum, so an unknown value in an old settings file degrades rather than throws.</summary>
-    public static class LlmProviders
-    {
-        public const string Anthropic = "Anthropic";
-        public const string OpenAI = "OpenAI";
-        public const string Google = "Google";
-
-        public static readonly string[] All = { Anthropic, OpenAI, Google };
-    }
 }

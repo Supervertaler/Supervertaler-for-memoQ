@@ -1,31 +1,54 @@
 using System;
+using System.Collections.Generic;
+using System.Globalization;
 using System.IO;
 using System.Text;
 
 namespace Supervertaler.MemoQ.Core
 {
     /// <summary>
-    /// The handful of settings both directors need to agree on, kept outside
-    /// memoQ's per-plugin settings storage.
+    /// The settings that do not belong to memoQ's per-plugin storage, kept in a
+    /// file the plugin and the prompt editor both read and write.
     ///
-    /// Necessary because the two SDKs persist settings quite differently. An MT
-    /// plugin round-trips a <c>PluginSettings</c> blob through memoQ, scoped to an
-    /// *MT settings resource*; a TB plugin gets no such thing — it has
-    /// <c>ShowOptionsForm</c> and is expected to persist its own state. So a
-    /// setting they must share, like the glossary path, has nowhere to live in
-    /// either scheme.
+    /// It began as the handful the two directors had to agree on. The two SDKs
+    /// persist settings quite differently: an MT plugin round-trips a
+    /// <c>PluginSettings</c> blob through memoQ, scoped to an *MT settings
+    /// resource*; a TB plugin gets no such thing, only <c>ShowOptionsForm</c> and
+    /// the expectation that it persists its own state. A setting they share, like
+    /// the glossary path, has nowhere to live in either scheme.
     ///
-    /// A single file at
-    /// <c>%LocalAppData%\Supervertaler.memoQ\shared.txt</c> keeps it simple and
-    /// means the glossary can be set from either dialog and is picked up by both.
+    /// It has since become the home for settings that are not properties of a
+    /// project at all, and for settings the user should be able to reach without
+    /// opening memoQ. Reaching the MT plugin's dialog costs six clicks through
+    /// Project home; the prompt editor is a program you can pin to the taskbar.
     ///
-    /// Deliberately not JSON: two keys do not justify a serializer, and a file a
-    /// user can open in Notepad and fix is a feature for a plugin whose failure
-    /// mode is otherwise invisible.
+    /// Every accessor comes in an <c>...Or(fallback)</c> form that answers with
+    /// the value in the settings resource until this file has ever carried the
+    /// key. That is the whole migration story: nothing is copied, no flag records
+    /// whether a move has happened, and an install that never opens either dialog
+    /// keeps behaving exactly as it did.
+    ///
+    /// A file at
+    /// <c>C:\Users\&lt;you&gt;\AppData\Local\Supervertaler.memoQ\shared.txt</c>,
+    /// deliberately not JSON: a file the user can open in Notepad and fix is a
+    /// feature for a plugin whose failure mode is otherwise invisible. Values are
+    /// single-line by construction. The one multi-line setting, the inline
+    /// instructions, gets its own file rather than an escaping scheme.
     /// </summary>
     internal static class SharedSettings
     {
         private static readonly object _lock = new object();
+
+        private const string GlossaryKey = "glossary";
+        private const string BridgeModeKey = "bridgemode";
+        private const string ProviderKey = "provider";
+        private const string ModelKey = "model";
+        private const string EndpointKey = "endpoint";
+        private const string ParallelKey = "parallel";
+        private const string BatchSizeKey = "batchsize";
+        private const string TerminologyContextKey = "useterminology";
+        private const string DocumentContextKey = "usedocumentcontext";
+        private const string PromptPathKey = "promptpath";
 
         /// <summary>
         /// Where failures are reported. The plugin points this at its log; the
@@ -43,25 +66,30 @@ namespace Supervertaler.MemoQ.Core
             try { sink(message, ex); } catch { }
         }
 
-        private const string GlossaryKey = "glossary";
-        private const string BridgeModeKey = "bridgemode";
-
-        internal static string Path
+        internal static string Directory
         {
             get
             {
                 var dir = System.IO.Path.Combine(
                     Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
                     "Supervertaler.memoQ");
-                Directory.CreateDirectory(dir);
-                return System.IO.Path.Combine(dir, "shared.txt");
+                System.IO.Directory.CreateDirectory(dir);
+                return dir;
             }
         }
 
+        internal static string Path => System.IO.Path.Combine(Directory, "shared.txt");
+
         /// <summary>
-        /// Path to the tab-separated glossary, or empty. Read on the translation
-        /// path, so it is cached and only re-read when the file changes.
+        /// The inline instructions, in their own file because they are the one
+        /// setting that spans lines and a line-based store has no honest way to
+        /// hold them.
         /// </summary>
+        internal static string InstructionsPath => System.IO.Path.Combine(Directory, "instructions.txt");
+
+        // ── typed settings ───────────────────────────────────────────────
+
+        /// <summary>Path to the tab-separated glossary, or empty.</summary>
         public static string GlossaryPath
         {
             get => Read(GlossaryKey);
@@ -72,8 +100,7 @@ namespace Supervertaler.MemoQ.Core
         /// Whether Pre-translate hands the segments to Claude Desktop instead of
         /// calling the model. Shared rather than kept in memoQ's MT settings
         /// resource because it says how the translator is working right now, not
-        /// anything about a particular project, and because it has to be
-        /// reachable without opening memoQ's dialogs.
+        /// anything about a particular project.
         /// </summary>
         public static bool BridgeMode
         {
@@ -81,51 +108,227 @@ namespace Supervertaler.MemoQ.Core
             set => Write(BridgeModeKey, value ? "1" : "0");
         }
 
+        public static bool BridgeModeOr(bool fromResource) => BoolOr(BridgeModeKey, fromResource);
+
+        public static string Provider { get => Read(ProviderKey); set => Write(ProviderKey, value); }
+        public static string ProviderOr(string fromResource) => StringOr(ProviderKey, fromResource);
+
+        public static string Model { get => Read(ModelKey); set => Write(ModelKey, value); }
+        public static string ModelOr(string fromResource) => StringOr(ModelKey, fromResource);
+
+        public static string Endpoint { get => Read(EndpointKey); set => Write(EndpointKey, value); }
+        public static string EndpointOr(string fromResource) => StringOr(EndpointKey, fromResource);
+
+        public static int Parallel { get => IntOr(ParallelKey, 4); set => Write(ParallelKey, value.ToString(CultureInfo.InvariantCulture)); }
+        public static int ParallelOr(int fromResource) => IntOr(ParallelKey, fromResource);
+
+        public static int BatchSize { get => IntOr(BatchSizeKey, 20); set => Write(BatchSizeKey, value.ToString(CultureInfo.InvariantCulture)); }
+        public static int BatchSizeOr(int fromResource) => IntOr(BatchSizeKey, fromResource);
+
+        public static bool UseTerminologyContext { get => BoolOr(TerminologyContextKey, true); set => Write(TerminologyContextKey, value ? "1" : "0"); }
+        public static bool UseTerminologyContextOr(bool fromResource) => BoolOr(TerminologyContextKey, fromResource);
+
+        public static bool UseDocumentContext { get => BoolOr(DocumentContextKey, true); set => Write(DocumentContextKey, value ? "1" : "0"); }
+        public static bool UseDocumentContextOr(bool fromResource) => BoolOr(DocumentContextKey, fromResource);
+
+        public static string PromptPath { get => Read(PromptPathKey); set => Write(PromptPathKey, value); }
+        public static string PromptPathOr(string fromResource) => StringOr(PromptPathKey, fromResource);
+
         /// <summary>
-        /// The shared value once it has ever been set, otherwise the value passed
-        /// in. This is the migration: the switch used to live in the MT settings
-        /// resource, and a user who had it on there keeps it on until the first
-        /// time either dialog writes the shared file. No copying, no flag to
-        /// leak, and nothing to undo once every install has moved across.
+        /// The inline instructions, or the value from the settings resource while
+        /// the file has never been written. An empty file is a real value: the
+        /// user is allowed to clear the box.
         /// </summary>
-        public static bool BridgeModeOr(bool fromResource)
-        {
-            var raw = Read(BridgeModeKey);
-            return raw.Length == 0 ? fromResource : raw == "1";
-        }
-
-        private static string _cache;
-        private static DateTime _cacheStamp;
-        private static DateTime _lastCheck = DateTime.MinValue;
-        private static readonly TimeSpan CheckInterval = TimeSpan.FromSeconds(3);
-
-        private static string Read(string key)
+        public static string InstructionsOr(string fromResource)
         {
             lock (_lock)
             {
                 try
                 {
-                    var path = Path;
+                    // Cached on the same terms as the key file. This is read once
+                    // per segment on the translation path, and going to disk for
+                    // it every time would put a file open behind every row of a
+                    // ten-thousand-segment document.
                     var now = DateTime.UtcNow;
+                    if (_instructions == null || now - _instructionsCheck >= CheckInterval)
+                    {
+                        _instructionsCheck = now;
+                        var path = InstructionsPath;
 
-                    if (_cache != null && now - _lastCheck < CheckInterval) return Extract(_cache, key);
-                    _lastCheck = now;
+                        if (!File.Exists(path))
+                        {
+                            _instructions = null;
+                            return fromResource;
+                        }
 
-                    if (!File.Exists(path)) { _cache = string.Empty; return string.Empty; }
+                        var stamp = File.GetLastWriteTimeUtc(path);
+                        if (_instructions == null || stamp != _instructionsStamp)
+                        {
+                            _instructions = File.ReadAllText(path, Encoding.UTF8);
+                            _instructionsStamp = stamp;
+                        }
+                    }
 
-                    var stamp = File.GetLastWriteTimeUtc(path);
-                    if (_cache != null && stamp == _cacheStamp) return Extract(_cache, key);
+                    return _instructions ?? fromResource;
+                }
+                catch (Exception ex)
+                {
+                    Report("SharedSettings: instructions read failed", ex);
+                    return fromResource;
+                }
+            }
+        }
 
-                    _cache = File.ReadAllText(path, Encoding.UTF8);
-                    _cacheStamp = stamp;
-                    return Extract(_cache, key);
+        private static string _instructions;
+        private static DateTime _instructionsStamp;
+        private static DateTime _instructionsCheck = DateTime.MinValue;
+
+        public static void WriteInstructions(string value)
+        {
+            try
+            {
+                File.WriteAllText(InstructionsPath, value ?? string.Empty, new UTF8Encoding(false));
+                lock (_lock)
+                {
+                    _instructions = null;
+                    _instructionsCheck = DateTime.MinValue;
+                }
+            }
+            catch (Exception ex)
+            {
+                Report("SharedSettings: instructions write failed", ex);
+            }
+        }
+
+        /// <summary>
+        /// Copies anything this file does not yet carry out of memoQ's settings
+        /// resource. Called when memoQ hands the plugin its settings, so the
+        /// prompt editor, which cannot see that resource, shows what is actually
+        /// in force rather than its own defaults.
+        ///
+        /// Only ever fills gaps. A key already here is the user's, and a second
+        /// call must not walk over it.
+        /// </summary>
+        public static void SeedIfUnset(
+            string provider, string model, string endpoint, string promptPath,
+            int parallel, int batchSize, bool useTerminology, bool useDocumentContext,
+            bool bridgeMode, string instructions)
+        {
+            SeedString(ProviderKey, provider);
+            SeedString(ModelKey, model);
+            SeedString(EndpointKey, endpoint);
+            SeedString(PromptPathKey, promptPath);
+            SeedString(ParallelKey, parallel.ToString(CultureInfo.InvariantCulture));
+            SeedString(BatchSizeKey, batchSize.ToString(CultureInfo.InvariantCulture));
+            SeedString(TerminologyContextKey, useTerminology ? "1" : "0");
+            SeedString(DocumentContextKey, useDocumentContext ? "1" : "0");
+            SeedString(BridgeModeKey, bridgeMode ? "1" : "0");
+
+            try
+            {
+                if (!File.Exists(InstructionsPath) && !string.IsNullOrEmpty(instructions))
+                    WriteInstructions(instructions);
+            }
+            catch (Exception ex)
+            {
+                Report("SharedSettings: instructions seed failed", ex);
+            }
+        }
+
+        private static void SeedString(string key, string value)
+        {
+            if (TryRead(key, out _)) return;
+            Write(key, value ?? string.Empty);
+        }
+
+        // ── store ────────────────────────────────────────────────────────
+
+        private static Dictionary<string, string> _map;
+        private static DateTime _stamp;
+        private static DateTime _lastCheck = DateTime.MinValue;
+        private static readonly TimeSpan CheckInterval = TimeSpan.FromSeconds(3);
+
+        private static string StringOr(string key, string fromResource)
+        {
+            return TryRead(key, out var value) ? value : fromResource;
+        }
+
+        private static bool BoolOr(string key, bool fromResource)
+        {
+            return TryRead(key, out var value) ? value == "1" : fromResource;
+        }
+
+        private static int IntOr(string key, int fromResource)
+        {
+            return TryRead(key, out var value)
+                && int.TryParse(value, NumberStyles.Integer, CultureInfo.InvariantCulture, out var parsed)
+                ? parsed
+                : fromResource;
+        }
+
+        private static string Read(string key)
+        {
+            return TryRead(key, out var value) ? value : string.Empty;
+        }
+
+        /// <summary>
+        /// False when the key has never been written, which is what separates
+        /// "not set, defer to the settings resource" from a value the user has
+        /// deliberately cleared.
+        /// </summary>
+        private static bool TryRead(string key, out string value)
+        {
+            lock (_lock)
+            {
+                value = string.Empty;
+                try
+                {
+                    // Read on the translation path, so the file is parsed once and
+                    // re-parsed only when it changes, and its timestamp is checked
+                    // at most every few seconds. Everything downstream asks for
+                    // several keys per segment.
+                    var now = DateTime.UtcNow;
+                    if (_map == null || now - _lastCheck >= CheckInterval)
+                    {
+                        _lastCheck = now;
+                        var path = Path;
+
+                        if (!File.Exists(path))
+                        {
+                            _map = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+                        }
+                        else
+                        {
+                            var stamp = File.GetLastWriteTimeUtc(path);
+                            if (_map == null || stamp != _stamp)
+                            {
+                                _map = Parse(File.ReadAllText(path, Encoding.UTF8));
+                                _stamp = stamp;
+                            }
+                        }
+                    }
+
+                    return _map.TryGetValue(key, out value);
                 }
                 catch (Exception ex)
                 {
                     Report("SharedSettings: read failed", ex);
-                    return string.Empty;
+                    value = string.Empty;
+                    return false;
                 }
             }
+        }
+
+        private static Dictionary<string, string> Parse(string contents)
+        {
+            var map = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+            foreach (var line in (contents ?? string.Empty).Split(new[] { "\r\n", "\n" }, StringSplitOptions.RemoveEmptyEntries))
+            {
+                var eq = line.IndexOf('=');
+                if (eq <= 0) continue;
+                map[line.Substring(0, eq).Trim()] = line.Substring(eq + 1).Trim();
+            }
+            return map;
         }
 
         private static void Write(string key, string value)
@@ -155,23 +358,17 @@ namespace Supervertaler.MemoQ.Core
                     if (!replaced) sb.Append(key).Append('=').Append(value ?? string.Empty).Append("\r\n");
 
                     File.WriteAllText(path, sb.ToString(), Encoding.UTF8);
-                    _cache = null;
+
+                    // Force the next read to re-parse rather than wait out the
+                    // freshness interval: the writer expects to see its own value.
+                    _map = null;
+                    _lastCheck = DateTime.MinValue;
                 }
                 catch (Exception ex)
                 {
                     Report("SharedSettings: write failed", ex);
                 }
             }
-        }
-
-        private static string Extract(string contents, string key)
-        {
-            foreach (var line in contents.Split(new[] { "\r\n", "\n" }, StringSplitOptions.RemoveEmptyEntries))
-            {
-                if (!line.StartsWith(key + "=", StringComparison.OrdinalIgnoreCase)) continue;
-                return line.Substring(key.Length + 1).Trim();
-            }
-            return string.Empty;
         }
     }
 }

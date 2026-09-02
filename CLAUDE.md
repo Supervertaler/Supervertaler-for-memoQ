@@ -244,6 +244,51 @@ attached, by name.
 - Build: `bash build.sh` (build → smoke test → deploy).
 - No NuGet packages, deliberately — see "Dependencies" below.
 
+## Where settings live (moved out of memoQ, 2026-09-02)
+
+memoQ persists an MT plugin's settings inside an **MT settings resource**, and
+the only way to that dialog is Project home, Settings, MT settings, right-click
+the provider, Edit, find Supervertaler, Options. The user works with a single
+resource and wanted the settings reachable without opening memoQ at all, so
+they now live in two files the plugin and the prompt editor both read:
+
+- `C:\Users\<you>\AppData\Local\Supervertaler.memoQ\shared.txt` — one
+  `key=value` per line: glossary, bridgemode, provider, model, endpoint,
+  parallel, batchsize, useterminology, usedocumentcontext, promptpath.
+- `...\instructions.txt` — the inline instructions, in their own file because
+  they are the one setting that spans lines.
+
+Three rules hold this together:
+
+1. **`SharedSettings` knows nothing about the settings model.** The prompt
+   editor compiles the very same source file (a `<Compile Include>` link in its
+   csproj, alongside `LlmProviders.cs`), so it must not reference memoQ SDK
+   types. It reports errors through an `ErrorSink` the plugin points at its log
+   and the editor leaves silent.
+2. **`EngineContext.General` is the single overlay point.** It returns the
+   stored resource values with anything the shared file carries laid over the
+   top, resolved on every access so a change in the editor lands on the next
+   segment. All eight consumers read settings through it and none of them know
+   two stores exist.
+3. **Every accessor has an `...Or(fallback)` form**, answering with the
+   resource value until the file has ever carried that key. That is the whole
+   migration: nothing is copied on upgrade and no flag records whether a move
+   happened.
+
+`EngineContext`'s constructor calls `SharedSettings.SeedIfUnset(...)`, filling
+gaps from the resource memoQ just handed us, so the editor shows what is
+actually in force rather than its own defaults.
+
+### The harness trap this creates
+
+**Always run a harness through `run-harness.ps1`.** A harness builds an engine
+from a bare defaults object, so seeding writes *those* into `shared.txt` — and
+because seeding only fills gaps, memoQ then finds the keys present and never
+seeds the real ones. One unguarded harness run silently blanks the user's
+selected prompt. The wrapper snapshots both files and restores them in a
+`finally`. This has already happened once and was caught by reading the file
+afterwards; check it after any run that skipped the wrapper.
+
 ## Gotchas that have already bitten
 
 **memoQ will not load an assembly without `[assembly: Module(...)]`.** This is the

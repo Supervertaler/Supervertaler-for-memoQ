@@ -37,14 +37,55 @@ namespace Supervertaler.MemoQ.Core
             Settings = settings ?? new SupervertalerSettings();
             SourceLangCode = sourceLangCode;
             TargetLangCode = targetLangCode;
+
+            // memoQ has just handed us the settings resource. Copy anything the
+            // shared file is missing out of it, once, so the prompt editor is
+            // showing the same values this engine will use.
+            var stored = Settings.GeneralSettings ?? new SupervertalerGeneralSettings();
+            SharedSettings.SeedIfUnset(
+                stored.Provider, stored.Model, stored.Endpoint, stored.PromptPath,
+                stored.MaxParallelRequests, stored.BatchSize,
+                stored.UseTerminologyContext, stored.UseDocumentContext,
+                stored.BridgeMode, stored.SystemPrompt);
         }
 
         public SupervertalerSettings Settings { get; }
         public string SourceLangCode { get; }
         public string TargetLangCode { get; }
 
-        public SupervertalerGeneralSettings General =>
-            Settings.GeneralSettings ?? new SupervertalerGeneralSettings();
+        /// <summary>
+        /// The settings actually in force: what memoQ handed us from the MT
+        /// settings resource, with anything the shared file carries laid over the
+        /// top. Every consumer reads settings through here, so this is the only
+        /// place that has to know the two stores exist.
+        ///
+        /// Resolved on each access rather than cached, so a change made in the
+        /// prompt editor takes effect on the next segment instead of the next
+        /// time memoQ builds an engine. The reads behind it are served from a
+        /// parsed dictionary refreshed at most every few seconds, so the cost is
+        /// a few dictionary lookups and one small allocation.
+        /// </summary>
+        public SupervertalerGeneralSettings General
+        {
+            get
+            {
+                var stored = Settings.GeneralSettings ?? new SupervertalerGeneralSettings();
+
+                return new SupervertalerGeneralSettings
+                {
+                    Provider = SharedSettings.ProviderOr(stored.Provider),
+                    Model = SharedSettings.ModelOr(stored.Model),
+                    Endpoint = SharedSettings.EndpointOr(stored.Endpoint),
+                    PromptPath = SharedSettings.PromptPathOr(stored.PromptPath),
+                    SystemPrompt = SharedSettings.InstructionsOr(stored.SystemPrompt),
+                    BatchSize = SharedSettings.BatchSizeOr(stored.BatchSize),
+                    MaxParallelRequests = SharedSettings.ParallelOr(stored.MaxParallelRequests),
+                    UseTerminologyContext = SharedSettings.UseTerminologyContextOr(stored.UseTerminologyContext),
+                    UseDocumentContext = SharedSettings.UseDocumentContextOr(stored.UseDocumentContext),
+                    BridgeMode = SharedSettings.BridgeModeOr(stored.BridgeMode)
+                };
+            }
+        }
 
         /// <summary>
         /// The document memoQ most recently asked us to translate in, or

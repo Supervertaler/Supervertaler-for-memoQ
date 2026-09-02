@@ -36,7 +36,7 @@ namespace Supervertaler.PromptEditor
         private ToolStripButton _save;
         private ToolStripDropDownButton _insert;
         private ToolStripStatusLabel _status;
-        private ToolStripButton _glossary;
+        private ToolStripStatusLabel _glossary;
         private ToolStripStatusLabel _dirtyLabel;
         private SplitContainer _split;
 
@@ -88,57 +88,51 @@ namespace Supervertaler.PromptEditor
 
             _editorFont = new Font("Consolas", 10.5f);
 
-            var toolbar = new ToolStrip { GripStyle = ToolStripGripStyle.Hidden };
+            // A menu bar rather than one strip of eleven buttons. The strip had
+            // come to hold file operations, editing helpers, memoQ integration and
+            // settings side by side with nothing to say which was which, and the
+            // settings end of it is still growing. Menus group by purpose and cost
+            // no width; the toolbar keeps only what is reached for constantly.
+            var menu = new MenuStrip();
 
-            var newPrompt = new ToolStripButton("New prompt") { DisplayStyle = ToolStripItemDisplayStyle.Text };
-            newPrompt.Click += (s, e) => NewPrompt();
-
-            var newFolder = new ToolStripButton("New folder") { DisplayStyle = ToolStripItemDisplayStyle.Text };
-            newFolder.Click += (s, e) => NewFolder();
-
-            var delete = new ToolStripButton("Delete") { DisplayStyle = ToolStripItemDisplayStyle.Text };
-            delete.Click += (s, e) => DeleteSelected();
-
-            _save = new ToolStripButton("Save") { DisplayStyle = ToolStripItemDisplayStyle.Text, Enabled = false };
-            _save.Click += (s, e) => Save();
-
-            _insert = new ToolStripDropDownButton("Insert placeholder")
+            var fileMenu = new ToolStripMenuItem("&File");
+            fileMenu.DropDownItems.Add(new ToolStripMenuItem("&New prompt", null, (s, e) => NewPrompt())
             {
-                DisplayStyle = ToolStripItemDisplayStyle.Text
-            };
-            BuildInsertMenu();
+                ShortcutKeys = Keys.Control | Keys.N
+            });
+            fileMenu.DropDownItems.Add(new ToolStripMenuItem("New &folder", null, (s, e) => NewFolder()));
+            fileMenu.DropDownItems.Add(new ToolStripMenuItem("&Delete", null, (s, e) => DeleteSelected()));
+            fileMenu.DropDownItems.Add(new ToolStripSeparator());
 
-            var reload = new ToolStripButton("Reload from disk") { DisplayStyle = ToolStripItemDisplayStyle.Text };
-            reload.Click += (s, e) => Reload();
-
-            var openFolder = new ToolStripButton("Open folder") { DisplayStyle = ToolStripItemDisplayStyle.Text };
-            openFolder.Click += (s, e) => OpenLibraryFolder();
-
-            var draft = new ToolStripButton("Draft for memoQ project…")
+            // Ctrl+S is already handled in the form's KeyDown. Declaring it as a
+            // real shortcut here too would save twice on one keystroke, so this
+            // only advertises it.
+            fileMenu.DropDownItems.Add(new ToolStripMenuItem("&Save", null, (s, e) => Save())
             {
-                DisplayStyle = ToolStripItemDisplayStyle.Text,
+                ShortcutKeyDisplayString = "Ctrl+S"
+            });
+            fileMenu.DropDownItems.Add(new ToolStripMenuItem("&Reload from disk", null, (s, e) => Reload())
+            {
+                ShortcutKeys = Keys.F5
+            });
+            fileMenu.DropDownItems.Add(new ToolStripSeparator());
+            fileMenu.DropDownItems.Add(new ToolStripMenuItem("Open library f&older", null, (s, e) => OpenLibraryFolder()));
+            fileMenu.DropDownItems.Add(new ToolStripSeparator());
+            fileMenu.DropDownItems.Add(new ToolStripMenuItem("E&xit", null, (s, e) => Close()));
+
+            var memoqMenu = new ToolStripMenuItem("&memoQ");
+            memoqMenu.DropDownItems.Add(new ToolStripMenuItem("&Draft a prompt for the open project…", null, (s, e) => DraftForProject())
+            {
                 ToolTipText = "AutoPrompt: have the AI write a prompt tailored to the document open in memoQ"
-            };
-            draft.Click += (s, e) => DraftForProject();
-
-            var exportGlossary = new ToolStripButton("Export glossary…")
-            {
-                DisplayStyle = ToolStripItemDisplayStyle.Text,
-                ToolTipText = "Turn this prompt's locked-terms table into a Supervertaler glossary file, and make it the active one in memoQ"
-            };
-            exportGlossary.Click += (s, e) => ExportGlossary();
-
-            // Names the glossary in force and changes it. The setting is shared
-            // with the plugin through one file, so this works with memoQ closed,
-            // and a running memoQ picks the change up within a few seconds.
-            _glossary = new ToolStripButton { DisplayStyle = ToolStripItemDisplayStyle.Text };
-            _glossary.Click += (s, e) => ChooseGlossary();
-            RefreshGlossary();
+            });
+            memoqMenu.DropDownItems.Add(new ToolStripSeparator());
+            memoqMenu.DropDownItems.Add(new ToolStripMenuItem("&Export this prompt's terms as a glossary…", null, (s, e) => ExportGlossary()));
+            memoqMenu.DropDownItems.Add(new ToolStripMenuItem("&Choose the active glossary…", null, (s, e) => ChooseGlossary()));
 
             // The first setting to move out of memoQ's dialog. It says how you are
             // working at this moment, chat-driven or key-driven, which is not a
             // property of any one project.
-            var bridgeMode = new ToolStripMenuItem("Pre-translate via Claude Desktop (MCP)")
+            var bridgeMode = new ToolStripMenuItem("&Pre-translate via Claude Desktop (MCP)")
             {
                 CheckOnClick = true,
                 Checked = SharedSettings.BridgeMode,
@@ -154,20 +148,50 @@ namespace Supervertaler.PromptEditor
                     : "Pre-translate will call the model directly.";
             };
 
-            var settings = new ToolStripDropDownButton("Settings") { DisplayStyle = ToolStripItemDisplayStyle.Text };
-            settings.DropDownItems.Add(bridgeMode);
+            var settingsMenu = new ToolStripMenuItem("&Settings");
+            settingsMenu.DropDownItems.Add(new ToolStripMenuItem("&Translation settings…", null, (s, e) => ShowSettings()));
+            settingsMenu.DropDownItems.Add(new ToolStripSeparator());
 
-            // memoQ's dialog writes the same file, so re-read rather than trust
-            // what this menu was last showing.
-            settings.DropDownOpening += (s, e) => bridgeMode.Checked = SharedSettings.BridgeMode;
+            // Also on the menu itself, not only inside the dialog: this is the one
+            // that gets flipped between jobs rather than set once.
+            settingsMenu.DropDownItems.Add(bridgeMode);
+
+            // memoQ's dialog writes the same file, so re-read on opening rather
+            // than trust what this menu was last showing.
+            settingsMenu.DropDownOpening += (s, e) => bridgeMode.Checked = SharedSettings.BridgeMode;
+
+            var helpMenu = new ToolStripMenuItem("&Help");
+            helpMenu.DropDownItems.Add(new ToolStripMenuItem("&Documentation", null, (s, e) => OpenDocumentation()));
+
+            menu.Items.AddRange(new ToolStripItem[] { fileMenu, memoqMenu, settingsMenu, helpMenu });
+
+            // Only what is used while actually writing a prompt.
+            var toolbar = new ToolStrip { GripStyle = ToolStripGripStyle.Hidden };
+
+            var newPromptButton = new ToolStripButton("New prompt") { DisplayStyle = ToolStripItemDisplayStyle.Text };
+            newPromptButton.Click += (s, e) => NewPrompt();
+
+            _save = new ToolStripButton("Save") { DisplayStyle = ToolStripItemDisplayStyle.Text, Enabled = false };
+            _save.Click += (s, e) => Save();
+
+            _insert = new ToolStripDropDownButton("Insert placeholder")
+            {
+                DisplayStyle = ToolStripItemDisplayStyle.Text
+            };
+            BuildInsertMenu();
+
+            var draft = new ToolStripButton("Draft for memoQ project…")
+            {
+                DisplayStyle = ToolStripItemDisplayStyle.Text,
+                ToolTipText = "AutoPrompt: have the AI write a prompt tailored to the document open in memoQ"
+            };
+            draft.Click += (s, e) => DraftForProject();
 
             toolbar.Items.AddRange(new ToolStripItem[]
             {
-                newPrompt, newFolder, delete, new ToolStripSeparator(),
-                _save, new ToolStripSeparator(),
+                newPromptButton, _save, new ToolStripSeparator(),
                 _insert, new ToolStripSeparator(),
-                draft, exportGlossary, _glossary, settings, new ToolStripSeparator(),
-                reload, openFolder
+                draft
             });
 
             _tree = new TreeView
@@ -272,13 +296,33 @@ namespace Supervertaler.PromptEditor
 
             var strip = new StatusStrip();
             _status = new ToolStripStatusLabel { Spring = true, TextAlign = ContentAlignment.MiddleLeft };
+
+            // The active glossary lives here because it is state rather than an
+            // action: worth seeing at all times, not worth a button. Clicking it
+            // opens the same chooser the memoQ menu does.
+            _glossary = new ToolStripStatusLabel
+            {
+                IsLink = true,
+                LinkBehavior = LinkBehavior.HoverUnderline,
+                Margin = new Padding(0, 3, 14, 2)
+            };
+            _glossary.Click += (s, e) => ChooseGlossary();
+            RefreshGlossary();
+
             _dirtyLabel = new ToolStripStatusLabel { Text = "" };
             strip.Items.Add(_status);
+            strip.Items.Add(_glossary);
             strip.Items.Add(_dirtyLabel);
 
             Controls.Add(_split);
             Controls.Add(toolbar);
+
+            // Added after the toolbar on purpose: docked children are laid out
+            // from the back of the collection forwards, so the last Top control
+            // added claims the very top of the window.
+            Controls.Add(menu);
             Controls.Add(strip);
+            MainMenuStrip = menu;
 
             _name.TextChanged += (s, e) => MarkDirty();
             _description.TextChanged += (s, e) => MarkDirty();
@@ -802,6 +846,30 @@ namespace Supervertaler.PromptEditor
         }
 
         /// <summary>Shows which glossary is active, or says plainly that none is.</summary>
+        /// <summary>How Supervertaler translates: the same settings memoQ shows.</summary>
+        private void ShowSettings()
+        {
+            using (var dialog = new SettingsForm())
+            {
+                if (dialog.ShowDialog(this) == DialogResult.OK)
+                    _status.Text = "Translation settings saved.";
+            }
+        }
+
+        /// <summary>Opens the editor's page on the documentation site.</summary>
+        private void OpenDocumentation()
+        {
+            try
+            {
+                Process.Start("https://docs.supervertaler.com/memoq/prompt-editor/");
+            }
+            catch (Exception ex)
+            {
+                MessageBox.Show(this, "Could not open the documentation.\r\n\r\n" + ex.Message,
+                    "Supervertaler", MessageBoxButtons.OK, MessageBoxIcon.Information);
+            }
+        }
+
         private void RefreshGlossary()
         {
             var path = SharedSettings.GlossaryPath;
@@ -810,6 +878,7 @@ namespace Supervertaler.PromptEditor
             {
                 _glossary.Text = "Glossary: none";
                 _glossary.ForeColor = SystemColors.GrayText;
+                _glossary.LinkColor = SystemColors.GrayText;
                 _glossary.ToolTipText = "No glossary is active, so the terminology pane, the prompts "
                     + "and the terminology check have nothing to work from.";
                 return;
@@ -818,6 +887,7 @@ namespace Supervertaler.PromptEditor
             var missing = !File.Exists(path);
             _glossary.Text = "Glossary: " + Path.GetFileName(path) + (missing ? " (missing)" : "");
             _glossary.ForeColor = missing ? Color.Firebrick : SystemColors.ControlText;
+            _glossary.LinkColor = _glossary.ForeColor;
             _glossary.ToolTipText = (missing ? "This file no longer exists:\r\n" : "Active glossary:\r\n") + path
                 + "\r\n\r\nClick to choose a different one.";
         }

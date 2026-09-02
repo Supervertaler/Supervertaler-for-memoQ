@@ -51,6 +51,9 @@
     <Compile Include="..\Supervertaler.MemoQ\Core\SharedSettings.cs">
       <Link>Shared\SharedSettings.cs</Link>
     </Compile>
+    <Compile Include="..\Supervertaler.MemoQ\Settings\LlmProviders.cs">
+      <Link>Shared\LlmProviders.cs</Link>
+    </Compile>
   </ItemGroup>
 
 </Project>
