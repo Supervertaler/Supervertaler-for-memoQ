@@ -17,8 +17,8 @@
     <GenerateAssemblyInfo>true</GenerateAssemblyInfo>
     <Authors>Michael Beijer</Authors>
     <Company>Supervertaler</Company>
-    <Product>Supervertaler Prompt Editor</Product>
-    <Description>Editor for the shared Supervertaler prompt library</Description>
+    <Product>Supervertaler for memoQ</Product>
+    <Description>Prompts, glossary and settings for Supervertaler for memoQ</Description>
     <Copyright>Copyright (c) 2026 Michael Beijer</Copyright>
     <Version>0.1.0</Version>
     <InformationalVersion>0.1.0</InformationalVersion>
@@ -40,6 +40,8 @@
   <ItemGroup>
     <!-- For the bridge client (AutoPrompt): not in net48's default SDK reference set. -->
     <Reference Include="System.Net.Http" />
+    <!-- For reading the Trados key store, which is JSON. -->
+    <Reference Include="System.Runtime.Serialization" />
   </ItemGroup>
 
   <ItemGroup>
@@ -53,6 +55,9 @@
     </Compile>
     <Compile Include="..\Supervertaler.MemoQ\Settings\LlmProviders.cs">
       <Link>Shared\LlmProviders.cs</Link>
+    </Compile>
+    <Compile Include="..\Supervertaler.MemoQ\Core\ApiKeys.cs">
+      <Link>Shared\ApiKeys.cs</Link>
     </Compile>
   </ItemGroup>
 

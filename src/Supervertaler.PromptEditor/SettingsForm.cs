@@ -29,6 +29,8 @@ namespace Supervertaler.PromptEditor
         private readonly CheckBox _useTerminology = new CheckBox();
         private readonly CheckBox _useDocumentContext = new CheckBox();
         private readonly CheckBox _bridgeMode = new CheckBox();
+        private readonly TextBox _apiKey = new TextBox();
+        private Label _apiKeySource;
 
         public SettingsForm()
         {
@@ -58,14 +60,24 @@ namespace Supervertaler.PromptEditor
                 return label;
             }
 
-            Label Hint(string text, int top, int left, int width)
+            // Hints wrap and then report how tall they became. Fixing their
+            // height instead is what clipped "or a gateway." off the end of the
+            // endpoint hint and left the parallel-requests box half covered by
+            // the label above it: a Label with AutoSize off silently crops what
+            // does not fit, and the row below had already been positioned.
+            Label Hint(string text, int left, int width)
             {
                 var hint = new Label
                 {
-                    Text = text, Left = left, Top = top, Width = width,
-                    ForeColor = SystemColors.GrayText, AutoSize = false, Height = 30
+                    Text = text,
+                    Left = left,
+                    Top = y,
+                    AutoSize = true,
+                    MaximumSize = new Size(width, 0),
+                    ForeColor = SystemColors.GrayText
                 };
                 Controls.Add(hint);
+                y += hint.PreferredHeight;
                 return hint;
             }
 
@@ -85,8 +97,8 @@ namespace Supervertaler.PromptEditor
             _endpoint.Left = fieldX; _endpoint.Top = y; _endpoint.Width = fieldW;
             Controls.Add(_endpoint);
             y += 26;
-            Hint("Leave blank for the provider default. Set this for a local model or a gateway.", y, fieldX, fieldW);
-            y += 26;
+            Hint("Leave blank for the provider default. Set this for a local model or a gateway.", fieldX, fieldW);
+            y += 10;
 
             Caption("Parallel requests", y);
             _parallel.Left = fieldX; _parallel.Top = y; _parallel.Width = 70;
@@ -98,8 +110,13 @@ namespace Supervertaler.PromptEditor
             _batchSize.Left = fieldX; _batchSize.Top = y; _batchSize.Width = 70;
             _batchSize.Minimum = 1; _batchSize.Maximum = 100;
             Controls.Add(_batchSize);
-            Hint("Pre-translate only; memoQ caps a batch at about 10.", y + 3, fieldX + 84, fieldW - 84);
-            y += rowH + 4;
+            var batchHint = new Label
+            {
+                Text = "Pre-translate only; memoQ caps a batch at about 10.",
+                Left = fieldX + 84, Top = y + 3, AutoSize = true, ForeColor = SystemColors.GrayText
+            };
+            Controls.Add(batchHint);
+            y += rowH + 6;
 
             _useTerminology.Text = "Send memoQ's termbase hits and forbidden terms to the model";
             _useTerminology.Left = fieldX; _useTerminology.Top = y; _useTerminology.Width = fieldW;
@@ -116,11 +133,23 @@ namespace Supervertaler.PromptEditor
             Controls.Add(_bridgeMode);
             y += 24;
             Hint("Pre-translate then only hands the segments to the chat and inserts the translations it "
-                + "sends back. Suggestions as you move through segments still use the API key.", y, fieldX, fieldW);
-            y += 34;
+                + "sends back. Suggestions as you move through segments still use the API key.", fieldX, fieldW);
+            y += 14;
 
-            Hint("The API key stays in memoQ, where it is stored encrypted: Project home → Settings → "
-                + "MT settings → Supervertaler.", y, labelX, fieldW + fieldX - labelX);
+            Caption("API key", y);
+            _apiKey.Left = fieldX; _apiKey.Top = y; _apiKey.Width = fieldW;
+            _apiKey.UseSystemPasswordChar = true;
+            Controls.Add(_apiKey);
+            y += 26;
+            _apiKeySource = Hint(string.Empty, fieldX, fieldW);
+            y += 6;
+            Hint("Leave it as it is to keep using the key shown. Supervertaler for Trados keeps its keys "
+                + "in the same data folder, so a key rotated there is picked up here.", fieldX, fieldW);
+            y += 16;
+
+            // The window is sized to the layout rather than the layout trusted to
+            // fit a guessed window: hint heights depend on the display's scaling.
+            ClientSize = new Size(ClientSize.Width, y + 44);
 
             var ok = new Button
             {
@@ -160,6 +189,12 @@ namespace Supervertaler.PromptEditor
             _useTerminology.Checked = SharedSettings.UseTerminologyContextOr(true);
             _useDocumentContext.Checked = SharedSettings.UseDocumentContextOr(true);
             _bridgeMode.Checked = SharedSettings.BridgeMode;
+
+            // Null for the resource: this program cannot read memoQ's settings, and
+            // does not need to, because memoQ copies that key into the shared file.
+            var key = ApiKeys.Resolve(provider, null);
+            _apiKey.Text = key.Key;
+            _apiKeySource.Text = key.HasKey ? "Key in use: " + key.Source : "No API key is set.";
         }
 
         private void Save()
@@ -172,6 +207,13 @@ namespace Supervertaler.PromptEditor
             SharedSettings.UseTerminologyContext = _useTerminology.Checked;
             SharedSettings.UseDocumentContext = _useDocumentContext.Checked;
             SharedSettings.BridgeMode = _bridgeMode.Checked;
+
+            // Recorded only as an override. Saving the key it was already showing
+            // would pin a copy and stop the Trados file being the one place to
+            // rotate it.
+            var typed = _apiKey.Text.Trim();
+            var without = ApiKeys.Fallback(SharedSettings.Provider, null).Key;
+            SharedSettings.ApiKey = string.Equals(typed, without, StringComparison.Ordinal) ? string.Empty : typed;
         }
     }
 }

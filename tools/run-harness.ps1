@@ -18,9 +18,15 @@ $instructionsExisted = Test-Path $instructions
 $instructionsBefore = if ($instructionsExisted) { [IO.File]::ReadAllBytes($instructions) } else { $null }
 
 try {
+    # Stops the plugin seeding the user's settings from harness defaults and
+    # stops it resolving their real API key. The snapshot below stays as well:
+    # a harness that sets a value deliberately should still not keep it.
+    $env:SUPERVERTALER_HARNESS = '1'
     & powershell -NoProfile -ExecutionPolicy Bypass -File $Harness
 }
 finally {
+    Remove-Item Env:SUPERVERTALER_HARNESS -ErrorAction SilentlyContinue
+
     if ($null -ne $sharedBefore) { [IO.File]::WriteAllBytes($shared, $sharedBefore) }
     elseif (Test-Path $shared) { Remove-Item $shared -Force }
 

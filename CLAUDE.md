@@ -279,15 +279,39 @@ Three rules hold this together:
 gaps from the resource memoQ just handed us, so the editor shows what is
 actually in force rather than its own defaults.
 
+### API keys
+
+Resolved in `Core/ApiKeys.cs`, in order: an explicit `apikey` in the shared
+file, then the key Supervertaler for Trados keeps for that provider, then the
+copy of memoQ's own key seeded into `apikey.memoq`. Trados stores its keys in
+plain JSON at `D:\Supervertaler	rados\settings\settings.json` under
+`aiSettings.apiKeys` (`claude`, `openai`, `gemini`), so a translator running
+both products rotates a key once. Clear text on disk is a deliberate choice and
+matches what Trados has always done.
+
+Two things bit while writing that reader. The file carries a **UTF-8 byte order
+mark**, which the JSON reader rejects as an unexpected character. And
+`DataContractJsonSerializer` walks members in contract order and returned
+**every key empty** against a file that plainly had them; it is the wrong tool
+for a document another product owns. `JsonReaderWriterFactory` into an
+`XDocument` is order-independent and indifferent to the fifty other settings.
+
 ### The harness trap this creates
 
-**Always run a harness through `run-harness.ps1`.** A harness builds an engine
-from a bare defaults object, so seeding writes *those* into `shared.txt` — and
-because seeding only fills gaps, memoQ then finds the keys present and never
-seeds the real ones. One unguarded harness run silently blanks the user's
-selected prompt. The wrapper snapshots both files and restores them in a
-`finally`. This has already happened once and was caught by reading the file
-afterwards; check it after any run that skipped the wrapper.
+**Always run a harness through `tools/run-harness.ps1`.** A harness builds an
+engine from a bare defaults object, and two things follow from that:
+
+- Seeding writes those defaults into `shared.txt`, and because seeding only
+  fills gaps, memoQ then finds the keys present and never seeds the real ones.
+  One unguarded run silently blanks the user's selected prompt.
+- Key resolution finds the user's real key, so a test written around "no key
+  configured" instead makes a **billable call**. This happened: a run reached
+  AutoPrompt and drafted a prompt against the user's Anthropic account.
+
+Both are off when `SUPERVERTALER_HARNESS` is set, which the wrapper and
+`build.sh` (whose smoke test also builds an engine) both do. The wrapper still
+snapshots and restores both files as well. Check `shared.txt` after any run that
+skipped it.
 
 ## Gotchas that have already bitten
 

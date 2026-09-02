@@ -323,6 +323,9 @@ namespace Supervertaler.MemoQ.Settings
             CancelButton = cancel;
         }
 
+        /// <summary>What memoQ stored, kept so OK can tell an override from a copy.</summary>
+        private string _resourceApiKey;
+
         private void LoadFrom(SupervertalerSettings settings)
         {
             var g = settings.GeneralSettings ?? new SupervertalerGeneralSettings();
@@ -337,7 +340,10 @@ namespace Supervertaler.MemoQ.Settings
                 : LlmProviders.Anthropic;
             _model.Text = SharedSettings.ModelOr(g.Model);
             _endpoint.Text = SharedSettings.EndpointOr(g.Endpoint);
-            _apiKey.Text = s.ApiKey;
+            // What is actually in force, which may be the key this user keeps
+            // in Supervertaler for Trados rather than anything memoQ stored.
+            _resourceApiKey = s.ApiKey;
+            _apiKey.Text = ApiKeys.Resolve(provider, s.ApiKey).Key;
             // Normalise to CRLF for display. A multiline TextBox does not treat a
             // bare LF as a line break, and the stored prompt reliably has them:
             // XML normalises CRLF to LF on read, so however the settings were
@@ -681,6 +687,13 @@ namespace Supervertaler.MemoQ.Settings
             SharedSettings.UseDocumentContext = _useDocumentContext.Checked;
             SharedSettings.BridgeMode = _bridgeMode.Checked;
             SharedSettings.WriteInstructions(_systemPrompt.ReadOnly ? _inlineInstructions : _systemPrompt.Text);
+
+            // Recorded only when it differs from what the other sources already
+            // supply. Writing it unconditionally would pin a copy of the Trados
+            // key here and quietly stop that file being the one place to rotate.
+            var typed = _apiKey.Text.Trim();
+            var without = ApiKeys.Fallback(_provider.SelectedItem as string, _resourceApiKey).Key;
+            SharedSettings.ApiKey = string.Equals(typed, without, StringComparison.Ordinal) ? string.Empty : typed;
 
             Result = Collect();
         }

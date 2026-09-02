@@ -92,6 +92,10 @@ if [[ -n "$STALE" ]]; then
 fi
 
 # --- smoke test -------------------------------------------------------------
+# The smoke test builds an engine, which seeds the shared settings file from the
+# defaults object it was handed. Left alone that silently replaces the user's
+# real settings, because seeding only ever fills gaps.
+export SUPERVERTALER_HARNESS=1
 # Catches the silent failure mode: memoQ lists nothing and says nothing when a
 # plugin type cannot be discovered or constructed.
 echo

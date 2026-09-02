@@ -46,10 +46,17 @@ namespace Supervertaler.MemoQ.Core
                 stored.Provider, stored.Model, stored.Endpoint, stored.PromptPath,
                 stored.MaxParallelRequests, stored.BatchSize,
                 stored.UseTerminologyContext, stored.UseDocumentContext,
-                stored.BridgeMode, stored.SystemPrompt);
+                stored.BridgeMode, stored.SystemPrompt, Settings.SecureSettings?.ApiKey);
         }
 
         public SupervertalerSettings Settings { get; }
+        /// <summary>
+        /// The API key in force, from whichever of the three sources has one.
+        /// Consumers ask for this rather than reaching into the secure settings,
+        /// which now hold only the last of those sources.
+        /// </summary>
+        public string ApiKey => ApiKeys.Resolve(General.Provider, Settings.SecureSettings?.ApiKey).Key;
+
         public string SourceLangCode { get; }
         public string TargetLangCode { get; }
 

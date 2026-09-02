@@ -160,7 +160,7 @@ namespace Supervertaler.MemoQ
                 return new TranslationResult { Translation = Segment.Empty, Confidence = 0 };
 
             var general = context.General;
-            var apiKey = context.Settings.SecureSettings?.ApiKey;
+            var apiKey = context.ApiKey;
 
             var taggedSource = TagBridge.ToTaggedText(bundle.Source);
 

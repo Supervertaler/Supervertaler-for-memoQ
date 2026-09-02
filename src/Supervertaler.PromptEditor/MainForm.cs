@@ -71,7 +71,7 @@ namespace Supervertaler.PromptEditor
             AutoScaleDimensions = new SizeF(96F, 96F);
             AutoScaleMode = AutoScaleMode.Dpi;
 
-            Text = "Supervertaler – Prompt Library";
+            Text = "Supervertaler for memoQ";
             Width = 1180;
             Height = 760;
             StartPosition = FormStartPosition.CenterScreen;

@@ -49,6 +49,8 @@ namespace Supervertaler.MemoQ.Core
         private const string TerminologyContextKey = "useterminology";
         private const string DocumentContextKey = "usedocumentcontext";
         private const string PromptPathKey = "promptpath";
+        private const string ApiKeyKey = "apikey";
+        private const string MemoQApiKeyKey = "apikey.memoq";
 
         /// <summary>
         /// Where failures are reported. The plugin points this at its log; the
@@ -58,6 +60,20 @@ namespace Supervertaler.MemoQ.Core
         /// apart is exactly what this class exists to prevent.
         /// </summary>
         internal static Action<string, Exception> ErrorSink = (message, ex) => { };
+
+        /// <summary>
+        /// Set by the test harnesses and by the build's smoke test. A harness
+        /// builds an engine from a bare defaults object, and two things follow
+        /// that must not: seeding writes those defaults into the user's settings
+        /// and, because seeding only fills gaps, memoQ then never seeds the real
+        /// ones; and key resolution finds the user's real key, so a test that
+        /// expects "no key configured" instead makes a billable call. Both have
+        /// happened. One variable turns both off.
+        /// </summary>
+        internal static bool InHarness =>
+            !string.IsNullOrEmpty(Environment.GetEnvironmentVariable("SUPERVERTALER_HARNESS"));
+
+        internal static void ReportError(string message, Exception ex) => Report(message, ex);
 
         private static void Report(string message, Exception ex)
         {
@@ -132,6 +148,23 @@ namespace Supervertaler.MemoQ.Core
         public static bool UseDocumentContextOr(bool fromResource) => BoolOr(DocumentContextKey, fromResource);
 
         public static string PromptPath { get => Read(PromptPathKey); set => Write(PromptPathKey, value); }
+
+        /// <summary>
+        /// An API key typed into either dialog. Empty means "no override",
+        /// and the key is then taken from Supervertaler for Trados, or failing
+        /// that from what memoQ stored. Deliberately not seeded from the
+        /// settings resource: seeding it would pin memoQ's copy here and stop
+        /// the Trados key ever being picked up.
+        /// </summary>
+        public static string ApiKey { get => Read(ApiKeyKey); set => Write(ApiKeyKey, value); }
+
+        /// <summary>
+        /// A copy of whatever key memoQ holds in its settings resource, seeded so
+        /// that the prompt editor, which cannot read that resource, resolves the
+        /// same key the plugin does. It sits in its own slot rather than in
+        /// <see cref="ApiKey"/> because it must not shadow the Trados key.
+        /// </summary>
+        public static string MemoQApiKey { get => Read(MemoQApiKeyKey); set => Write(MemoQApiKeyKey, value); }
         public static string PromptPathOr(string fromResource) => StringOr(PromptPathKey, fromResource);
 
         /// <summary>
@@ -212,8 +245,10 @@ namespace Supervertaler.MemoQ.Core
         public static void SeedIfUnset(
             string provider, string model, string endpoint, string promptPath,
             int parallel, int batchSize, bool useTerminology, bool useDocumentContext,
-            bool bridgeMode, string instructions)
+            bool bridgeMode, string instructions, string apiKey)
         {
+            if (InHarness) return;
+
             SeedString(ProviderKey, provider);
             SeedString(ModelKey, model);
             SeedString(EndpointKey, endpoint);
@@ -223,6 +258,10 @@ namespace Supervertaler.MemoQ.Core
             SeedString(TerminologyContextKey, useTerminology ? "1" : "0");
             SeedString(DocumentContextKey, useDocumentContext ? "1" : "0");
             SeedString(BridgeModeKey, bridgeMode ? "1" : "0");
+
+            // Only when memoQ actually has one. Writing an empty value would make
+            // the slot look deliberately cleared and stop a later seed.
+            if (!string.IsNullOrWhiteSpace(apiKey)) SeedString(MemoQApiKeyKey, apiKey);
 
             try
             {

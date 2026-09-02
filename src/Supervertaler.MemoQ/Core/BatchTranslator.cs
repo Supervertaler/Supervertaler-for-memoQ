@@ -187,7 +187,7 @@ namespace Supervertaler.MemoQ.Core
                 general, context.SourceLangCode, context.TargetLangCode,
                 context.LastMetadata, recalled, ownTerms, instructions);
 
-            var apiKey = context.Settings.SecureSettings?.ApiKey;
+            var apiKey = context.ApiKey;
             var cacheKey = TranslationCache.Key(
                 general.Provider, general.Model, general.Endpoint, system, userPrompt);
 

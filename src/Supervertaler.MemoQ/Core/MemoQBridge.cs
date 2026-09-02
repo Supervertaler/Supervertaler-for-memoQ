@@ -664,7 +664,7 @@ namespace Supervertaler.MemoQ.Core
             var req = Read<AutoPromptRequest>(ctx) ?? new AutoPromptRequest();
             var context = _context;
             var general = context?.General;
-            var apiKey = context?.Settings?.SecureSettings?.ApiKey;
+            var apiKey = context?.ApiKey;
 
             if (general == null || string.IsNullOrWhiteSpace(apiKey))
             {
@@ -825,7 +825,7 @@ namespace Supervertaler.MemoQ.Core
             var req = Read<AutoPromptRequest>(ctx) ?? new AutoPromptRequest();
             var context = _context;
             var general = context?.General;
-            var apiKey = context?.Settings?.SecureSettings?.ApiKey;
+            var apiKey = context?.ApiKey;
 
             if (general == null || string.IsNullOrWhiteSpace(apiKey))
             {
