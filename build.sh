@@ -142,7 +142,17 @@ if [[ "$DEPLOY_LOG" == *"OK  "* ]]; then
     # could shadow memoQ's. It lives under the user's profile instead, needs no
     # elevation, and memoQ finds it by the AutoStartupCommand it registered.
     PREVIEW_SRC="$ROOT/src/Supervertaler.MemoQ.Preview/bin/$CONFIG"
-    PREVIEW_DST="$LOCALAPPDATA/Supervertaler.memoQ/preview"
+    # Into the shared Supervertaler data folder (D:\Supervertaler here), NOT
+    # %LocalAppData%. Claude Code runs as a packaged (MSIX) app, and packaged
+    # apps get file-system virtualisation: anything written under AppData from
+    # this shell lands in AppData\Local\Packages\Claude_…\LocalCache instead,
+    # visible to this shell and to nothing else. An hour was spent on a folder
+    # that was "empty" in Explorer and full in bash. The data folder is on a
+    # real path, and memoQ, the tool and the user all see the same files.
+    SV_CFG="$APPDATA/Supervertaler/config.json"
+    SV_ROOT="$(python -c "import json,sys;print(json.load(open(sys.argv[1]))['user_data_path'])" "$SV_CFG" 2>/dev/null || true)"
+    [[ -n "$SV_ROOT" ]] || SV_ROOT="$USERPROFILE/Supervertaler"
+    PREVIEW_DST="$(cygpath -u "$SV_ROOT")/memoq/preview"
     if [[ -f "$PREVIEW_SRC/Supervertaler.MemoQ.Preview.exe" ]]; then
         if tasklist.exe //FI "IMAGENAME eq Supervertaler.MemoQ.Preview.exe" 2>/dev/null | grep -qi "Supervertaler.MemoQ.Preview"; then
             echo "WARN  preview tool is running; not replaced (quit it from the tray and rerun)"

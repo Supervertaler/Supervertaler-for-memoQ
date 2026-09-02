@@ -92,9 +92,9 @@ Then:
   `SUPERVERTALER_BRIDGE_FILE` environment variable. Steps in the
   [docs](https://docs.supervertaler.com/memoq/mcp-server/#setting-it-up).
 - **Live document link** — run `Supervertaler.MemoQ.Preview.exe` once (the deploy
-  puts it under `%LocalAppData%\Supervertaler.memoQ\preview\`) and accept memoQ's
-  *Preview tool connection request*, leaving *Auto-start with memoQ* ticked. memoQ
-  starts it itself from then on.
+  puts it in your Supervertaler data folder, `C:\Users\<you>\Supervertaler\memoq\preview\`)
+  and accept memoQ's *Preview tool connection request*, leaving *Auto-start with
+  memoQ* ticked. memoQ starts it itself from then on.
 
 ## Glossary format
 

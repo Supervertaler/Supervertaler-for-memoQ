@@ -49,6 +49,8 @@ namespace Supervertaler.MemoQ.Core
         {
             public string Type;      // "goto"
             public string PartId;
+            /// <summary>Optional character range within the part's source: which sentence of the paragraph to land on.</summary>
+            public int SourceStart, SourceLength;
             public DateTime QueuedUtc;
         }
 
@@ -132,24 +134,22 @@ namespace Supervertaler.MemoQ.Core
         }
 
         /// <summary>
-        /// A document's rows in order. memoQ's own id list wins; rows never
-        /// listed come after it, sorted by the numeric tail of the id.
+        /// A document's parts in document order.
+        ///
+        /// Measured: a part is a PARAGRAPH, not a segment — a three-sentence
+        /// paragraph that memoQ shows as three grid rows is one part with one
+        /// id — and memoQ's id list arrives in string order (1, 10, 11, 2, …),
+        /// so the numeric tail of the id is the only reliable order. The list
+        /// memoQ sends is kept for membership, not for sequence.
         /// </summary>
         public static List<Part> Rows(Guid documentGuid)
         {
             lock (_lock)
             {
-                var parts = _parts.Values.Where(p => p.DocumentGuid == documentGuid).ToList();
-                if (parts.Count == 0) return parts;
-
-                var view = ViewKeyOf(parts[0].PartId);
-                var listed = _order.TryGetValue(view, out var order) ? order : new List<string>();
-                var rank = new Dictionary<string, int>(StringComparer.Ordinal);
-                for (var i = 0; i < listed.Count; i++) rank[listed[i]] = i;
-
-                return parts
-                    .OrderBy(p => rank.TryGetValue(p.PartId, out var r) ? r : int.MaxValue)
-                    .ThenBy(p => NumericTail(p.PartId))
+                return _parts.Values
+                    .Where(p => p.DocumentGuid == documentGuid)
+                    .OrderBy(p => NumericTail(p.PartId))
+                    .ThenBy(p => p.PartId, StringComparer.Ordinal)
                     .ToList();
             }
         }

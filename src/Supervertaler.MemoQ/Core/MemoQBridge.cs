@@ -375,7 +375,10 @@ namespace Supervertaler.MemoQ.Core
                         DocumentKey = previewDoc.DocumentGuid.ToString("D"),
                         DocumentName = previewDoc.DocumentName,
                         Total = rows.Count,
-                        Source = "live view from memoQ (preview tool): row order, target text and the active row are real",
+                        Source = "live view from memoQ (preview tool). Units are PARAGRAPHS as memoQ's Preview SDK delivers them: "
+                               + "a paragraph of three sentences that memoQ shows as three grid rows is ONE item here, with the whole "
+                               + "paragraph's source and target. Order and targets are real; use sourceStart/sourceLength with "
+                               + "go_to_segment to land on one sentence of a paragraph.",
                         Segments = rows.Skip(offset).Take(limit).Select((r, i) => new SegmentBody
                         {
                             Index = offset + i + 1,
@@ -1054,6 +1057,8 @@ namespace Supervertaler.MemoQ.Core
                 {
                     Type = c.Type,
                     PartId = c.PartId,
+                    SourceStart = c.SourceStart,
+                    SourceLength = c.SourceLength,
                     Part = ToBody(PreviewStore.GetPart(c.PartId))
                 }).ToArray()
             }));
@@ -1083,10 +1088,22 @@ namespace Supervertaler.MemoQ.Core
             var rows = PreviewStore.Rows(part.DocumentGuid);
             var index = rows.FindIndex(r => r.PartId == part.PartId);
 
+            // A part is a paragraph; the focused range says which sentence of it
+            // — which memoQ grid row — the cursor is on. Cut it out so the
+            // caller gets the segment, not the paragraph, when they differ.
+            string Slice(string text, int start, int length)
+            {
+                if (string.IsNullOrEmpty(text) || length <= 0 || start < 0 || start >= text.Length) return null;
+                var cut = text.Substring(start, Math.Min(length, text.Length - start));
+                return cut.Length == text.Length ? null : cut;
+            }
+
             TryWrite(ctx, 200, Json(new ActiveSegmentBody
             {
                 Index = index >= 0 ? index + 1 : 0,
                 Part = ToBody(part),
+                ActiveSource = Slice(part.Source, active.SourceStart, active.SourceLength),
+                ActiveTarget = Slice(part.Target, active.TargetStart, active.TargetLength),
                 SourceSelectionStart = active.SourceStart, SourceSelectionLength = active.SourceLength,
                 TargetSelectionStart = active.TargetStart, TargetSelectionLength = active.TargetLength,
                 SelectedAgoSeconds = (int)(DateTime.UtcNow - active.AtUtc).TotalSeconds
@@ -1130,11 +1147,23 @@ namespace Supervertaler.MemoQ.Core
                 return;
             }
 
-            PreviewStore.Enqueue(new PreviewStore.Command { Type = "goto", PartId = target.PartId });
+            // A part is a paragraph. A range within it says which sentence —
+            // memoQ's grid row — to land on; without one, the whole paragraph.
+            var start = Math.Max(0, req.SourceStart);
+            var length = req.SourceLength > 0 ? Math.Min(req.SourceLength, Math.Max(0, target.Source.Length - start)) : 0;
+
+            PreviewStore.Enqueue(new PreviewStore.Command
+            {
+                Type = "goto", PartId = target.PartId, SourceStart = start, SourceLength = length
+            });
+
+            var shown = length > 0 && start < target.Source.Length
+                ? target.Source.Substring(start, Math.Min(length, target.Source.Length - start))
+                : target.Source;
             TryWrite(ctx, 200, Json(new OkBody
             {
                 Ok = true,
-                Message = "Asked memoQ to select \"" + Truncate(TagBridge.StripTagMarkers(target.Source), 60) + "\"."
+                Message = "Asked memoQ to select \"" + Truncate(TagBridge.StripTagMarkers(shown), 60) + "\"."
             }));
         }
 
@@ -1196,6 +1225,8 @@ namespace Supervertaler.MemoQ.Core
         {
             [DataMember(Name = "type")] public string Type { get; set; }
             [DataMember(Name = "partId")] public string PartId { get; set; }
+            [DataMember(Name = "sourceStart")] public int SourceStart { get; set; }
+            [DataMember(Name = "sourceLength")] public int SourceLength { get; set; }
             [DataMember(Name = "part", EmitDefaultValue = false)] public PreviewPartBody Part { get; set; }
         }
 
@@ -1204,6 +1235,8 @@ namespace Supervertaler.MemoQ.Core
         {
             [DataMember(Name = "index")] public int Index { get; set; }
             [DataMember(Name = "part", EmitDefaultValue = false)] public PreviewPartBody Part { get; set; }
+            [DataMember(Name = "activeSource", EmitDefaultValue = false)] public string ActiveSource { get; set; }
+            [DataMember(Name = "activeTarget", EmitDefaultValue = false)] public string ActiveTarget { get; set; }
             [DataMember(Name = "sourceSelectionStart")] public int SourceSelectionStart { get; set; }
             [DataMember(Name = "sourceSelectionLength")] public int SourceSelectionLength { get; set; }
             [DataMember(Name = "targetSelectionStart")] public int TargetSelectionStart { get; set; }
@@ -1218,6 +1251,8 @@ namespace Supervertaler.MemoQ.Core
             [DataMember(Name = "index")] public int Index { get; set; }
             [DataMember(Name = "partId")] public string PartId { get; set; }
             [DataMember(Name = "document")] public string Document { get; set; }
+            [DataMember(Name = "sourceStart")] public int SourceStart { get; set; }
+            [DataMember(Name = "sourceLength")] public int SourceLength { get; set; }
         }
 
         // ── plumbing ─────────────────────────────────────────────────────

@@ -44,7 +44,7 @@
     {
       "name": "get_active_segment",
       "access": "read",
-      "description": "The segment the user's cursor is on in memoQ right now: its index, source and target text, document name and which part of it is selected. Needs the Supervertaler preview tool running (memoQ starts it automatically once registered); if it is not, this says so. Use before insert-style requests such as 'translate this one' or 'what does this segment say'.",
+      "description": "Where the user's cursor is in memoQ right now. Returns the paragraph (part) it is in with full source and target, plus activeSource/activeTarget: the sentence within that paragraph that is actually selected — the memoQ grid row — when the paragraph has several. Needs the Supervertaler preview tool running (memoQ starts it automatically once registered); if it is not, this says so. Use before requests such as 'translate this one' or 'what does this segment say'.",
       "inputSchema": { "type": "object", "properties": {} },
       "method": "GET",
       "path": "/v1/active",
@@ -55,18 +55,20 @@
     {
       "name": "go_to_segment",
       "access": "write",
-      "description": "Ask memoQ to select a segment, by index (from get_segments) or by part id. Needs the Supervertaler preview tool running. Moves the user's cursor, so use it when they asked to be taken somewhere, not as a side effect of reading.",
+      "description": "Ask memoQ to select a segment, by index (from get_segments) or by part id. Units from get_segments are paragraphs; to land on one sentence of a multi-sentence paragraph, pass sourceStart/sourceLength = that sentence's character range within the paragraph's source. Needs the Supervertaler preview tool running. Moves the user's cursor, so use it when they asked to be taken somewhere, not as a side effect of reading.",
       "inputSchema": {
         "type": "object",
         "properties": {
-          "index": { "type": ["integer", "null"], "description": "1-based row index as returned by get_segments.", "default": null },
+          "index": { "type": ["integer", "null"], "description": "1-based index as returned by get_segments.", "default": null },
           "partId": { "type": ["string", "null"], "description": "Alternatively the exact part id from get_segments / get_active_segment.", "default": null },
-          "document": { "type": ["string", "null"], "description": "Document GUID or name when several are open. Omit for the most recently active.", "default": null }
+          "document": { "type": ["string", "null"], "description": "Document GUID or name when several are open. Omit for the most recently active.", "default": null },
+          "sourceStart": { "type": ["integer", "null"], "description": "Optional: 0-based start of the sentence within the paragraph's source text.", "default": null },
+          "sourceLength": { "type": ["integer", "null"], "description": "Optional: length of that sentence.", "default": null }
         }
       },
       "method": "POST",
       "path": "/v1/goto",
-      "paramMap": { "index": "index", "partId": "partId", "document": "document" },
+      "paramMap": { "index": "index", "partId": "partId", "document": "document", "sourceStart": "sourceStart", "sourceLength": "sourceLength" },
       "fixedQuery": {},
       "fixedBody": {}
     },

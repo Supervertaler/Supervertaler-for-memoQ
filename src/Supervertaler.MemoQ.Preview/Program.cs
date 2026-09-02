@@ -214,7 +214,7 @@ namespace Supervertaler.MemoQ.Preview
             _proxy.RequestPreviewPartIdUpdate();
         }
 
-        public void SelectSegment(string partId, JObject part)
+        public void SelectSegment(string partId, JObject part, int sourceStart = 0, int sourceLength = 0)
         {
             var p = _proxy;
             if (p == null || !_connected || string.IsNullOrEmpty(partId)) return;
@@ -222,12 +222,19 @@ namespace Supervertaler.MemoQ.Preview
             {
                 var source = (string)part?["source"] ?? "";
                 var target = (string)part?["target"] ?? "";
+
+                // A part is a paragraph. A range picks the sentence — the grid
+                // row — within it; no range means the whole paragraph.
+                var srcRange = sourceLength > 0 && sourceStart < source.Length
+                    ? new FocusedRange(sourceStart, Math.Min(sourceLength, source.Length - sourceStart))
+                    : new FocusedRange(0, source.Length);
+
                 var r = p.RequestHighlightChange(new ChangeHighlightRequestFromPreviewTool(
                     partId,
                     (string)part?["sourceLangCode"],
                     (string)part?["targetLangCode"],
                     source, target,
-                    new FocusedRange(0, source.Length),
+                    srcRange,
                     new FocusedRange(0, target.Length)));
                 Program.Log("goto " + partId + " -> accepted=" + r?.RequestAccepted + " " + r?.ErrorMessage);
 
@@ -455,7 +462,8 @@ namespace Supervertaler.MemoQ.Preview
                     foreach (var c in body["commands"]?.Children<JObject>() ?? Enumerable.Empty<JObject>())
                     {
                         if ((string)c["type"] == "goto")
-                            memoq.SelectSegment((string)c["partId"], c["part"] as JObject);
+                            memoq.SelectSegment((string)c["partId"], c["part"] as JObject,
+                                (int?)c["sourceStart"] ?? 0, (int?)c["sourceLength"] ?? 0);
                     }
                 }
                 catch (Exception ex)

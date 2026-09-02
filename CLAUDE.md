@@ -447,13 +447,42 @@ locates the current memoQ directory is a real requirement, not a nicety.
    `RequestHighlightChange`. **Verified live:** memoQ moved the cursor. Two
    facts that shaped it: memoQ does not echo a selection it was asked to make,
    so the tool reports the new active row itself after an accepted goto; and
-   memoQ lists only the rows it has loaded (11 of 21 on connect), so the tool
-   re-requests the id list every 45 s and the view fills in as the user
-   scrolls. Bridge tools added: `get_active_segment`, `go_to_segment`;
+   **A preview part is a PARAGRAPH, not a segment.** Measured: 11 parts for a
+   21-row document; part 5 is 602 characters / three sentences = grid rows
+   5-7. The "11 of 21" was never about loading. Consequences: `get_segments`
+   in live mode returns paragraphs (documented as such in the tool
+   description); the focused range in a highlight change identifies the
+   sentence — the grid row — within the paragraph, and `get_active_segment`
+   cuts it out as `activeSource`/`activeTarget`; `go_to_segment` accepts
+   `sourceStart`/`sourceLength` to aim at a sentence. memoQ's id list also
+   arrives in STRING order (1, 10, 11, 2, ...), so rows are ordered by the
+   numeric tail of the id, never by the list. Bridge tools added: `get_active_segment`, `go_to_segment`;
    `get_segments` serves the live view (order, targets, isActive, real name)
-   when the tool is connected. The exe deploys to
-   `%%LocalAppData%%\Supervertaler.memoQ\preview\` — never `Addins`, because it
-   carries its own Newtonsoft.Json and memoQ probes Addins for its own copy.
+   when the tool is connected. The exe deploys to `<Supervertaler data folder>\memoq\preview\`
+   (`D:\Supervertaler\memoq\preview\` here) — never `Addins`, because it
+   carries its own Newtonsoft.Json and memoQ probes Addins for its own copy;
+   and never under `%LocalAppData%`, because of the next section.
+
+## This shell cannot write to AppData (MSIX virtualisation)
+
+Claude Code here runs inside the packaged Claude desktop app
+(`Claude_pzs8sxrjxfjjc`). Windows virtualises the file system for packaged
+apps: every write from this shell to `C:\Users\<user>\AppData\Local\...` or
+`...\Roaming\...` — bash, PowerShell, python, child processes, even a
+UAC-elevated child — lands in
+`C:\Users\<user>\AppData\Local\Packages\Claude_pzs8sxrjxfjjc\LocalCache\...`.
+Reads see a merged view, so memoQ's `plugin.log` reads fine and my own writes
+look like they landed. Nothing outside the package sees them.
+
+Found 2026-09-02 after an hour: seven files in every listing this shell could
+produce, an empty folder in Explorer, Run and cmd. Everything (the search
+tool) showed the real location.
+
+Rules: deploy runtime files to the Supervertaler data folder (`D:`) or, via
+the elevated `deploy.ps1`, to Program Files — both real. Never start the
+preview tool from this shell: it inherits the sandbox, its log goes to the
+package cache, and memoQ's auto-started copy is the one that matters. If a
+listing here disagrees with what the user sees, the user is right.
 
 ## Confidentiality
 
