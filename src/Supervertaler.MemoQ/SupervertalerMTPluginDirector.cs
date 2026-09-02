@@ -45,6 +45,10 @@ namespace Supervertaler.MemoQ
 
         public void Initialize(IModuleEnvironment environment)
         {
+            // SharedSettings is compiled into the prompt editor as well, so it
+            // cannot reference the plugin log directly. Inside memoQ it should.
+            SharedSettings.ErrorSink = PluginLog.Write;
+
             _moduleEnvironment = environment;
             _activated = true;
             PluginLog.Write("Initialize: settings directory = "

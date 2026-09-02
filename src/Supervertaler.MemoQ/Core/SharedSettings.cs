@@ -27,6 +27,22 @@ namespace Supervertaler.MemoQ.Core
     {
         private static readonly object _lock = new object();
 
+        /// <summary>
+        /// Where failures are reported. The plugin points this at its log; the
+        /// prompt editor compiles this same file and has no plugin log, so it
+        /// leaves it silent. The alternative was a second implementation of the
+        /// file format in the editor, and two readers of one file that can drift
+        /// apart is exactly what this class exists to prevent.
+        /// </summary>
+        internal static Action<string, Exception> ErrorSink = (message, ex) => { };
+
+        private static void Report(string message, Exception ex)
+        {
+            var sink = ErrorSink;
+            if (sink == null) return;
+            try { sink(message, ex); } catch { }
+        }
+
         private const string GlossaryKey = "glossary";
 
         internal static string Path
@@ -79,7 +95,7 @@ namespace Supervertaler.MemoQ.Core
                 }
                 catch (Exception ex)
                 {
-                    PluginLog.Write("SharedSettings: read failed", ex);
+                    Report("SharedSettings: read failed", ex);
                     return string.Empty;
                 }
             }
@@ -116,7 +132,7 @@ namespace Supervertaler.MemoQ.Core
                 }
                 catch (Exception ex)
                 {
-                    PluginLog.Write("SharedSettings: write failed", ex);
+                    Report("SharedSettings: write failed", ex);
                 }
             }
         }

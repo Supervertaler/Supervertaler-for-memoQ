@@ -7,6 +7,7 @@ using System.Linq;
 using System.Text;
 using System.Windows.Forms;
 using Supervertaler.Core;
+using Supervertaler.MemoQ.Core;
 using Supervertaler.Core.Models;
 
 namespace Supervertaler.PromptEditor
@@ -35,6 +36,7 @@ namespace Supervertaler.PromptEditor
         private ToolStripButton _save;
         private ToolStripDropDownButton _insert;
         private ToolStripStatusLabel _status;
+        private ToolStripButton _glossary;
         private ToolStripStatusLabel _dirtyLabel;
         private SplitContainer _split;
 
@@ -126,12 +128,19 @@ namespace Supervertaler.PromptEditor
             };
             exportGlossary.Click += (s, e) => ExportGlossary();
 
+            // Names the glossary in force and changes it. The setting is shared
+            // with the plugin through one file, so this works with memoQ closed,
+            // and a running memoQ picks the change up within a few seconds.
+            _glossary = new ToolStripButton { DisplayStyle = ToolStripItemDisplayStyle.Text };
+            _glossary.Click += (s, e) => ChooseGlossary();
+            RefreshGlossary();
+
             toolbar.Items.AddRange(new ToolStripItem[]
             {
                 newPrompt, newFolder, delete, new ToolStripSeparator(),
                 _save, new ToolStripSeparator(),
                 _insert, new ToolStripSeparator(),
-                draft, exportGlossary, new ToolStripSeparator(),
+                draft, exportGlossary, _glossary, new ToolStripSeparator(),
                 reload, openFolder
             });
 
@@ -756,29 +765,63 @@ namespace Supervertaler.PromptEditor
                 return;
             }
 
-            var bridge = MemoQBridgeClient.TryConnect(out var reason);
-            if (bridge == null)
+            // Written straight to the shared setting rather than asked of a
+            // running memoQ over the bridge. It is the same single value either
+            // way, the plugin re-reads the file within seconds, and doing it here
+            // means exporting works with memoQ closed instead of ending in
+            // "select it by hand".
+            SharedSettings.GlossaryPath = path;
+            RefreshGlossary();
+            _status.Text = "Glossary written and made active: " + path;
+        }
+
+        /// <summary>Shows which glossary is active, or says plainly that none is.</summary>
+        private void RefreshGlossary()
+        {
+            var path = SharedSettings.GlossaryPath;
+
+            if (string.IsNullOrWhiteSpace(path))
             {
-                MessageBox.Show(this,
-                    "Glossary written to:\r\n" + path + "\r\n\r\nmemoQ is not connected, so it was not activated (" + reason + ").\r\n\r\nSelect it by hand under Options > Terminology plugins > Supervertaler terms > Options.",
-                    "Export glossary", MessageBoxButtons.OK, MessageBoxIcon.Information);
-                _status.Text = "Glossary written (not activated): " + path;
+                _glossary.Text = "Glossary: none";
+                _glossary.ForeColor = SystemColors.GrayText;
+                _glossary.ToolTipText = "No glossary is active, so the terminology pane, the prompts "
+                    + "and the terminology check have nothing to work from.";
                 return;
             }
 
-            using (bridge)
+            var missing = !File.Exists(path);
+            _glossary.Text = "Glossary: " + Path.GetFileName(path) + (missing ? " (missing)" : "");
+            _glossary.ForeColor = missing ? Color.Firebrick : SystemColors.ControlText;
+            _glossary.ToolTipText = (missing ? "This file no longer exists:\r\n" : "Active glossary:\r\n") + path
+                + "\r\n\r\nClick to choose a different one.";
+        }
+
+        /// <summary>
+        /// Picks the glossary the plugin uses for the terminology pane, the prompts
+        /// and the terminology check. One setting, so this is the same choice as the
+        /// one offered by memoQ's own dialogs, and either can be used.
+        /// </summary>
+        private void ChooseGlossary()
+        {
+            var glossaries = Path.Combine(SupervertalerPaths.Root, "memoq", "glossaries");
+            var current = SharedSettings.GlossaryPath;
+            var currentDir = string.IsNullOrWhiteSpace(current) ? null : Path.GetDirectoryName(current);
+
+            using (var dialog = new OpenFileDialog
             {
-                try
-                {
-                    var message = bridge.ActivateGlossaryAsync(path).GetAwaiter().GetResult();
-                    _status.Text = message;
-                }
-                catch (Exception ex)
-                {
-                    MessageBox.Show(this, "Glossary written, but memoQ did not activate it:\r\n\r\n" + ex.Message,
-                        "Export glossary", MessageBoxButtons.OK, MessageBoxIcon.Warning);
-                    _status.Text = "Glossary written (not activated): " + path;
-                }
+                Title = "Choose the active glossary",
+                Filter = "Glossary files (*.txt;*.tsv)|*.txt;*.tsv|All files (*.*)|*.*",
+                CheckFileExists = true,
+                InitialDirectory = Directory.Exists(currentDir ?? "") ? currentDir
+                    : (Directory.Exists(glossaries) ? glossaries : SupervertalerPaths.Root),
+                FileName = string.IsNullOrWhiteSpace(current) ? "" : Path.GetFileName(current)
+            })
+            {
+                if (dialog.ShowDialog(this) != DialogResult.OK) return;
+
+                SharedSettings.GlossaryPath = dialog.FileName;
+                RefreshGlossary();
+                _status.Text = "Active glossary: " + dialog.FileName;
             }
         }
 

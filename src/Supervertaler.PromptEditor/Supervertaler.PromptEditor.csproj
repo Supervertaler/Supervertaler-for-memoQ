@@ -42,4 +42,15 @@
     <Reference Include="System.Net.Http" />
   </ItemGroup>
 
+  <ItemGroup>
+    <!--
+      The same source file the memoQ plugin compiles, not a copy. The active
+      glossary is one setting in one file that both processes write, so both
+      must agree on its format down to the line endings.
+    -->
+    <Compile Include="..\Supervertaler.MemoQ\Core\SharedSettings.cs">
+      <Link>Shared\SharedSettings.cs</Link>
+    </Compile>
+  </ItemGroup>
+
 </Project>
