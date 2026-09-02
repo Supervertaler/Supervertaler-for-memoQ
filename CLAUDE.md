@@ -456,7 +456,9 @@ locates the current memoQ directory is a real requirement, not a nicety.
    cuts it out as `activeSource`/`activeTarget`; `go_to_segment` accepts
    `sourceStart`/`sourceLength` to aim at a sentence. memoQ's id list also
    arrives in STRING order (1, 10, 11, 2, ...), so rows are ordered by the
-   numeric tail of the id, never by the list. Bridge tools added: `get_active_segment`, `go_to_segment`;
+   numeric tail of the id, never by the list. **Verified live 2026-09-02:** a jump
+   with a range aimed at the third sentence of paragraph 5 put memoQ's cursor
+   on grid row 7. Sentence-precise, not paragraph-precise. Bridge tools added: `get_active_segment`, `go_to_segment`;
    `get_segments` serves the live view (order, targets, isActive, real name)
    when the tool is connected. The exe deploys to `<Supervertaler data folder>\memoq\preview\`
    (`D:\Supervertaler\memoq\preview\` here) — never `Addins`, because it
