@@ -132,7 +132,7 @@ plugin it cannot load simply never appears, with no error anywhere.
 | `src/Supervertaler.MemoQ` | MT engine, options dialog, MCP bridge, capture and staging stores |
 | `src/Supervertaler.MemoQ.Terms` | Terminology provider (its own DLL: memoQ loads one module per assembly) |
 | `src/Supervertaler.PromptEditor` | Standalone prompt library editor |
-| `src/Supervertaler.MemoQ.Preview` | Preview-SDK tool: the live document link (deploys under the user profile, never into `Addins`) |
+| `src/Supervertaler.MemoQ.Preview` | Preview-SDK tool: the live document link (deploys into the Supervertaler data folder, never into `Addins`) |
 | `core/` | Shared Supervertaler code (submodule) |
 | `tools/` | Smoke test, deploy script, glossary converter |
 
