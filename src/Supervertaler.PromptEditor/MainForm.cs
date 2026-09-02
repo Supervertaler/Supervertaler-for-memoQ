@@ -184,7 +184,9 @@ namespace Supervertaler.PromptEditor
             meta.Controls.Add(_preserved);
             fields.Controls.Add(meta, 1, 2);
 
-            _editor = new RichTextBox
+            // FastRichTextBox: RichEdit 4.1 instead of 2.0 — see that class for
+            // why a long highlighted prompt stuttered on mouse-wheel scroll.
+            _editor = new FastRichTextBox
             {
                 Dock = DockStyle.Fill,
                 Font = _editorFont,
