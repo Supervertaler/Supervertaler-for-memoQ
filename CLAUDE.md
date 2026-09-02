@@ -109,6 +109,28 @@ bridge `get_active_segment`, target text for QA (`check_numbers`,
 probably cursor navigation. `stage_translations` + Pre-translate stays the
 only write channel; the Preview SDK has no "set target text" call.
 
+**Measured with the spike (`src/Supervertaler.MemoQ.Preview`), 2026-09-02:**
+- Accepting the "Preview tool connection request" dialog in memoQ *is* the
+  connection: `Register` returns accepted and a subsequent `Connect` throws
+  `PreviewToolAlreadyConnectedException`. `Connect` is for a tool that is
+  already registered and starts later (the auto-start path).
+- Part ids look like `mQ-default-<view-guid>-<n>`. The view guid is constant
+  for a document but is NOT the document guid (that arrives separately in
+  `SourceDocument.DocumentGuid`, alongside `DocumentName` and `ImportPath`).
+  `<n>` is a stable per-row integer whose order did not obviously match the
+  grid's row numbers on first sight — treat it as an opaque key and sort
+  numerically only as a guess until the full id list has been compared.
+- A highlight change delivers the active part in full: source AND target
+  content, language codes, `WordCount`/`CharCount`, and the focused ranges
+  (0..length of each side when a whole row is selected).
+- A content update fires for exactly the part that changed, after an edit or
+  confirm, with the new target text.
+- `PlainWithInterpretedFormatting` renders inline formatting as `<b>…</b>`;
+  tags come through as HTML-ish markup, not memoQ tag objects.
+- The tool's own process, not the plugin, must host this: memoQ launches it
+  from `AutoStartupCommand` and shows it under Options > External preview
+  tools with "Auto-start with memoQ".
+
 **Blocker:** `MemoQ.PreviewInterfaces.dll` ships with preview tools, not with
 memoQ, and its redistribution terms are unknown. Adam has been asked for the
 SDK package; that is now a concrete, specific request: the assembly plus

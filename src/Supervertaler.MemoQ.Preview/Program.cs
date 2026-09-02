@@ -72,11 +72,24 @@ namespace Supervertaler.MemoQ.Preview
                             new[] { PropertyNames.WordCount, PropertyNames.CharCount }));
                         Log("Register -> " + JsonConvert.SerializeObject(reg));
 
-                        var con = proxy.Connect(ToolId);
-                        Log("Connect -> " + JsonConvert.SerializeObject(con));
+                        // Learned from the first run: accepting the registration
+                        // dialog in memoQ already establishes the connection, and
+                        // a Connect() afterwards throws PreviewToolAlreadyConnected.
+                        // Connect() is for a tool that is already registered and
+                        // starts up later (memoQ's own auto-start path).
+                        if (!(reg?.RequestAccepted ?? false))
+                        {
+                            var con = proxy.Connect(ToolId);
+                            Log("Connect -> " + JsonConvert.SerializeObject(con));
+                        }
 
+                        // Ask for every part id memoQ knows, then for all their
+                        // content — the whole document with target text, in one
+                        // pull, which is what the bridge will do on startup.
                         var ids = proxy.RequestPreviewPartIdUpdate();
                         Log("RequestPreviewPartIdUpdate -> " + JsonConvert.SerializeObject(ids));
+                        Thread.Sleep(1500);
+                        TryRequestContent(proxy, callback);
                     }
                     catch (Exception ex)
                     {
