@@ -4,6 +4,7 @@ using System.Diagnostics;
 using System.Drawing;
 using System.IO;
 using System.Linq;
+using System.Text;
 using System.Windows.Forms;
 using Supervertaler.Core;
 using Supervertaler.Core.Models;
@@ -118,12 +119,19 @@ namespace Supervertaler.PromptEditor
             };
             draft.Click += (s, e) => DraftForProject();
 
+            var exportGlossary = new ToolStripButton("Export glossary…")
+            {
+                DisplayStyle = ToolStripItemDisplayStyle.Text,
+                ToolTipText = "Turn this prompt's locked-terms table into a Supervertaler glossary file, and make it the active one in memoQ"
+            };
+            exportGlossary.Click += (s, e) => ExportGlossary();
+
             toolbar.Items.AddRange(new ToolStripItem[]
             {
                 newPrompt, newFolder, delete, new ToolStripSeparator(),
                 _save, new ToolStripSeparator(),
                 _insert, new ToolStripSeparator(),
-                draft, new ToolStripSeparator(),
+                draft, exportGlossary, new ToolStripSeparator(),
                 reload, openFolder
             });
 
@@ -694,6 +702,84 @@ namespace Supervertaler.PromptEditor
                 + result.ConfirmedPairCount + " confirmed segment(s)"
                 + (string.IsNullOrWhiteSpace(result.Domain) ? "" : " · domain: " + result.Domain)
                 + " — review, then select it in memoQ under Prompt.";
+        }
+
+        /// <summary>
+        /// The prompt's locked-terms table becomes the project glossary. Written
+        /// to &lt;Supervertaler data folder&gt;\memoq\glossaries\&lt;prompt&gt;.txt, in
+        /// the format the terminology plugin reads; then, if memoQ is running,
+        /// made the active glossary over the bridge. A general glossary flags a
+        /// term in every paragraph for senses the document does not use; a
+        /// dozen terms chosen for this job are what check_terminology and the
+        /// terminology pane should work from.
+        /// </summary>
+        private void ExportGlossary()
+        {
+            if (_current == null) return;
+
+            var entries = PromptGlossaryExtractor.Extract(_editor.Text);
+            if (entries.Count == 0)
+            {
+                MessageBox.Show(this,
+                    "No glossary table found in this prompt.\r\n\r\nThe export looks for a Markdown table whose header names a source and a target column — the PROJECT-SPECIFIC GLOSSARY that AutoPrompt writes, or any table laid out the same way.",
+                    "Export glossary", MessageBoxButtons.OK, MessageBoxIcon.Information);
+                return;
+            }
+
+            var dir = Path.Combine(SupervertalerPaths.Root, "memoq", "glossaries");
+            var safe = string.Concat((_current.Name ?? "glossary").Select(c => Path.GetInvalidFileNameChars().Contains(c) ? '_' : c)).Trim();
+            var path = Path.Combine(dir, safe + ".txt");
+
+            var forbidden = entries.Count(e => e.Forbidden);
+            var summary = entries.Count + " term(s)" + (forbidden > 0 ? " including " + forbidden + " forbidden" : "")
+                + "\r\n\r\nWrite to:\r\n" + path
+                + (File.Exists(path) ? "\r\n\r\n(The file exists and will be replaced.)" : "")
+                + "\r\n\r\nMake it the active glossary in memoQ as well?";
+
+            var choice = MessageBox.Show(this, summary, "Export glossary", MessageBoxButtons.YesNoCancel, MessageBoxIcon.Question);
+            if (choice == DialogResult.Cancel) return;
+
+            try
+            {
+                Directory.CreateDirectory(dir);
+                File.WriteAllText(path, PromptGlossaryExtractor.ToGlossaryText(entries, _current.Name), new UTF8Encoding(false));
+            }
+            catch (Exception ex)
+            {
+                MessageBox.Show(this, "Could not write the glossary.\r\n\r\n" + ex.Message, "Export glossary", MessageBoxButtons.OK, MessageBoxIcon.Error);
+                return;
+            }
+
+            if (choice != DialogResult.Yes)
+            {
+                _status.Text = "Glossary written: " + path;
+                return;
+            }
+
+            var bridge = MemoQBridgeClient.TryConnect(out var reason);
+            if (bridge == null)
+            {
+                MessageBox.Show(this,
+                    "Glossary written to:\r\n" + path + "\r\n\r\nmemoQ is not connected, so it was not activated (" + reason + ").\r\n\r\nSelect it by hand under Options > Terminology plugins > Supervertaler terms > Options.",
+                    "Export glossary", MessageBoxButtons.OK, MessageBoxIcon.Information);
+                _status.Text = "Glossary written (not activated): " + path;
+                return;
+            }
+
+            using (bridge)
+            {
+                try
+                {
+                    var message = bridge.ActivateGlossaryAsync(path).GetAwaiter().GetResult();
+                    _status.Text = message;
+                }
+                catch (Exception ex)
+                {
+                    MessageBox.Show(this, "Glossary written, but memoQ did not activate it:\r\n\r\n" + ex.Message,
+                        "Export glossary", MessageBoxButtons.OK, MessageBoxIcon.Warning);
+                    _status.Text = "Glossary written (not activated): " + path;
+                }
+            }
         }
 
         private void NewFolder()

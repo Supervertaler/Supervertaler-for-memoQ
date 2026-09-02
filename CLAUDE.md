@@ -482,6 +482,17 @@ locates the current memoQ directory is a real requirement, not a nicety.
     Verified over stdio: 19 memoQ tools, no instance tools, get_project
     answered. One server, two thin bundles. `dist/` is gitignored (29 MB).
 
+12. ~~Export glossary from a prompt~~ — shipped 2026-09-02. Core's
+    `PromptGlossaryExtractor` reads every source/target table in a prompt
+    (AutoPrompt's locked-terms table, or any laid out the same way), turns
+    `never "X"` notes into forbidden rows, and writes the TB plugin's
+    tab-separated format. Editor button **Export glossary…** writes to
+    `<data folder>/memoq/glossaries/<prompt>.txt` and activates it over the
+    bridge (`POST /v1/glossary/activate`, which sets `SharedSettings.GlossaryPath`).
+    Tested on the real draft: 70 entries, `application → applicatie`, one
+    forbidden (`apparaat`). Motivation: `check_terminology` against the general
+    patent glossary flagged 9 of 11 paragraphs, every one a false positive.
+
 ## This shell cannot write to AppData (MSIX virtualisation)
 
 Claude Code here runs inside the packaged Claude desktop app
@@ -502,6 +513,21 @@ the elevated `deploy.ps1`, to Program Files — both real. Never start the
 preview tool from this shell: it inherits the sandbox, its log goes to the
 package cache, and memoQ's auto-started copy is the one that matters. If a
 listing here disagrees with what the user sees, the user is right.
+
+**Orphaned preview tool:** when memoQ is killed rather than closed, the
+preview tool it started lives on, and it will connect to ANY bridge whose
+handshake appears — including a harness's — and consume its `goto` commands.
+Two harness checks failed that way on 2026-09-02. The harnesses now refuse to
+run while `Supervertaler.MemoQ.Preview.exe` is running; memoQ restarts the
+tool itself, so killing an orphan costs nothing.
+
+**The reverse trap:** once a harness run here has written
+`%LocalAppData%\Supervertaler.memoQ\plugin.log` (or `preview-tool.log`), the
+package copy SHADOWS memoQ's real one in this shell's merged view — reading
+"the log" after that shows the harness's log, not memoQ's. Seen 2026-09-02
+while looking into a memoQ hang: the tail was my own harness. Until the
+plugin logs to the data folder instead, ask the user to copy the real file,
+or read it through a path this shell does not virtualise.
 
 ## Confidentiality
 

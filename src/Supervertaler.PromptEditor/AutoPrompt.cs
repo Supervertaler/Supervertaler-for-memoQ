@@ -150,6 +150,33 @@ namespace Supervertaler.PromptEditor
             [DataMember(Name = "confirmedPairs")] public int ConfirmedPairs { get; set; }
         }
 
+        /// <summary>Make a glossary file the plugin's active glossary. Returns the plugin's message.</summary>
+        public async Task<string> ActivateGlossaryAsync(string path)
+        {
+            var body = new StringContent("{\"path\":" + JsonString(path) + "}", Encoding.UTF8, "application/json");
+            var response = await _http.PostAsync(_base + "/v1/glossary/activate", body).ConfigureAwait(false);
+            var json = await response.Content.ReadAsStringAsync().ConfigureAwait(false);
+            if (!response.IsSuccessStatusCode)
+            {
+                var err = Deserialize<ErrorBody>(json);
+                throw new InvalidOperationException(err?.Error ?? ("HTTP " + (int)response.StatusCode));
+            }
+            var m = Regex.Match(json, "\"message\"\\s*:\\s*\"((?:[^\"\\\\]|\\\\.)*)\"");
+            return m.Success ? Regex.Unescape(m.Groups[1].Value) : "Glossary activated.";
+        }
+
+        private static string JsonString(string s)
+        {
+            var sb = new StringBuilder("\"");
+            foreach (var c in s ?? "")
+            {
+                if (c == '"' || c == '\\') sb.Append('\\').Append(c);
+                else if (c < ' ') sb.Append("\\u").Append(((int)c).ToString("x4"));
+                else sb.Append(c);
+            }
+            return sb.Append('"').ToString();
+        }
+
         public async Task<ClassifyResult> ClassifyAsync(string documentKey)
         {
             var body = new StringContent(Serialize(new AutoPromptRequest { Document = documentKey }), Encoding.UTF8, "application/json");

@@ -266,6 +266,7 @@ namespace Supervertaler.MemoQ.Core
                 case "POST /v1/goto": HandleGoTo(ctx); return;
                 case "GET /v1/qa-check": HandleQaCheck(ctx); return;
                 case "GET /v1/inconsistencies": HandleInconsistencies(ctx); return;
+                case "POST /v1/glossary/activate": HandleGlossaryActivate(ctx); return;
                 default:
                     TryWrite(ctx, 404, Json(new ErrorBody { Error = "unknown endpoint " + method + " " + path }));
                     return;
@@ -1380,6 +1381,41 @@ namespace Supervertaler.MemoQ.Core
             [DataMember(Name = "index")] public int Index { get; set; }
             [DataMember(Name = "partId")] public string PartId { get; set; }
             [DataMember(Name = "target")] public string Target { get; set; }
+        }
+
+        /// <summary>
+        /// POST /v1/glossary/activate — make a glossary file the one the
+        /// terminology plugin serves and the prompts and QA checks use. The
+        /// setting lives in the plugin's shared settings, which only the plugin
+        /// should write; the prompt editor asks for it here after exporting a
+        /// prompt's glossary.
+        /// </summary>
+        private void HandleGlossaryActivate(HttpListenerContext ctx)
+        {
+            var req = Read<GlossaryActivateRequest>(ctx);
+            var path = req?.Path?.Trim();
+            if (string.IsNullOrEmpty(path) || !File.Exists(path))
+            {
+                TryWrite(ctx, 400, Json(new ErrorBody { Error = "path is required and must exist: " + path }));
+                return;
+            }
+
+            var previous = SharedSettings.GlossaryPath;
+            SharedSettings.GlossaryPath = path;
+            PluginLog.Write($"glossary activated over the bridge: {path} (was: {previous})");
+
+            TryWrite(ctx, 200, Json(new OkBody
+            {
+                Ok = true,
+                Message = "Active glossary is now " + Path.GetFileName(path) + ". The terminology pane, translation prompts "
+                        + "and check_terminology use it from the next lookup."
+            }));
+        }
+
+        [DataContract]
+        internal class GlossaryActivateRequest
+        {
+            [DataMember(Name = "path")] public string Path { get; set; }
         }
 
         // ── plumbing ─────────────────────────────────────────────────────
