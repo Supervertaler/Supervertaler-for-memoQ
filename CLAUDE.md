@@ -58,6 +58,63 @@ worth pursuing before assuming the companion has to be a detached side window.
 Not yet verified: whether those events carry segment identity, and what the payload
 looks like. Ask memoQ for the Preview SDK package.
 
+## Preview SDK — the contract, recovered 2026-09-02
+
+memoQ's separately distributed **memoQ PDF Preview** tool ships
+`MemoQ.PreviewInterfaces.dll` (53 KB), which IS the Preview SDK contract.
+Installed at `C:\Program Files\memoQ\memoQ PDF Preview\`. Reflected in full;
+the shape is:
+
+**Transport.** Two protocols, same messages: a named pipe (`MQ_PREVIEW_PIPE`)
+or REST (`http://localhost:8088/MQPreviewService`, with the tool hosting a
+callback controller via `System.Web.Http.SelfHost`). memoQ's side is
+configured in `C:\ProgramData\MemoQ\{Rest,NamedPipe}ProtocolWrapperSettings.xml`.
+`PreviewServiceProxy(IPreviewToolCallback, baseAddress, protocol)` wraps it.
+
+**Registration.** `Register(RegistrationRequest)`: a tool GUID, name,
+description, an `AutoStartupCommand` (memoQ launches the tool itself —
+the PDF tool has "Auto-start with memoQ"), a `PreviewPartIdRegex`, a
+`ContentComplexityLevel` (`Minimal` | `PlainWithInterpretedFormatting`), and
+`RequiredProperties` from {WebPreviewBaseUrl, Wpm, Cps, LineLengthLimit,
+WordCount, CharCount}. Then `Connect(guid)`. memoQ shows registered tools
+under Options > External preview tools and asks the user once
+("Preview tool connection request", with "Can change focus").
+
+**What memoQ pushes** (`IPreviewToolCallback`):
+- `HandleContentUpdateRequest(PreviewPart[])` — each part: `PreviewPartId`,
+  `SourceDocument {DocumentGuid, DocumentName, ImportPath}`, source/target
+  language codes, and **`SourceContent` AND `TargetContent`** as text. Fires on
+  every edit: one real log shows ~4,900 of these over a few months.
+- `HandleChangeHighlightRequest(ActivePreviewParts[] with source/target
+  FocusedRange {StartIndex, Length})` — **where the cursor is**, on every
+  move (~4,500 in the same log).
+- `HandlePreviewPartIdUpdateRequest`, `HandleDisconnect`.
+
+**What the tool may send:** `RequestContentUpdate(previewPartIds,
+targetLangCodes)` — pull any parts, and `RequestHighlightChange(previewPartId,
+langs, sourceContent, targetContent, focused ranges)` — which the PDF tool
+uses to make a click in the PDF select the matching memoQ segment ("Select
+only one segment in memoQ then click the Align mode button…"). That is, in
+all likelihood, **`go_to_segment`**.
+
+**Why this matters.** Every ✗ in the MCP tool table exists because the MT/TB
+SDKs never show a plugin the target text, the active row, or the document
+name. The Preview SDK shows all three, live. A Supervertaler preview tool
+registration — in the plugin process or the editor exe — would give the
+bridge `get_active_segment`, target text for QA (`check_numbers`,
+`find_inconsistencies`…), real document names without the disk hack, and
+probably cursor navigation. `stage_translations` + Pre-translate stays the
+only write channel; the Preview SDK has no "set target text" call.
+
+**Blocker:** `MemoQ.PreviewInterfaces.dll` ships with preview tools, not with
+memoQ, and its redistribution terms are unknown. Adam has been asked for the
+SDK package; that is now a concrete, specific request: the assembly plus
+permission to reference it. Do not copy the DLL out of the PDF tool's folder
+into our repo.
+
+**Privacy note:** the PDF tool's `%APPDATA%\MemoQ.PDFPreview\logs.txt`
+names every document it ever saw. Never paste from it.
+
 ## What memoQ hands us (and Trados does not)
 
 `TranslationBundle` carries context the Trados plugin has to assemble itself:

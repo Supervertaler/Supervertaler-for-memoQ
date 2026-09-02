@@ -61,7 +61,7 @@ namespace Supervertaler.MemoQ.Settings
             MinimizeBox = false;
             StartPosition = FormStartPosition.CenterParent;
             AutoScaleMode = AutoScaleMode.Font;
-            ClientSize = new Size(660, 640);
+            ClientSize = new Size(660, 656);
 
             // The ? in the title bar. This dialog is most of the plugin's UI, so
             // it is also the only place the documentation can be reached from
@@ -164,11 +164,11 @@ namespace Supervertaler.MemoQ.Settings
             {
                 Text = "Pre-translate then only hands the segments to the chat and inserts the translations it sends back; "
                      + "nothing is charged to the API key. Suggestions as you move through segments still use the API key.",
-                Left = fieldX + 18, Top = y, Width = fieldW - 18, Height = 34, AutoSize = false,
+                Left = fieldX + 18, Top = y, Width = fieldW - 18, Height = 50, AutoSize = false,
                 ForeColor = SystemColors.GrayText
             };
             Controls.Add(bridgeHint);
-            y += 42;
+            y += 58;
 
             // The shared prompt library, the same folder the Trados plugin reads.
             // Selecting one stores its path, not its text, so a prompt edited
