@@ -343,11 +343,17 @@ locates the current memoQ directory is a real requirement, not a nicety.
    are all inside memoQ's process. Same pipeline as Trados — keyword analysis,
    classification call, `PromptGenerator.BuildMetaPrompt` — plus a
    `HostConstraints` block (Core) describing how memoQ consumes a prompt:
-   single unnumbered segments as well as batches, no comment channel so notes
-   and ⟦TC:⟧ markers are forbidden, tags reproduced exactly, request-time
-   confirmed pairs outrank the prompt's glossary, 1500-3000 words because the
-   prompt is re-sent every ~10 segments. Without it a Trados-shaped prompt
-   writes defect markers into target cells.
+   single unnumbered segments as well as batches, tags reproduced exactly,
+   request-time confirmed pairs outrank the prompt's glossary, 1500-3000 words
+   because the prompt is re-sent every ~10 segments. Inline ⟦TC:⟧ translator
+   comments are kept exactly as in Trados — they land in the target cell and
+   the translator processes them during review; the first draft of this block
+   forbade them, and the user wants them.
+
+   Document labels: memoQ gives the plugin only a document GUID, so
+   `Core/DocumentNames.cs` resolves it to the project folder name and the
+   file name from `Documents\<guid>er1\majorVersionStore.info` (first
+   printable string). Labels only, never keys.
 
 ## Confidentiality
 

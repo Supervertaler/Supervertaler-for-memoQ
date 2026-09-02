@@ -301,6 +301,8 @@ namespace Supervertaler.MemoQ.Core
                 Documents = docs.Select(d => new ProjectDocumentBody
                 {
                     Key = d.Key,
+                    ProjectName = DocumentNames.Resolve(d.DocumentId)?.Project,
+                    DocumentName = DocumentNames.Resolve(d.DocumentId)?.Document,
                     Origin = d.ViaTerminology
                         ? "rows the cursor has visited (via terminology lookups; document identity unknown, so this is one bucket per language pair)"
                         : "translation requests (Pre-translate or MT lookup with Supervertaler as provider)",
@@ -766,10 +768,11 @@ namespace Supervertaler.MemoQ.Core
             "numbered batches of about 10 segments in the format described above; during interactive work it " +
             "delivers ONE segment at a time with no numbering. The prompt must handle both: when a single " +
             "unnumbered segment is delivered, return only its translation.\n" +
-            "- EVERY character the model returns is written verbatim into the target cell. There is NO comment " +
-            "channel. The generated prompt must therefore FORBID inline translator comments, ⟦TC: ...⟧ markers, " +
-            "notes, defect flags, questions or any text that is not the translation itself. Omit the section " +
-            "on translator comments entirely; replace it with an explicit prohibition.\n" +
+            "- EVERY character the model returns is written verbatim into the target cell, exactly as in Trados. " +
+            "Keep the translator-comment convention described above unchanged: a genuinely necessary note goes " +
+            "inline as a ⟦TC: ...⟧ marker, which the translator finds and processes while reviewing the grid. " +
+            "Use them sparingly and never for anything that is not a real defect or ambiguity. No other " +
+            "non-translation text of any kind.\n" +
             "- Inline formatting arrives as tag markers such as <t1>...</t1> or <b>...</b>. The prompt must " +
             "require every marker to be reproduced exactly, in the equivalent position, never invented, dropped " +
             "or renumbered.\n" +
@@ -910,6 +913,8 @@ namespace Supervertaler.MemoQ.Core
         {
             [DataMember(Name = "key")] public string Key { get; set; }
             [DataMember(Name = "origin")] public string Origin { get; set; }
+            [DataMember(Name = "projectName", EmitDefaultValue = false)] public string ProjectName { get; set; }
+            [DataMember(Name = "documentName", EmitDefaultValue = false)] public string DocumentName { get; set; }
             [DataMember(Name = "client", EmitDefaultValue = false)] public string Client { get; set; }
             [DataMember(Name = "domain", EmitDefaultValue = false)] public string Domain { get; set; }
             [DataMember(Name = "subject", EmitDefaultValue = false)] public string Subject { get; set; }

@@ -139,7 +139,11 @@ namespace Supervertaler.PromptEditor
         {
             [DataMember(Name = "key")] public string Key { get; set; }
             [DataMember(Name = "origin")] public string Origin { get; set; }
+            [DataMember(Name = "projectName")] public string ProjectName { get; set; }
+            [DataMember(Name = "documentName")] public string DocumentName { get; set; }
             [DataMember(Name = "client")] public string Client { get; set; }
+
+            public bool IsVisitedBucket => Key != null && Key.StartsWith("visited_", StringComparison.Ordinal);
             [DataMember(Name = "domain")] public string Domain { get; set; }
             [DataMember(Name = "subject")] public string Subject { get; set; }
             [DataMember(Name = "capturedSegments")] public int CapturedSegments { get; set; }
@@ -241,15 +245,31 @@ namespace Supervertaler.PromptEditor
             try
             {
                 var project = await _bridge.GetProjectAsync();
-                _documents = project?.Documents ?? new MemoQBridgeClient.DocumentInfo[0];
+
+                // Real documents first (most recently active first, as the
+                // bridge orders them); the "rows you have visited" bucket last.
+                // That bucket is one bag per language pair fed by the
+                // terminology plugin, useful when a document was pre-translated
+                // with another engine, but never the natural default.
+                _documents = (project?.Documents ?? new MemoQBridgeClient.DocumentInfo[0])
+                    .OrderBy(d => d.IsVisitedBucket ? 1 : 0)
+                    .ToArray();
 
                 _document.Items.Clear();
                 foreach (var d in _documents)
                 {
-                    var label = !string.IsNullOrWhiteSpace(d.Client) ? d.Client
-                              : !string.IsNullOrWhiteSpace(d.Subject) ? d.Subject
-                              : d.Key;
-                    _document.Items.Add(label + "   (" + d.CapturedSegments + " segments)");
+                    string label;
+                    if (d.IsVisitedBucket)
+                        label = "Rows you have visited in the editor (any MT engine)";
+                    else if (!string.IsNullOrWhiteSpace(d.DocumentName))
+                        label = d.DocumentName + (string.IsNullOrWhiteSpace(d.ProjectName) ? "" : "  —  " + d.ProjectName);
+                    else if (!string.IsNullOrWhiteSpace(d.Client))
+                        label = d.Client + (string.IsNullOrWhiteSpace(d.Subject) ? "" : " / " + d.Subject);
+                    else
+                        label = (d.Subject ?? d.Domain ?? "Document") + "  (name unknown)";
+
+                    _document.Items.Add(label + "   (" + d.CapturedSegments + " segment"
+                        + (d.CapturedSegments == 1 ? "" : "s") + ")");
                 }
 
                 if (_documents.Length == 0)
