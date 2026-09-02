@@ -1,0 +1,59 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <OutputType>WinExe</OutputType>
+    <TargetFramework>net48</TargetFramework>
+    <PlatformTarget>x64</PlatformTarget>
+    <UseWindowsForms>true</UseWindowsForms>
+    <RootNamespace>Supervertaler.MemoQ.Preview</RootNamespace>
+    <AssemblyName>Supervertaler.MemoQ.Preview</AssemblyName>
+    <LangVersion>latest</LangVersion>
+    <AppendTargetFrameworkToOutputPath>false</AppendTargetFrameworkToOutputPath>
+    <AppendPlatformToOutputPath>false</AppendPlatformToOutputPath>
+    <GenerateAssemblyInfo>true</GenerateAssemblyInfo>
+    <Authors>Michael Beijer</Authors>
+    <Company>Supervertaler</Company>
+    <Product>Supervertaler for memoQ</Product>
+    <Version>0.1.0</Version>
+    <Nullable>disable</Nullable>
+    <!--
+      A memoQ *preview tool*: a separate process memoQ launches and talks to
+      over its Preview SDK. Not an add-in — it never loads into memoQ's
+      AppDomain — so the "ship nothing" rule for Addins does not apply here,
+      and it can carry its own copies of the SDK's dependencies.
+
+      MemoQ.PreviewInterfaces.dll is not part of the memoQ install. It ships
+      with memoQ's own preview tools (PDF Preview, video preview), publicly
+      downloadable from docs.memoq.com. Referenced from that install for now;
+      redistribution terms are being confirmed with memoQ (see CLAUDE.md,
+      "Preview SDK"). Until then this project builds only on a machine with
+      the PDF Preview tool installed.
+    -->
+    <PreviewSdkDir>C:\Program Files\memoQ\memoQ PDF Preview\</PreviewSdkDir>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <Reference Include="MemoQ.PreviewInterfaces">
+      <HintPath>$(PreviewSdkDir)MemoQ.PreviewInterfaces.dll</HintPath>
+      <Private>true</Private>
+    </Reference>
+    <Reference Include="Newtonsoft.Json">
+      <HintPath>$(PreviewSdkDir)Newtonsoft.Json.dll</HintPath>
+      <Private>true</Private>
+    </Reference>
+    <Reference Include="System.Web.Http">
+      <HintPath>$(PreviewSdkDir)System.Web.Http.dll</HintPath>
+      <Private>true</Private>
+    </Reference>
+    <Reference Include="System.Web.Http.SelfHost">
+      <HintPath>$(PreviewSdkDir)System.Web.Http.SelfHost.dll</HintPath>
+      <Private>true</Private>
+    </Reference>
+    <Reference Include="System.Net.Http.Formatting">
+      <HintPath>$(PreviewSdkDir)System.Net.Http.Formatting.dll</HintPath>
+      <Private>true</Private>
+    </Reference>
+    <Reference Include="System.Net.Http" />
+  </ItemGroup>
+
+</Project>
