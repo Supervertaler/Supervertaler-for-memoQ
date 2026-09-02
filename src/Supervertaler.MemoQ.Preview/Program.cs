@@ -242,7 +242,7 @@ namespace Supervertaler.MemoQ.Preview
                 // for a selection it was asked to make. Report it ourselves, or
                 // get_active_segment keeps answering with the previous row.
                 if (r?.RequestAccepted ?? false)
-                    _bridge.PostHighlightFor(partId, part, source.Length, target.Length);
+                    _bridge.PostHighlightFor(partId, part, srcRange.StartIndex, srcRange.Length, target.Length);
             }
             catch (Exception ex)
             {
@@ -413,13 +413,13 @@ namespace Supervertaler.MemoQ.Preview
         }
 
         /// <summary>Report a selection we caused ourselves (see MemoQLink.SelectSegment).</summary>
-        public void PostHighlightFor(string partId, JObject part, int sourceLength, int targetLength)
+        public void PostHighlightFor(string partId, JObject part, int sourceStart, int sourceLength, int targetLength)
         {
             if (part == null) part = new JObject { ["partId"] = partId };
             Post("/v1/preview/highlight", new
             {
                 part = part,
-                sourceStart = 0, sourceLength = sourceLength,
+                sourceStart = sourceStart, sourceLength = sourceLength,
                 targetStart = 0, targetLength = targetLength
             });
         }
