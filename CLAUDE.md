@@ -337,6 +337,18 @@ locates the current memoQ directory is a real requirement, not a nicety.
    bucket, not the latest engine: memoQ builds one engine per target language in
    an order of its own, and the "latest" was German on a Dutch job.
 
+8. ~~AutoPrompt~~ — shipped 2026-09-02. Button in the prompt editor; the work
+   happens in the plugin over the bridge (`POST /v1/autoprompt`, not an MCP
+   tool), because the captured document, confirmed pairs, glossary and API key
+   are all inside memoQ's process. Same pipeline as Trados — keyword analysis,
+   classification call, `PromptGenerator.BuildMetaPrompt` — plus a
+   `HostConstraints` block (Core) describing how memoQ consumes a prompt:
+   single unnumbered segments as well as batches, no comment channel so notes
+   and ⟦TC:⟧ markers are forbidden, tags reproduced exactly, request-time
+   confirmed pairs outrank the prompt's glossary, 1500-3000 words because the
+   prompt is re-sent every ~10 segments. Without it a Trados-shaped prompt
+   writes defect markers into target cells.
+
 ## Confidentiality
 
 Same rule as the Trados repo: **never use real client names.** `Acme` for a client,
