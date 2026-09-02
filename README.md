@@ -87,9 +87,11 @@ Then:
 - **Terminology** — Options → Terminology plugins → tick *Perform terminology
   plugin lookups while working in the translation grid* → **Supervertaler terms**
   → Options → choose a glossary → **Enable plugin**.
-- **Claude Desktop** — add one server entry pointing the Supervertaler MCP Server
-  at `<Supervertaler data folder>\memoq\runtime\bridge.json` via the
-  `SUPERVERTALER_BRIDGE_FILE` environment variable. Steps in the
+- **Claude Desktop** — install `Supervertaler-for-memoQ-MCP-Server.mcpb`
+  (Settings → Extensions → Advanced settings → Install extension…). It is the
+  same MCP server exe as the Trados extension with `SUPERVERTALER_HOST=memoq`
+  set; build it with `python tools/build_mcpb.py`. Other MCP clients: run the
+  exe with that variable set. Steps in the
   [docs](https://docs.supervertaler.com/memoq/mcp-server/#setting-it-up).
 - **Live document link** — run `Supervertaler.MemoQ.Preview.exe` once (the deploy
   puts it in your Supervertaler data folder, `C:\Users\<you>\Supervertaler\memoq\preview\`)
@@ -134,7 +136,7 @@ plugin it cannot load simply never appears, with no error anywhere.
 | `src/Supervertaler.PromptEditor` | Standalone prompt library editor |
 | `src/Supervertaler.MemoQ.Preview` | Preview-SDK tool: the live document link (deploys into the Supervertaler data folder, never into `Addins`) |
 | `core/` | Shared Supervertaler code (submodule) |
-| `tools/` | Smoke test, deploy script, glossary converter |
+| `tools/` | Smoke test, deploy script, glossary converter, `.mcpb` builder |
 
 ## Licence
 

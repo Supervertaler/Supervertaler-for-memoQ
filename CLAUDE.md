@@ -473,6 +473,15 @@ locates the current memoQ directory is a real requirement, not a nicety.
     own QA is not callable by a plugin. Bridge: GET /v1/qa-check?type=… and
     GET /v1/inconsistencies; five MCP tools.
 
+11. ~~memoQ `.mcpb`~~ — shipped 2026-09-02. `tools/build_mcpb.py` packs the
+    Trados repo's `Supervertaler.McpServer` exe with a manifest whose only
+    difference is `env: SUPERVERTALER_HOST=memoq`. The server (Trados repo)
+    understands that variable: handshake at `<root>/memoq/runtime/bridge.json`,
+    a separate tool cache, memoQ wording in the not-found message, no
+    `list/select_trados_instance` tools, and no Trados fallback registry.
+    Verified over stdio: 19 memoQ tools, no instance tools, get_project
+    answered. One server, two thin bundles. `dist/` is gitignored (29 MB).
+
 ## This shell cannot write to AppData (MSIX virtualisation)
 
 Claude Code here runs inside the packaged Claude desktop app
