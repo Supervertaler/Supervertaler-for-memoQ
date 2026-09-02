@@ -41,6 +41,13 @@ API key; every write into your document goes through your own hands. See
 [MCP Server](https://docs.supervertaler.com/memoq/mcp-server/) — including the
 honest table of which Trados tools do and do not exist for memoQ.
 
+**A live document link.** memoQ's Preview SDK — the interface its own PDF
+preview uses — is the one channel that shows a tool the target text, the row
+the cursor is on and the document's real name. `Supervertaler.MemoQ.Preview.exe`
+registers as a preview tool and forwards that stream to the plugin, so Claude
+sees the document as it is, can tell which row you are on, and can ask memoQ
+to jump to a segment. It draws nothing; it is a link, not a preview.
+
 **A prompt library, shared with Trados.** Instructions come from the same library
 the Trados plugin uses, chosen from a dropdown and edited in a small companion
 editor (`Supervertaler.PromptEditor.exe`) launched from the settings dialog. Claude
@@ -121,6 +128,7 @@ plugin it cannot load simply never appears, with no error anywhere.
 | `src/Supervertaler.MemoQ` | MT engine, options dialog, MCP bridge, capture and staging stores |
 | `src/Supervertaler.MemoQ.Terms` | Terminology provider (its own DLL: memoQ loads one module per assembly) |
 | `src/Supervertaler.PromptEditor` | Standalone prompt library editor |
+| `src/Supervertaler.MemoQ.Preview` | Preview-SDK tool: the live document link (deploys under the user profile, never into `Addins`) |
 | `core/` | Shared Supervertaler code (submodule) |
 | `tools/` | Smoke test, deploy script, glossary converter |
 

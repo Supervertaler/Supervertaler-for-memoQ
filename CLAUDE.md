@@ -439,6 +439,22 @@ locates the current memoQ directory is a real requirement, not a nicety.
    file name from `Documents\<guid>er1\majorVersionStore.info` (first
    printable string). Labels only, never keys.
 
+9. ~~Live document link (Preview SDK)~~ — shipped 2026-09-02, the same day the
+   SDK assembly was found inside memoQ's PDF preview tool.
+   `src/Supervertaler.MemoQ.Preview` registers as a preview tool, forwards every
+   content update and highlight change to the bridge (`Core/PreviewStore.cs`),
+   and long-polls the bridge for `goto` commands, executed through
+   `RequestHighlightChange`. **Verified live:** memoQ moved the cursor. Two
+   facts that shaped it: memoQ does not echo a selection it was asked to make,
+   so the tool reports the new active row itself after an accepted goto; and
+   memoQ lists only the rows it has loaded (11 of 21 on connect), so the tool
+   re-requests the id list every 45 s and the view fills in as the user
+   scrolls. Bridge tools added: `get_active_segment`, `go_to_segment`;
+   `get_segments` serves the live view (order, targets, isActive, real name)
+   when the tool is connected. The exe deploys to
+   `%%LocalAppData%%\Supervertaler.memoQ\preview\` — never `Addins`, because it
+   carries its own Newtonsoft.Json and memoQ probes Addins for its own copy.
+
 ## Confidentiality
 
 Same rule as the Trados repo: **never use real client names.** `Acme` for a client,

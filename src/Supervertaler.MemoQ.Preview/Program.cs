@@ -165,9 +165,20 @@ namespace Supervertaler.MemoQ.Preview
                         backoff = Math.Min(30, backoff * 2);
                     }
                 }
+                // While connected, ask for the id list again now and then. The
+                // first list after connect held 11 of 21 rows — memoQ appears to
+                // list what it has loaded — and rows arrive as the user scrolls.
+                if (_connected && (DateTime.UtcNow - _lastIdRefresh) > TimeSpan.FromSeconds(45))
+                {
+                    _lastIdRefresh = DateTime.UtcNow;
+                    try { _proxy?.RequestPreviewPartIdUpdate(); } catch (Exception ex) { Program.Log("id refresh: " + ex.Message); }
+                }
+
                 Thread.Sleep(TimeSpan.FromSeconds(_connected ? 5 : backoff));
             }
         }
+
+        private DateTime _lastIdRefresh = DateTime.MinValue;
 
         private void ConnectOnce()
         {
@@ -219,6 +230,12 @@ namespace Supervertaler.MemoQ.Preview
                     new FocusedRange(0, source.Length),
                     new FocusedRange(0, target.Length)));
                 Program.Log("goto " + partId + " -> accepted=" + r?.RequestAccepted + " " + r?.ErrorMessage);
+
+                // Measured: memoQ moves the cursor but sends no highlight change
+                // for a selection it was asked to make. Report it ourselves, or
+                // get_active_segment keeps answering with the previous row.
+                if (r?.RequestAccepted ?? false)
+                    _bridge.PostHighlightFor(partId, part, source.Length, target.Length);
             }
             catch (Exception ex)
             {
@@ -244,6 +261,7 @@ namespace Supervertaler.MemoQ.Preview
         public void HandlePreviewPartIdUpdateRequest(PreviewPartIdUpdateRequestFromMQ r)
         {
             var ids = r?.PreviewPartIds ?? new string[0];
+            Program.Log("memoQ listed " + ids.Length + " part id(s)");
             _bridge.PostIds(ids);
 
             // The id list is the cue to pull everything: this is how the tool
@@ -384,6 +402,18 @@ namespace Supervertaler.MemoQ.Preview
                 sourceLength = active.SourceFocusedRange?.Length ?? 0,
                 targetStart = active.TargetFocusedRange?.StartIndex ?? 0,
                 targetLength = active.TargetFocusedRange?.Length ?? 0
+            });
+        }
+
+        /// <summary>Report a selection we caused ourselves (see MemoQLink.SelectSegment).</summary>
+        public void PostHighlightFor(string partId, JObject part, int sourceLength, int targetLength)
+        {
+            if (part == null) part = new JObject { ["partId"] = partId };
+            Post("/v1/preview/highlight", new
+            {
+                part = part,
+                sourceStart = 0, sourceLength = sourceLength,
+                targetStart = 0, targetLength = targetLength
             });
         }
 
