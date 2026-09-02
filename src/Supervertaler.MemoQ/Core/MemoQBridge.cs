@@ -846,10 +846,13 @@ namespace Supervertaler.MemoQ.Core
             "delivers ONE segment at a time with no numbering. The prompt must handle both: when a single " +
             "unnumbered segment is delivered, return only its translation.\n" +
             "- EVERY character the model returns is written verbatim into the target cell, exactly as in Trados. " +
-            "Keep the translator-comment convention described above unchanged: a genuinely necessary note goes " +
-            "inline as a ⟦TC: ...⟧ marker, which the translator finds and processes while reviewing the grid. " +
-            "Use them sparingly and never for anything that is not a real defect or ambiguity. No other " +
-            "non-translation text of any kind.\n" +
+            "Keep the translator-comment convention described above, with ONE change of delimiter: in memoQ " +
+            "the marker is written with double ASCII square brackets, [[TC: ...]], NOT with the ⟦ ⟧ characters. " +
+            "Reason: ⟦ and ⟧ (U+27E6/U+27E7) are missing from Tahoma, Verdana and Calibri, the fonts memoQ's " +
+            "grid uses, and render as empty boxes there. Every rule about the marker (one per segment, at the " +
+            "end, sparingly, only for a real defect or ambiguity) stays the same; only the brackets change. " +
+            "Write the prompt's comment-format section with [[TC: ...]] throughout and mention nowhere the " +
+            "⟦ ⟧ form. No other non-translation text of any kind.\n" +
             "- Inline formatting arrives as tag markers such as <t1>...</t1> or <b>...</b>. The prompt must " +
             "require every marker to be reproduced exactly, in the equivalent position, never invented, dropped " +
             "or renumbered.\n" +

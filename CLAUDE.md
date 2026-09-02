@@ -345,10 +345,12 @@ locates the current memoQ directory is a real requirement, not a nicety.
    `HostConstraints` block (Core) describing how memoQ consumes a prompt:
    single unnumbered segments as well as batches, tags reproduced exactly,
    request-time confirmed pairs outrank the prompt's glossary, 1500-3000 words
-   because the prompt is re-sent every ~10 segments. Inline ⟦TC:⟧ translator
-   comments are kept exactly as in Trados — they land in the target cell and
-   the translator processes them during review; the first draft of this block
-   forbade them, and the user wants them.
+   because the prompt is re-sent every ~10 segments. Inline translator
+   comments are kept as in Trados — they land in the target cell and the
+   translator processes them during review; the first draft of this block
+   forbade them, and the user wants them. **Delimiter differs:** memoQ prompts
+   use `[[TC: ...]]`, not `⟦TC: ...⟧` — U+27E6/U+27E7 are missing from Tahoma,
+   Verdana and Calibri, the fonts memoQ's grid uses, and render as boxes.
 
    Document labels: memoQ gives the plugin only a document GUID, so
    `Core/DocumentNames.cs` resolves it to the project folder name and the
