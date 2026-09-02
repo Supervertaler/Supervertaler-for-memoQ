@@ -253,6 +253,17 @@ namespace Supervertaler.MemoQ.Core
                 case "POST /v1/prompt": HandlePromptSave(ctx); return;
                 case "POST /v1/autoprompt/classify": HandleClassify(ctx); return;
                 case "POST /v1/autoprompt": HandleAutoPrompt(ctx); return;
+
+                // From the preview tool (memoQ → tool → here).
+                case "POST /v1/preview/content": HandlePreviewContent(ctx); return;
+                case "POST /v1/preview/ids": HandlePreviewIds(ctx); return;
+                case "POST /v1/preview/highlight": HandlePreviewHighlight(ctx); return;
+                case "POST /v1/preview/status": HandlePreviewStatus(ctx); return;
+                case "GET /v1/preview/commands": HandlePreviewCommands(ctx); return;
+
+                // From the MCP client, answered from the preview view.
+                case "GET /v1/active": HandleActiveSegment(ctx); return;
+                case "POST /v1/goto": HandleGoTo(ctx); return;
                 default:
                     TryWrite(ctx, 404, Json(new ErrorBody { Error = "unknown endpoint " + method + " " + path }));
                     return;
@@ -315,6 +326,16 @@ namespace Supervertaler.MemoQ.Core
                     LastSeenUtc = d.LastSeenUtc.ToString("o")
                 }).ToArray(),
                 StagedTranslations = StagedTranslations.Snapshot(null).Count,
+                PreviewToolConnected = PreviewStore.ToolAlive,
+                LiveDocuments = PreviewStore.ToolAlive
+                    ? PreviewStore.Documents().Select(d => new LiveDocumentBody
+                    {
+                        DocumentGuid = d.DocumentGuid.ToString("D"),
+                        DocumentName = d.DocumentName,
+                        LangPair = (d.SourceLangCode ?? "?") + "-" + (d.TargetLangCode ?? "?"),
+                        Rows = PreviewStore.Count(d.DocumentGuid)
+                    }).ToArray()
+                    : null,
                 Note = docs.Count == 0
                     ? "No segments captured yet. The plugin only sees what memoQ sends it: "
                       + "ask the user to run Pre-translate once (any model) or visit some segments, "
@@ -330,6 +351,44 @@ namespace Supervertaler.MemoQ.Core
             var key = ctx.Request.QueryString["document"];
             var offset = ParseInt(ctx.Request.QueryString["offset"], 0);
             var limit = Math.Min(500, ParseInt(ctx.Request.QueryString["limit"], 200));
+
+            // The preview view wins when it exists: it has target text, real
+            // row order and the document's name, none of which the MT capture
+            // has. The capture store remains the answer when the preview tool
+            // is not running.
+            if (PreviewStore.ToolAlive)
+            {
+                var previewDoc = PreviewStore.Documents().FirstOrDefault(d =>
+                    string.IsNullOrEmpty(key)
+                    || d.DocumentGuid.ToString("D") == key
+                    || (key.StartsWith(d.DocumentGuid.ToString("N"), StringComparison.OrdinalIgnoreCase))
+                    || string.Equals(d.DocumentName, key, StringComparison.OrdinalIgnoreCase));
+
+                if (previewDoc != null)
+                {
+                    var rows = PreviewStore.Rows(previewDoc.DocumentGuid);
+                    var livePair = (previewDoc.SourceLangCode ?? "?") + "-" + (previewDoc.TargetLangCode ?? "?");
+                    var active = PreviewStore.GetActive()?.PartId;
+
+                    TryWrite(ctx, 200, Json(new SegmentsBody
+                    {
+                        DocumentKey = previewDoc.DocumentGuid.ToString("D"),
+                        DocumentName = previewDoc.DocumentName,
+                        Total = rows.Count,
+                        Source = "live view from memoQ (preview tool): row order, target text and the active row are real",
+                        Segments = rows.Skip(offset).Take(limit).Select((r, i) => new SegmentBody
+                        {
+                            Index = offset + i + 1,
+                            PartId = r.PartId,
+                            Source = r.Source,
+                            Target = string.IsNullOrEmpty(r.Target) ? null : r.Target,
+                            Staged = StagedTranslations.TryGetPeek(r.Source, livePair)?.Target,
+                            IsActive = r.PartId == active ? true : (bool?)null
+                        }).ToArray()
+                    }));
+                    return;
+                }
+            }
 
             var doc = CaptureStore.Get(key);
             if (doc == null)
@@ -903,6 +962,264 @@ namespace Supervertaler.MemoQ.Core
             [DataMember(Name = "confirmedPairCount")] public int ConfirmedPairCount { get; set; }
         }
 
+        // ── preview tool channel ─────────────────────────────────────────
+        //
+        // memoQ's Preview SDK talks to a separate process, not to a plugin. So
+        // Supervertaler.MemoQ.Preview.exe registers as a preview tool, receives
+        // memoQ's pushes, and forwards them here — the same bridge, the same
+        // token. What it forwards is exactly what the MT SDK never showed us:
+        // target text, the active row, the document's real name.
+
+        private void HandlePreviewContent(HttpListenerContext ctx)
+        {
+            var req = Read<PreviewContentRequest>(ctx);
+            var parts = (req?.Parts ?? new PreviewPartBody[0])
+                .Where(p => p != null && !string.IsNullOrEmpty(p.PartId))
+                .Select(p => new PreviewStore.Part
+                {
+                    PartId = p.PartId,
+                    DocumentGuid = Guid.TryParse(p.DocumentGuid, out var g) ? g : Guid.Empty,
+                    DocumentName = p.DocumentName,
+                    ImportPath = p.ImportPath,
+                    SourceLangCode = p.SourceLangCode,
+                    TargetLangCode = p.TargetLangCode,
+                    Source = p.Source ?? "",
+                    Target = p.Target ?? "",
+                    WordCount = p.WordCount,
+                    CharCount = p.CharCount
+                })
+                .ToList();
+
+            PreviewStore.Upsert(parts);
+            PreviewStore.NoteTool(true);
+            TryWrite(ctx, 200, Json(new OkBody { Ok = true, Message = parts.Count + " part(s) stored" }));
+        }
+
+        private void HandlePreviewIds(HttpListenerContext ctx)
+        {
+            var req = Read<PreviewIdsRequest>(ctx);
+            PreviewStore.SetOrder(req?.PartIds ?? new string[0]);
+            PreviewStore.NoteTool(true);
+            TryWrite(ctx, 200, Json(new OkBody { Ok = true }));
+        }
+
+        private void HandlePreviewHighlight(HttpListenerContext ctx)
+        {
+            var req = Read<PreviewHighlightRequest>(ctx);
+            if (req?.Part != null) PreviewStore.Upsert(new[]
+            {
+                new PreviewStore.Part
+                {
+                    PartId = req.Part.PartId,
+                    DocumentGuid = Guid.TryParse(req.Part.DocumentGuid, out var g) ? g : Guid.Empty,
+                    DocumentName = req.Part.DocumentName,
+                    ImportPath = req.Part.ImportPath,
+                    SourceLangCode = req.Part.SourceLangCode,
+                    TargetLangCode = req.Part.TargetLangCode,
+                    Source = req.Part.Source ?? "",
+                    Target = req.Part.Target ?? "",
+                    WordCount = req.Part.WordCount,
+                    CharCount = req.Part.CharCount
+                }
+            });
+
+            PreviewStore.SetActive(req?.Part == null ? null : new PreviewStore.Active
+            {
+                PartId = req.Part.PartId,
+                SourceStart = req.SourceStart, SourceLength = req.SourceLength,
+                TargetStart = req.TargetStart, TargetLength = req.TargetLength,
+                AtUtc = DateTime.UtcNow
+            });
+            PreviewStore.NoteTool(true);
+            TryWrite(ctx, 200, Json(new OkBody { Ok = true }));
+        }
+
+        private void HandlePreviewStatus(HttpListenerContext ctx)
+        {
+            var req = Read<PreviewStatusRequest>(ctx);
+            PreviewStore.NoteTool(req?.Connected ?? false);
+            TryWrite(ctx, 200, Json(new OkBody { Ok = true }));
+        }
+
+        /// <summary>Long-poll: the tool asks, and waits up to ~25 s for something to do.</summary>
+        private void HandlePreviewCommands(HttpListenerContext ctx)
+        {
+            var wait = Math.Min(25, ParseInt(ctx.Request.QueryString["wait"], 20));
+            PreviewStore.NoteTool(true);
+            var commands = PreviewStore.TakeCommands(TimeSpan.FromSeconds(wait));
+
+            TryWrite(ctx, 200, Json(new PreviewCommandsBody
+            {
+                Commands = commands.Select(c => new PreviewCommandBody
+                {
+                    Type = c.Type,
+                    PartId = c.PartId,
+                    Part = ToBody(PreviewStore.GetPart(c.PartId))
+                }).ToArray()
+            }));
+        }
+
+        private void HandleActiveSegment(HttpListenerContext ctx)
+        {
+            if (!PreviewStore.ToolAlive)
+            {
+                TryWrite(ctx, 409, Json(new ErrorBody
+                {
+                    Error = "The Supervertaler preview tool is not connected, so the active segment is unknown. "
+                          + "It starts with memoQ once registered under Options > External preview tools; "
+                          + "if it is not running, ask the user to start Supervertaler.MemoQ.Preview.exe."
+                }));
+                return;
+            }
+
+            var active = PreviewStore.GetActive();
+            var part = PreviewStore.GetPart(active?.PartId);
+            if (part == null)
+            {
+                TryWrite(ctx, 200, Json(new ActiveSegmentBody { Note = "No segment has been selected yet in this session." }));
+                return;
+            }
+
+            var rows = PreviewStore.Rows(part.DocumentGuid);
+            var index = rows.FindIndex(r => r.PartId == part.PartId);
+
+            TryWrite(ctx, 200, Json(new ActiveSegmentBody
+            {
+                Index = index >= 0 ? index + 1 : 0,
+                Part = ToBody(part),
+                SourceSelectionStart = active.SourceStart, SourceSelectionLength = active.SourceLength,
+                TargetSelectionStart = active.TargetStart, TargetSelectionLength = active.TargetLength,
+                SelectedAgoSeconds = (int)(DateTime.UtcNow - active.AtUtc).TotalSeconds
+            }));
+        }
+
+        /// <summary>
+        /// go_to_segment. Resolved to a part id here, executed by the preview
+        /// tool through RequestHighlightChange — the call memoQ's own PDF tool
+        /// uses to select a row from outside.
+        /// </summary>
+        private void HandleGoTo(HttpListenerContext ctx)
+        {
+            var req = Read<GoToRequest>(ctx) ?? new GoToRequest();
+
+            if (!PreviewStore.ToolAlive)
+            {
+                TryWrite(ctx, 409, Json(new ErrorBody { Error = "The Supervertaler preview tool is not connected; memoQ cannot be navigated." }));
+                return;
+            }
+
+            PreviewStore.Part target = null;
+            if (!string.IsNullOrEmpty(req.PartId))
+            {
+                target = PreviewStore.GetPart(req.PartId);
+            }
+            else if (req.Index > 0)
+            {
+                var doc = PreviewStore.Documents().FirstOrDefault(d =>
+                    string.IsNullOrEmpty(req.Document) || d.DocumentGuid.ToString("D") == req.Document || d.DocumentName == req.Document);
+                if (doc != null)
+                {
+                    var rows = PreviewStore.Rows(doc.DocumentGuid);
+                    if (req.Index <= rows.Count) target = rows[req.Index - 1];
+                }
+            }
+
+            if (target == null)
+            {
+                TryWrite(ctx, 404, Json(new ErrorBody { Error = "No such segment. Use get_segments to see indexes and part ids." }));
+                return;
+            }
+
+            PreviewStore.Enqueue(new PreviewStore.Command { Type = "goto", PartId = target.PartId });
+            TryWrite(ctx, 200, Json(new OkBody
+            {
+                Ok = true,
+                Message = "Asked memoQ to select \"" + Truncate(TagBridge.StripTagMarkers(target.Source), 60) + "\"."
+            }));
+        }
+
+        private static string Truncate(string s, int n) =>
+            string.IsNullOrEmpty(s) || s.Length <= n ? s : s.Substring(0, n) + "…";
+
+        private static PreviewPartBody ToBody(PreviewStore.Part p)
+        {
+            if (p == null) return null;
+            return new PreviewPartBody
+            {
+                PartId = p.PartId,
+                DocumentGuid = p.DocumentGuid.ToString("D"),
+                DocumentName = p.DocumentName,
+                ImportPath = p.ImportPath,
+                SourceLangCode = p.SourceLangCode,
+                TargetLangCode = p.TargetLangCode,
+                Source = p.Source,
+                Target = p.Target,
+                WordCount = p.WordCount,
+                CharCount = p.CharCount
+            };
+        }
+
+        [DataContract]
+        internal class PreviewPartBody
+        {
+            [DataMember(Name = "partId")] public string PartId { get; set; }
+            [DataMember(Name = "documentGuid")] public string DocumentGuid { get; set; }
+            [DataMember(Name = "documentName", EmitDefaultValue = false)] public string DocumentName { get; set; }
+            [DataMember(Name = "importPath", EmitDefaultValue = false)] public string ImportPath { get; set; }
+            [DataMember(Name = "sourceLangCode", EmitDefaultValue = false)] public string SourceLangCode { get; set; }
+            [DataMember(Name = "targetLangCode", EmitDefaultValue = false)] public string TargetLangCode { get; set; }
+            [DataMember(Name = "source")] public string Source { get; set; }
+            [DataMember(Name = "target")] public string Target { get; set; }
+            [DataMember(Name = "wordCount")] public int WordCount { get; set; }
+            [DataMember(Name = "charCount")] public int CharCount { get; set; }
+        }
+
+        [DataContract] internal class PreviewContentRequest { [DataMember(Name = "parts")] public PreviewPartBody[] Parts { get; set; } }
+        [DataContract] internal class PreviewIdsRequest { [DataMember(Name = "partIds")] public string[] PartIds { get; set; } }
+        [DataContract] internal class PreviewStatusRequest { [DataMember(Name = "connected")] public bool Connected { get; set; } }
+
+        [DataContract]
+        internal class PreviewHighlightRequest
+        {
+            [DataMember(Name = "part")] public PreviewPartBody Part { get; set; }
+            [DataMember(Name = "sourceStart")] public int SourceStart { get; set; }
+            [DataMember(Name = "sourceLength")] public int SourceLength { get; set; }
+            [DataMember(Name = "targetStart")] public int TargetStart { get; set; }
+            [DataMember(Name = "targetLength")] public int TargetLength { get; set; }
+        }
+
+        [DataContract]
+        internal class PreviewCommandsBody { [DataMember(Name = "commands")] public PreviewCommandBody[] Commands { get; set; } }
+
+        [DataContract]
+        internal class PreviewCommandBody
+        {
+            [DataMember(Name = "type")] public string Type { get; set; }
+            [DataMember(Name = "partId")] public string PartId { get; set; }
+            [DataMember(Name = "part", EmitDefaultValue = false)] public PreviewPartBody Part { get; set; }
+        }
+
+        [DataContract]
+        internal class ActiveSegmentBody
+        {
+            [DataMember(Name = "index")] public int Index { get; set; }
+            [DataMember(Name = "part", EmitDefaultValue = false)] public PreviewPartBody Part { get; set; }
+            [DataMember(Name = "sourceSelectionStart")] public int SourceSelectionStart { get; set; }
+            [DataMember(Name = "sourceSelectionLength")] public int SourceSelectionLength { get; set; }
+            [DataMember(Name = "targetSelectionStart")] public int TargetSelectionStart { get; set; }
+            [DataMember(Name = "targetSelectionLength")] public int TargetSelectionLength { get; set; }
+            [DataMember(Name = "selectedAgoSeconds")] public int SelectedAgoSeconds { get; set; }
+            [DataMember(Name = "note", EmitDefaultValue = false)] public string Note { get; set; }
+        }
+
+        [DataContract]
+        internal class GoToRequest
+        {
+            [DataMember(Name = "index")] public int Index { get; set; }
+            [DataMember(Name = "partId")] public string PartId { get; set; }
+            [DataMember(Name = "document")] public string Document { get; set; }
+        }
+
         // ── plumbing ─────────────────────────────────────────────────────
 
         private static string LangPair(EngineContext context)
@@ -998,7 +1315,18 @@ namespace Supervertaler.MemoQ.Core
             [DataMember(Name = "langPair", EmitDefaultValue = false)] public string LangPair { get; set; }
             [DataMember(Name = "documents")] public ProjectDocumentBody[] Documents { get; set; }
             [DataMember(Name = "stagedTranslations")] public int StagedTranslations { get; set; }
+            [DataMember(Name = "previewToolConnected")] public bool PreviewToolConnected { get; set; }
+            [DataMember(Name = "liveDocuments", EmitDefaultValue = false)] public LiveDocumentBody[] LiveDocuments { get; set; }
             [DataMember(Name = "note", EmitDefaultValue = false)] public string Note { get; set; }
+        }
+
+        [DataContract]
+        internal class LiveDocumentBody
+        {
+            [DataMember(Name = "documentGuid")] public string DocumentGuid { get; set; }
+            [DataMember(Name = "documentName", EmitDefaultValue = false)] public string DocumentName { get; set; }
+            [DataMember(Name = "langPair")] public string LangPair { get; set; }
+            [DataMember(Name = "rows")] public int Rows { get; set; }
         }
 
         [DataContract]
@@ -1020,7 +1348,9 @@ namespace Supervertaler.MemoQ.Core
         internal class SegmentsBody
         {
             [DataMember(Name = "documentKey", EmitDefaultValue = false)] public string DocumentKey { get; set; }
+            [DataMember(Name = "documentName", EmitDefaultValue = false)] public string DocumentName { get; set; }
             [DataMember(Name = "total")] public int Total { get; set; }
+            [DataMember(Name = "source", EmitDefaultValue = false)] public string Source { get; set; }
             [DataMember(Name = "segments")] public SegmentBody[] Segments { get; set; }
             [DataMember(Name = "note", EmitDefaultValue = false)] public string Note { get; set; }
         }
@@ -1029,8 +1359,11 @@ namespace Supervertaler.MemoQ.Core
         internal class SegmentBody
         {
             [DataMember(Name = "index")] public int Index { get; set; }
+            [DataMember(Name = "partId", EmitDefaultValue = false)] public string PartId { get; set; }
             [DataMember(Name = "source")] public string Source { get; set; }
+            [DataMember(Name = "target", EmitDefaultValue = false)] public string Target { get; set; }
             [DataMember(Name = "staged", EmitDefaultValue = false)] public string Staged { get; set; }
+            [DataMember(Name = "isActive", EmitDefaultValue = false)] public bool? IsActive { get; set; }
         }
 
         [DataContract]

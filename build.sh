@@ -82,7 +82,9 @@ done
 # silently — which it duly did the first time this guard was written.
 # obj/ is excluded: MSBuild writes AssemblyAttributes.cs there during every
 # build, so it is always newer than the output and would trip this on principle.
-STALE="$(find "$ROOT/src" -path '*/obj' -prune -o     \( -name '*.cs' -o -name '*.csproj' \) -newer "$OUTPUT" -print -quit)"
+# The two standalone exes are pruned too: their sources never enter the DLL,
+# so an edit to the preview tool must not read as "the plugin is stale".
+STALE="$(find "$ROOT/src" \( -path '*/obj' -o -path '*/Supervertaler.PromptEditor' -o -path '*/Supervertaler.MemoQ.Preview' \) -prune -o     \( -name '*.cs' -o -name '*.csproj' \) -newer "$OUTPUT" -print -quit)"
 if [[ -n "$STALE" ]]; then
     echo "ERROR: $(basename "$OUTPUT") is older than $STALE" >&2
     echo "       The build produced no fresh output — refusing to deploy a stale DLL." >&2
@@ -134,6 +136,22 @@ DEPLOY_LOG=""
 # Substring, not anchored: deploy.ps1 writes plain UTF-8, but a leading byte from
 # any future logging change must not turn a successful deploy into a failure.
 if [[ "$DEPLOY_LOG" == *"OK  "* ]]; then
+    # The preview tool. A separate process memoQ launches itself, so it does
+    # NOT go into Addins: it carries its own Newtonsoft.Json and System.Web.Http,
+    # and memoQ probes Addins for its own assemblies — a copy of either there
+    # could shadow memoQ's. It lives under the user's profile instead, needs no
+    # elevation, and memoQ finds it by the AutoStartupCommand it registered.
+    PREVIEW_SRC="$ROOT/src/Supervertaler.MemoQ.Preview/bin/$CONFIG"
+    PREVIEW_DST="$LOCALAPPDATA/Supervertaler.memoQ/preview"
+    if [[ -f "$PREVIEW_SRC/Supervertaler.MemoQ.Preview.exe" ]]; then
+        if tasklist.exe //FI "IMAGENAME eq Supervertaler.MemoQ.Preview.exe" 2>/dev/null | grep -qi "Supervertaler.MemoQ.Preview"; then
+            echo "WARN  preview tool is running; not replaced (quit it from the tray and rerun)"
+        else
+            mkdir -p "$PREVIEW_DST"
+            cp "$PREVIEW_SRC"/*.dll "$PREVIEW_SRC"/*.exe "$PREVIEW_SRC"/*.config "$PREVIEW_DST/" 2>/dev/null || true
+            echo "OK  $(cygpath -w "$PREVIEW_DST")\Supervertaler.MemoQ.Preview.exe"
+        fi
+    fi
     echo
     echo "Next: start memoQ, then Resources > Settings > MT > Supervertaler."
     echo "memoQ warns once that the plugin is unsigned — expected until it is signed"

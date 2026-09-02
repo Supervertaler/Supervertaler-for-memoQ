@@ -26,7 +26,7 @@
     {
       "name": "get_segments",
       "access": "read",
-      "description": "The captured source segments of a document, in the order memoQ first showed them, with any staged translation alongside. Tags appear as <t1>...</t1> markers - reproduce them exactly in translations. Use offset/limit to page through long documents.",
+      "description": "The document's segments. With the Supervertaler preview tool running this is the LIVE view from memoQ: rows in real order, each with source, current target text, a partId, and isActive on the cursor row. Without it, it is what the plugin has captured from translation requests (source only, in the order memoQ sent them). Tags appear as <b>...</b> or <t1>...</t1> markers - reproduce them exactly in translations. Use offset/limit to page through long documents.",
       "inputSchema": {
         "type": "object",
         "properties": {
@@ -38,6 +38,35 @@
       "method": "GET",
       "path": "/v1/segments",
       "paramMap": { "document": "document", "offset": "offset", "limit": "limit" },
+      "fixedQuery": {},
+      "fixedBody": {}
+    },
+    {
+      "name": "get_active_segment",
+      "access": "read",
+      "description": "The segment the user's cursor is on in memoQ right now: its index, source and target text, document name and which part of it is selected. Needs the Supervertaler preview tool running (memoQ starts it automatically once registered); if it is not, this says so. Use before insert-style requests such as 'translate this one' or 'what does this segment say'.",
+      "inputSchema": { "type": "object", "properties": {} },
+      "method": "GET",
+      "path": "/v1/active",
+      "paramMap": {},
+      "fixedQuery": {},
+      "fixedBody": {}
+    },
+    {
+      "name": "go_to_segment",
+      "access": "write",
+      "description": "Ask memoQ to select a segment, by index (from get_segments) or by part id. Needs the Supervertaler preview tool running. Moves the user's cursor, so use it when they asked to be taken somewhere, not as a side effect of reading.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "index": { "type": ["integer", "null"], "description": "1-based row index as returned by get_segments.", "default": null },
+          "partId": { "type": ["string", "null"], "description": "Alternatively the exact part id from get_segments / get_active_segment.", "default": null },
+          "document": { "type": ["string", "null"], "description": "Document GUID or name when several are open. Omit for the most recently active.", "default": null }
+        }
+      },
+      "method": "POST",
+      "path": "/v1/goto",
+      "paramMap": { "index": "index", "partId": "partId", "document": "document" },
       "fixedQuery": {},
       "fixedBody": {}
     },
