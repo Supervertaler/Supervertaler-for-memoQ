@@ -88,7 +88,19 @@ namespace Supervertaler.MemoQ.Core
                     var text = System.Text.Encoding.GetEncoding(28591).GetString(bytes);
                     var m = Regex.Match(text, @"[\x20-\x7e]{3,}\.[A-Za-z0-9]{2,6}(?=[^\x20-\x7e]|$)");
                     if (m.Success && !m.Value.Contains("\\") && !m.Value.Contains("/"))
-                        names.Document = m.Value.Trim();
+                    {
+                        var value = m.Value;
+
+                        // The byte before the string is its length, and for a
+                        // name of 32–126 characters that byte is itself printable
+                        // — a 36-character name arrives as "$Example…". If the
+                        // first character's code equals the length of what
+                        // follows, it is the prefix, not the name.
+                        if (value.Length > 1 && value[0] == value.Length - 1)
+                            value = value.Substring(1);
+
+                        names.Document = value.Trim();
+                    }
                 }
 
                 return names;

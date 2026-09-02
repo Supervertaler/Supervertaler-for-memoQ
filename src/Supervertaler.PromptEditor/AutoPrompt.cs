@@ -305,7 +305,14 @@ namespace Supervertaler.PromptEditor
                     if (d.IsVisitedBucket)
                         label = "Rows you have visited in the editor (any MT engine)";
                     else if (!string.IsNullOrWhiteSpace(d.DocumentName))
-                        label = d.DocumentName + (string.IsNullOrWhiteSpace(d.ProjectName) ? "" : "  \u2014  " + d.ProjectName);
+                    {
+                        // A document named after its project reads twice over;
+                        // show the project only when it adds something.
+                        var stem = Path.GetFileNameWithoutExtension(d.DocumentName);
+                        var showProject = !string.IsNullOrWhiteSpace(d.ProjectName)
+                            && !string.Equals(stem, d.ProjectName, StringComparison.OrdinalIgnoreCase);
+                        label = d.DocumentName + (showProject ? "  \u2014  " + d.ProjectName : "");
+                    }
                     else if (!string.IsNullOrWhiteSpace(d.Client))
                         label = d.Client + (string.IsNullOrWhiteSpace(d.Subject) ? "" : " / " + d.Subject);
                     else
