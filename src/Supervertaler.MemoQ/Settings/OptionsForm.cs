@@ -61,7 +61,7 @@ namespace Supervertaler.MemoQ.Settings
             MinimizeBox = false;
             StartPosition = FormStartPosition.CenterParent;
             AutoScaleMode = AutoScaleMode.Font;
-            ClientSize = new Size(660, 628);
+            ClientSize = new Size(660, 640);
 
             // The ? in the title bar. This dialog is most of the plugin's UI, so
             // it is also the only place the documentation can be reached from
@@ -155,18 +155,20 @@ namespace Supervertaler.MemoQ.Settings
             // for the plumbing. "Bridge" stays the internal term (MemoQBridge,
             // the handshake file); the user-facing word is MCP, the thing they
             // actually set up.
-            _bridgeMode.Text = "Pre-translate only captures and delivers staged translations – never calls the model";
+            _bridgeMode.Text = "Pre-translate via Claude Desktop (MCP) instead of the API key above";
             _bridgeMode.Left = fieldX; _bridgeMode.Top = y; _bridgeMode.AutoSize = true;
             Controls.Add(_bridgeMode);
             y += 20;
 
             var bridgeHint = new Label
             {
-                Text = "For chat-driven jobs (Claude Desktop via MCP). Segment-by-segment lookups still use the model.",
-                Left = fieldX + 18, Top = y, AutoSize = true, ForeColor = SystemColors.GrayText
+                Text = "Pre-translate then only hands the segments to the chat and inserts the translations it sends back; "
+                     + "nothing is charged to the API key. Suggestions as you move through segments still use the API key.",
+                Left = fieldX + 18, Top = y, Width = fieldW - 18, Height = 34, AutoSize = false,
+                ForeColor = SystemColors.GrayText
             };
             Controls.Add(bridgeHint);
-            y += 30;
+            y += 42;
 
             // The shared prompt library, the same folder the Trados plugin reads.
             // Selecting one stores its path, not its text, so a prompt edited
