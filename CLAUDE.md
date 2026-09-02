@@ -62,7 +62,10 @@ looks like. Ask memoQ for the Preview SDK package.
 
 memoQ's separately distributed **memoQ PDF Preview** tool ships
 `MemoQ.PreviewInterfaces.dll` (53 KB), which IS the Preview SDK contract.
-Installed at `C:\Program Files\memoQ\memoQ PDF Preview\`. Reflected in full;
+Installed at `C:\Program Files\memoQ\memoQ PDF Preview\`; downloaded from
+https://docs.memoq.com/current/en/memoQ-PDF-preview-tool/memoq-pdf-preview-tool.html
+(a public download — the assembly is not under NDA, though redistribution
+terms are still unstated). Reflected in full;
 the shape is:
 
 **Transport.** Two protocols, same messages: a named pipe (`MQ_PREVIEW_PIPE`)
