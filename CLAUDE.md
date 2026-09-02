@@ -465,6 +465,14 @@ locates the current memoQ directory is a real requirement, not a nicety.
    carries its own Newtonsoft.Json and memoQ probes Addins for its own copy;
    and never under `%LocalAppData%`, because of the next section.
 
+10. ~~QA over the live document~~ — shipped 2026-09-02. `Core/QaChecks.cs`
+    runs the Trados plugin's checks (numbers, tags, nbsp, terminology,
+    inconsistencies) over PreviewStore rows: same semantics, paragraph units,
+    tag markers compared by name as a multiset since memoQ delivers text
+    markers rather than tag ids. `run_verification` stays impossible — memoQ's
+    own QA is not callable by a plugin. Bridge: GET /v1/qa-check?type=… and
+    GET /v1/inconsistencies; five MCP tools.
+
 ## This shell cannot write to AppData (MSIX virtualisation)
 
 Claude Code here runs inside the packaged Claude desktop app

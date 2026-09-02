@@ -264,6 +264,8 @@ namespace Supervertaler.MemoQ.Core
                 // From the MCP client, answered from the preview view.
                 case "GET /v1/active": HandleActiveSegment(ctx); return;
                 case "POST /v1/goto": HandleGoTo(ctx); return;
+                case "GET /v1/qa-check": HandleQaCheck(ctx); return;
+                case "GET /v1/inconsistencies": HandleInconsistencies(ctx); return;
                 default:
                     TryWrite(ctx, 404, Json(new ErrorBody { Error = "unknown endpoint " + method + " " + path }));
                     return;
@@ -1253,6 +1255,131 @@ namespace Supervertaler.MemoQ.Core
             [DataMember(Name = "document")] public string Document { get; set; }
             [DataMember(Name = "sourceStart")] public int SourceStart { get; set; }
             [DataMember(Name = "sourceLength")] public int SourceLength { get; set; }
+        }
+
+        // ── QA over the live view ────────────────────────────────────────
+
+        /// <summary>The live document to run QA on: the one asked for, else the most recently active. Null with a reason when there is none.</summary>
+        private static List<PreviewStore.Part> QaRows(HttpListenerContext ctx, out string problem, out PreviewStore.Part doc)
+        {
+            problem = null; doc = null;
+            if (!PreviewStore.ToolAlive)
+            {
+                problem = "The Supervertaler preview tool is not connected, so the target text is not available. "
+                        + "QA checks need it; ask the user to start Supervertaler.MemoQ.Preview.exe (memoQ auto-starts it once registered).";
+                return null;
+            }
+
+            var key = ctx.Request.QueryString["document"];
+            doc = PreviewStore.Documents().FirstOrDefault(d =>
+                string.IsNullOrEmpty(key)
+                || d.DocumentGuid.ToString("D") == key
+                || string.Equals(d.DocumentName, key, StringComparison.OrdinalIgnoreCase));
+
+            if (doc == null) { problem = "No document has been seen yet. Open one in memoQ and click into a segment."; return null; }
+            return PreviewStore.Rows(doc.DocumentGuid);
+        }
+
+        private void HandleQaCheck(HttpListenerContext ctx)
+        {
+            var type = (ctx.Request.QueryString["type"] ?? "").ToLowerInvariant();
+            if (type != "numbers" && type != "tags" && type != "nbsp" && type != "terminology")
+            {
+                TryWrite(ctx, 400, Json(new ErrorBody { Error = "missing or unknown 'type' — use numbers, tags, nbsp or terminology" }));
+                return;
+            }
+
+            var rows = QaRows(ctx, out var problem, out var doc);
+            if (rows == null) { TryWrite(ctx, 409, Json(new ErrorBody { Error = problem })); return; }
+
+            var limit = Math.Min(200, ParseInt(ctx.Request.QueryString["limit"], 50));
+            var result = QaChecks.Run(type, rows, limit, SharedSettings.GlossaryPath);
+
+            TryWrite(ctx, 200, Json(new QaBody
+            {
+                Check = result.Check,
+                DocumentName = doc.DocumentName,
+                Checked = result.Checked,
+                Found = result.Found,
+                Truncated = result.Truncated,
+                Note = result.Note,
+                Unit = "paragraph — pass 'index' to go_to_segment to jump there",
+                Issues = result.Issues.Select(i => new QaIssueBody
+                {
+                    Index = i.Index, PartId = i.PartId, Detail = i.Detail, Source = i.Source, Target = i.Target
+                }).ToArray()
+            }));
+        }
+
+        private void HandleInconsistencies(HttpListenerContext ctx)
+        {
+            var rows = QaRows(ctx, out var problem, out var doc);
+            if (rows == null) { TryWrite(ctx, 409, Json(new ErrorBody { Error = problem })); return; }
+
+            var limit = Math.Min(500, ParseInt(ctx.Request.QueryString["limit"], 50));
+            var offset = ParseInt(ctx.Request.QueryString["offset"], 0);
+            var groups = QaChecks.Inconsistencies(rows);
+
+            TryWrite(ctx, 200, Json(new InconsistenciesBody
+            {
+                DocumentName = doc.DocumentName,
+                Total = groups.Count,
+                Unit = "paragraph — the same source paragraph translated differently",
+                Note = groups.Count == 0 ? "No repeated source paragraph has more than one translation." : null,
+                Groups = groups.Skip(offset).Take(limit).Select(g => new InconsistencyGroupBody
+                {
+                    Source = g.Source,
+                    Occurrences = g.Occurrences.Select(o => new OccurrenceBody { Index = o.Index, PartId = o.PartId, Target = o.Target }).ToArray()
+                }).ToArray()
+            }));
+        }
+
+        [DataContract]
+        internal class QaBody
+        {
+            [DataMember(Name = "check")] public string Check { get; set; }
+            [DataMember(Name = "documentName", EmitDefaultValue = false)] public string DocumentName { get; set; }
+            [DataMember(Name = "unit")] public string Unit { get; set; }
+            [DataMember(Name = "checked")] public int Checked { get; set; }
+            [DataMember(Name = "found")] public int Found { get; set; }
+            [DataMember(Name = "truncated")] public bool Truncated { get; set; }
+            [DataMember(Name = "note", EmitDefaultValue = false)] public string Note { get; set; }
+            [DataMember(Name = "issues")] public QaIssueBody[] Issues { get; set; }
+        }
+
+        [DataContract]
+        internal class QaIssueBody
+        {
+            [DataMember(Name = "index")] public int Index { get; set; }
+            [DataMember(Name = "partId")] public string PartId { get; set; }
+            [DataMember(Name = "detail")] public string Detail { get; set; }
+            [DataMember(Name = "source")] public string Source { get; set; }
+            [DataMember(Name = "target")] public string Target { get; set; }
+        }
+
+        [DataContract]
+        internal class InconsistenciesBody
+        {
+            [DataMember(Name = "documentName", EmitDefaultValue = false)] public string DocumentName { get; set; }
+            [DataMember(Name = "unit")] public string Unit { get; set; }
+            [DataMember(Name = "total")] public int Total { get; set; }
+            [DataMember(Name = "note", EmitDefaultValue = false)] public string Note { get; set; }
+            [DataMember(Name = "groups")] public InconsistencyGroupBody[] Groups { get; set; }
+        }
+
+        [DataContract]
+        internal class InconsistencyGroupBody
+        {
+            [DataMember(Name = "source")] public string Source { get; set; }
+            [DataMember(Name = "occurrences")] public OccurrenceBody[] Occurrences { get; set; }
+        }
+
+        [DataContract]
+        internal class OccurrenceBody
+        {
+            [DataMember(Name = "index")] public int Index { get; set; }
+            [DataMember(Name = "partId")] public string PartId { get; set; }
+            [DataMember(Name = "target")] public string Target { get; set; }
         }
 
         // ── plumbing ─────────────────────────────────────────────────────

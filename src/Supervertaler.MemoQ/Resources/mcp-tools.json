@@ -73,6 +73,92 @@
       "fixedBody": {}
     },
     {
+      "name": "check_numbers",
+      "access": "read",
+      "description": "QA check over the live document: paragraphs whose numbers differ between source and target (digits compared with thousand/decimal separators stripped, so 1.234,56 matches 1,234.56). Only translated paragraphs are checked. Needs the Supervertaler preview tool running. Each issue carries an index usable with go_to_segment.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "limit": { "type": ["integer", "null"], "description": "Maximum issues to return (default 50, cap 200).", "default": null },
+          "document": { "type": ["string", "null"], "description": "Document GUID or name when several are open.", "default": null }
+        }
+      },
+      "method": "GET",
+      "path": "/v1/qa-check",
+      "paramMap": { "limit": "limit", "document": "document" },
+      "fixedQuery": { "type": "numbers" },
+      "fixedBody": {}
+    },
+    {
+      "name": "check_tags",
+      "access": "read",
+      "description": "QA check over the live document: paragraphs whose inline tag markers (<b>...</b>, <t1>...</t1>) differ from the source — by count, or by tag name as a multiset when counts agree. Needs the Supervertaler preview tool running. A count difference can be legitimate; a name mismatch with equal counts rarely is.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "limit": { "type": ["integer", "null"], "description": "Maximum issues to return (default 50, cap 200).", "default": null },
+          "document": { "type": ["string", "null"], "description": "Document GUID or name when several are open.", "default": null }
+        }
+      },
+      "method": "GET",
+      "path": "/v1/qa-check",
+      "paramMap": { "limit": "limit", "document": "document" },
+      "fixedQuery": { "type": "tags" },
+      "fixedBody": {}
+    },
+    {
+      "name": "check_nbsp",
+      "access": "read",
+      "description": "QA check over the live document: translated paragraphs with fewer non-breaking spaces (U+00A0) than their source. Invisible on screen and in every tool response, so this is the only way to see a lost one — relevant where a style guide wants a non-breaking space between a value and its unit. Needs the Supervertaler preview tool running.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "limit": { "type": ["integer", "null"], "description": "Maximum issues to return (default 50, cap 200).", "default": null },
+          "document": { "type": ["string", "null"], "description": "Document GUID or name when several are open.", "default": null }
+        }
+      },
+      "method": "GET",
+      "path": "/v1/qa-check",
+      "paramMap": { "limit": "limit", "document": "document" },
+      "fixedQuery": { "type": "nbsp" },
+      "fixedBody": {}
+    },
+    {
+      "name": "check_terminology",
+      "access": "read",
+      "description": "QA check over the live document against the Supervertaler glossary: source paragraphs containing a glossary term whose target lacks the expected rendering (inflection tolerated), and any target using a term marked FORBIDDEN. Longest match wins where entries overlap. Needs the Supervertaler preview tool running and a glossary configured.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "limit": { "type": ["integer", "null"], "description": "Maximum issues to return (default 50, cap 200).", "default": null },
+          "document": { "type": ["string", "null"], "description": "Document GUID or name when several are open.", "default": null }
+        }
+      },
+      "method": "GET",
+      "path": "/v1/qa-check",
+      "paramMap": { "limit": "limit", "document": "document" },
+      "fixedQuery": { "type": "terminology" },
+      "fixedBody": {}
+    },
+    {
+      "name": "find_inconsistencies",
+      "access": "read",
+      "description": "Find translation inconsistencies in the live document: repeated source paragraphs (compared tag-stripped) whose translations differ. Returns each group with its source and every occurrence (index, target). Needs the Supervertaler preview tool running. To align them, stage the preferred translation for the others and have the user Pre-translate, or point them there with go_to_segment.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "limit": { "type": ["integer", "null"], "description": "Maximum groups to return (default 50, cap 500).", "default": null },
+          "offset": { "type": ["integer", "null"], "description": "Groups to skip, for paging.", "default": null },
+          "document": { "type": ["string", "null"], "description": "Document GUID or name when several are open.", "default": null }
+        }
+      },
+      "method": "GET",
+      "path": "/v1/inconsistencies",
+      "paramMap": { "limit": "limit", "offset": "offset", "document": "document" },
+      "fixedQuery": {},
+      "fixedBody": {}
+    },
+    {
       "name": "get_confirmed_pairs",
       "access": "read",
       "description": "Source/target pairs the translator has personally confirmed in this document, newest last. This is the gold standard: match their terminology and register in anything you stage. Requires the plugin to be selected under Self-learning MT in memoQ; if always empty, tell the user to check that setting.",
