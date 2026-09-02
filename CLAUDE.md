@@ -36,6 +36,93 @@ used so far.
 | `MemoQ.QAInterfaces` | `IBatchQAChecker` / `ISegmentLevelQAChecker` | QA over mqxliff streams |
 | `MemoQ.GCInterfaces` | `ISession.CheckGrammar` | inline LLM proofreading |
 
+### Contract facts recovered from the SDK packages (2026-09-02)
+
+All five packages were read in full: specification, assembly surface, sample
+source. The full write-up is private, in `D:\Google Drive\Skills\memoQ SDK
+findings 2026-09-02.md`. The facts below change how this plugin must be written.
+
+**MT SDK**
+
+- **The rich session path never runs.** memoQ creates a rich lookup session
+  only for the plugin whose id is `MemoQAGT`. `SupervertalerRichSession` and
+  everything behind `CreateRichLookupSession` is unreachable inside memoQ. This
+  is why `ContextKinds.Terminology` never arrived. Claiming the `AGT`
+  capability only removes the plugin from the pre-translate list.
+- **memoQ will forward the best fuzzy TM match** if `SupportFuzzyForwarding`
+  is true and the user routes it to us under *Send best fuzzy TM match to*. It
+  arrives as the second and third arguments of `TranslateCorrectSegment`. We
+  currently discard it.
+- **`MaxDegreeOfParallelism` is read once, when the MT settings resource is
+  created, and stored in the .mqres.** Changing it later does nothing until the
+  resource is recreated. The "Parallel requests" setting is therefore inert for
+  an existing resource.
+- **Saving MT settings calls `CreateEngine("eng","ger")`.** The engine
+  constructor must be side-effect free; ours starts and re-aims the bridge,
+  which is the root cause of the earlier eng-ger staging bug. Start the bridge
+  from the director's `Initialize`, aim it from real traffic.
+- Exceptions must be `MTException`; memoQ shows the message under the grid.
+  `StoreTranslation(TranslationUnit[])` must return the indices stored, not
+  flags. `SetProperty` is never called by memoQ desktop.
+- `MTRequestMetadata.SegmentLevelMetadata` carries each row's GUID, its
+  translation state (`TranslationStates`: 0 NotStarted, 1000 PreTranslated,
+  2000 PartiallyEdited, 3000 ManuallyConfirmed, 5000 Proofread, 6000
+  MachineTranslated, 7000 Rejected) and its index in the batch. The batch is a
+  contiguous slice of the document, so array neighbours are real neighbours.
+- memoQ calls the synchronous session on `Parallel.ForEach` workers; our extra
+  `Task.Run` per call doubles the thread count. There is no cancellation on that
+  path, so the LLM client must have its own timeout.
+- Setting `TranslationResult.Confidence` and `ConfidenceProviderName` makes
+  memoQ show "AIQE: <name> (n%)" under the hit.
+
+**TB SDK**
+
+- `GetAddTermsUrl(externalId, sourceLang, sourceTerm, targetLang, targetTerm)`
+  is called with the user's *selected* source and target text and memoQ opens
+  the URL returned. A localhost page served by the bridge makes it a quick-add
+  dialog. The existing plugin disables it on a mistaken belief.
+- `IEnvironment.BuildWordsOfSegment` is memoQ's own tokeniser.
+- `TerminologyResult` also carries `Confidence` (0–101, 101 = exact with
+  context), `ExternalId` and four metadata lists memoQ renders itself.
+
+**TM SDK**
+
+- Read-only: `Lookup(segment, preceding, following, threshold)` and
+  `Concordance`. memoQ never stores a confirmed segment into a plugin TM.
+  Learning from confirmations stays in the MT plugin's
+  `ISessionForStoringTranslations`.
+- Every lookup carries the neighbouring segments. Hits carry match rate,
+  fragment ranges, plugin name and full entry metadata; concordance answers
+  Ctrl+K with highlight ranges.
+
+**QA SDK**
+
+- Batch checks run under a modal progress dialog on a worker: no UI freeze,
+  but no cancel, progress or timeout. Findings are target-range only, no
+  auto-fix, no info level; errors and non-ignorable warnings block export.
+  Trans-units carry only hashes, languages, document guid and (V2) notes.
+  `mq:originalhash` is the natural cache key for an LLM pass. Generator id
+  10–99 must be assigned by memoQ. Request version V4 exists but is undocumented.
+
+**Preview SDK**
+
+- Several tools connect at once; `PreviewPartIdRegex` routes content and
+  triggers `AutoStartupCommand`. Parts are segment parts, paragraphs only when
+  there are no structural tags. Ids come from the source file (XML filter
+  settings, SRT filter, or an mqxliff round trip writing `mq:previewidbylabel`);
+  `mQ-default` is undocumented. Id refresh happens only on request; our poll is
+  what makes it periodic. The pipe name carries the terminal-server session id.
+  A highlight request with only `PreviewPartId` cannot be rejected as stale.
+
+**Distribution (MT, TB, TM, QA alike)**
+
+Unsigned plugins prompt at every start unless
+`C:\ProgramData\MemoQ\ClientDevConfig.xml` sets `LoadUnsignedPlugins`. Public
+distribution is either memoQ compiling and signing the source into their
+installer, or the signed-private-plugin route: `MemoQ.AddinSigner.exe -g`,
+send memoQ the public key, they compile it into a public build, then `-s` per
+release with the `.kgsign` beside the DLL. The Preview tool has no such gate.
+
 There is also a **Preview SDK**, distributed separately rather than as an assembly
 in the install directory — and it is more interesting than the others.
 
