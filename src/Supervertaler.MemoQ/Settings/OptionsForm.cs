@@ -2,6 +2,7 @@ using System;
 using System.Diagnostics;
 using System.Drawing;
 using System.IO;
+using System.Runtime.InteropServices;
 using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
@@ -471,6 +472,17 @@ namespace Supervertaler.MemoQ.Settings
         /// shared with the Trados plugin, and hosting a second WinForms window
         /// inside memoQ's UI thread means its bugs become memoQ's bugs. It also
         /// keeps the add-in free of the editor's code entirely.
+        ///
+        /// It does NOT block this dialog, and must not. An earlier version set
+        /// Enabled = false and span on Application.DoEvents until the editor
+        /// exited, so that nobody could change the selected prompt while editing
+        /// one. That made the whole of memoQ look hung: a disabled window still
+        /// pumps messages, so Windows reports the application as responding and
+        /// says nothing about "not responding" while every click is ignored — and
+        /// when the editor opened behind memoQ, as it does, there was nothing on
+        /// screen to explain why. A stale dropdown is cheaper than a host the user
+        /// has to kill, so the list is re-read when the editor exits and whenever
+        /// this dialog is activated with an editor open.
         /// </summary>
         private void OnEditPrompts(object sender, EventArgs e)
         {
@@ -486,49 +498,117 @@ namespace Supervertaler.MemoQ.Settings
                 return;
             }
 
+            // One editor at a time. Two windows over one folder of unlocked files
+            // is how an edit in the first gets overwritten by a save in the second,
+            // and a user who clicks Edit again means "show me the one I opened".
+            using (var already = FindRunningEditor())
+            {
+                if (already != null) { BringEditorToFront(already); return; }
+            }
+
             var selected = _promptPick.SelectedItem as PromptChoice;
 
             try
             {
-                using (var process = Process.Start(new ProcessStartInfo(exe)
+                var process = Process.Start(new ProcessStartInfo(exe)
                 {
                     Arguments = selected != null && !string.IsNullOrEmpty(selected.Path)
                         ? "\"" + selected.Path + "\""
                         : "",
                     UseShellExecute = false
-                }))
-                {
-                    if (process == null) return;
+                });
 
-                    // Modal by waiting: the library is a folder of files with no
-                    // locking, and letting the user edit a prompt in one window
-                    // while changing which prompt is selected in another is a way
-                    // to save a stale choice.
-                    Enabled = false;
-                    try
-                    {
-                        while (!process.WaitForExit(50))
-                            Application.DoEvents();
-                    }
-                    finally
-                    {
-                        Enabled = true;
-                    }
-                }
+                if (process == null) return;
+
+                process.EnableRaisingEvents = true;
+                process.Exited += OnPromptEditorExited;
             }
             catch (Exception ex)
             {
                 PluginLog.Write("Could not start the prompt editor", ex);
                 MessageBox.Show(this, "Could not start the prompt editor.\r\n\r\n" + ex.Message,
                     "Supervertaler", MessageBoxButtons.OK, MessageBoxIcon.Error);
-                return;
             }
+        }
 
-            // The dropdown caches for ten seconds; the user has almost certainly
-            // been in the editor longer, but say so explicitly rather than rely
-            // on that.
-            PromptResolver.Invalidate();
-            PopulatePrompts(SelectedPromptPath());
+        /// <summary>
+        /// Runs on a thread-pool thread when the editor closes. Everything is
+        /// wrapped: an exception escaping here takes memoQ down with it, not just
+        /// this dialog. By now the dialog may be closed, in which case there is
+        /// nothing to refresh and the Process object is simply released — the
+        /// handle would leak otherwise, every time the editor is opened.
+        /// </summary>
+        private void OnPromptEditorExited(object sender, EventArgs e)
+        {
+            var process = sender as Process;
+            try
+            {
+                if (process != null) process.Exited -= OnPromptEditorExited;
+                if (IsHandleCreated && !IsDisposed) BeginInvoke(new Action(RefreshPromptsFromDisk));
+            }
+            catch (Exception ex) { PluginLog.Write("Prompt editor exit handler", ex); }
+            finally { if (process != null) process.Dispose(); }
+        }
+
+        /// <summary>
+        /// Picks up prompts written while the editor is still open. Only when one
+        /// is actually running: re-reading the library on every activation would
+        /// put a directory scan behind every focus change.
+        /// </summary>
+        protected override void OnActivated(EventArgs e)
+        {
+            base.OnActivated(e);
+            using (var editor = FindRunningEditor())
+            {
+                if (editor != null) RefreshPromptsFromDisk();
+            }
+        }
+
+        /// <summary>Re-reads the library, keeping the selection if it survived.</summary>
+        private void RefreshPromptsFromDisk()
+        {
+            try
+            {
+                PromptResolver.Invalidate();
+                PopulatePrompts(SelectedPromptPath());
+            }
+            catch (Exception ex) { PluginLog.Write("Refreshing the prompt list", ex); }
+        }
+
+        /// <summary>The running editor, or null. The caller disposes what it gets.</summary>
+        private static Process FindRunningEditor()
+        {
+            Process found = null;
+            foreach (var p in Process.GetProcessesByName("Supervertaler.PromptEditor"))
+            {
+                if (found == null)
+                {
+                    try { if (!p.HasExited) { found = p; continue; } } catch { }
+                }
+                p.Dispose();
+            }
+            return found;
+        }
+
+        [DllImport("user32.dll")] private static extern bool SetForegroundWindow(IntPtr hWnd);
+        [DllImport("user32.dll")] private static extern bool ShowWindow(IntPtr hWnd, int nCmdShow);
+        private const int SW_RESTORE = 9;
+
+        /// <summary>
+        /// Raises the editor the user already has open. Without this, clicking Edit
+        /// a second time appears to do nothing when the editor is behind memoQ.
+        /// </summary>
+        private static void BringEditorToFront(Process editor)
+        {
+            try
+            {
+                editor.Refresh();
+                var handle = editor.MainWindowHandle;
+                if (handle == IntPtr.Zero) return;
+                ShowWindow(handle, SW_RESTORE);
+                SetForegroundWindow(handle);
+            }
+            catch (Exception ex) { PluginLog.Write("Raising the prompt editor window", ex); }
         }
 
         /// <summary>
