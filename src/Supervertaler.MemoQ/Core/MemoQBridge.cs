@@ -330,6 +330,8 @@ namespace Supervertaler.MemoQ.Core
                 }).ToArray(),
                 StagedTranslations = StagedTranslations.Snapshot(null).Count,
                 PreviewToolConnected = PreviewStore.ToolAlive,
+                // The glossary all three consumers (terminology pane, prompts, QA) read.
+                ActiveGlossary = string.IsNullOrWhiteSpace(SharedSettings.GlossaryPath) ? null : SharedSettings.GlossaryPath,
                 LiveDocuments = PreviewStore.ToolAlive
                     ? PreviewStore.Documents().Select(d => new LiveDocumentBody
                     {
@@ -1514,6 +1516,7 @@ namespace Supervertaler.MemoQ.Core
             [DataMember(Name = "documents")] public ProjectDocumentBody[] Documents { get; set; }
             [DataMember(Name = "stagedTranslations")] public int StagedTranslations { get; set; }
             [DataMember(Name = "previewToolConnected")] public bool PreviewToolConnected { get; set; }
+            [DataMember(Name = "activeGlossary", EmitDefaultValue = false)] public string ActiveGlossary { get; set; }
             [DataMember(Name = "liveDocuments", EmitDefaultValue = false)] public LiveDocumentBody[] LiveDocuments { get; set; }
             [DataMember(Name = "note", EmitDefaultValue = false)] public string Note { get; set; }
         }

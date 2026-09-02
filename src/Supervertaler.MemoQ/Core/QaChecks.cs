@@ -212,20 +212,39 @@ namespace Supervertaler.MemoQ.Core
 
             r.Note = r.Found == 0
                 ? "Every glossary term found in a source paragraph has its expected rendering in the target, and no forbidden term appears."
-                : "Matching allows inflection (the first five letters of each word must appear), so a listed miss is " +
+                : "Matching allows inflection (the first four letters of each word, diacritics folded, must appear), so a listed miss is " +
                   "usually a genuine substitution — but check compounds and reordered phrases by eye.";
         }
 
-        /// <summary>Loose containment: every word of the term, by its first five letters, occurs in the text.</summary>
+        /// <summary>
+        /// Loose containment: every word of the term occurs in the text by its
+        /// stem. Diacritics are folded and the stem is four letters, because the
+        /// first real run flagged "creëren" as missing from a target that said
+        /// "gecreëerd" — a Dutch participle carries a ge- prefix and the
+        /// diaeresis shifts, so a five-letter exact stem never matched. Four
+        /// folded letters catch that; the cost is a few more lenient passes,
+        /// which for a terminology check is the right side to err on.
+        /// </summary>
         private static bool ContainsStem(string text, string term)
         {
-            var t = text.ToLowerInvariant();
-            foreach (var word in term.ToLowerInvariant().Split(new[] { ' ', '-' }, StringSplitOptions.RemoveEmptyEntries))
+            var t = Fold(text);
+            foreach (var word in Fold(term).Split(new[] { ' ', '-' }, StringSplitOptions.RemoveEmptyEntries))
             {
-                var stem = word.Length > 5 ? word.Substring(0, 5) : word;
+                var stem = word.Length > 4 ? word.Substring(0, 4) : word;
                 if (!t.Contains(stem)) return false;
             }
             return true;
+        }
+
+        /// <summary>Lower-case with diacritics removed: "creëren" → "creeren".</summary>
+        private static string Fold(string s)
+        {
+            var d = (s ?? "").ToLowerInvariant().Normalize(System.Text.NormalizationForm.FormD);
+            var sb = new System.Text.StringBuilder(d.Length);
+            foreach (var c in d)
+                if (System.Globalization.CharUnicodeInfo.GetUnicodeCategory(c) != System.Globalization.UnicodeCategory.NonSpacingMark)
+                    sb.Append(c);
+            return sb.ToString();
         }
 
         // ── helpers ──────────────────────────────────────────────────────

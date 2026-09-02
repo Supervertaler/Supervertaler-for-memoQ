@@ -38,6 +38,23 @@ namespace Supervertaler.MemoQ.Settings
         private readonly CheckBox _useTerminology = new CheckBox();
         private readonly CheckBox _useDocumentContext = new CheckBox();
         private readonly CheckBox _bridgeMode = new CheckBox();
+        private readonly Label _glossaryLabel = new Label();
+
+        /// <summary>The active glossary as a file name, or a plain statement that there is none.</summary>
+        private void RefreshGlossaryLabel()
+        {
+            var path = Core.SharedSettings.GlossaryPath;
+            if (string.IsNullOrWhiteSpace(path))
+            {
+                _glossaryLabel.Text = "(none — terminology pane, prompts and QA checks have nothing to use)";
+                _glossaryLabel.ForeColor = SystemColors.GrayText;
+            }
+            else
+            {
+                _glossaryLabel.Text = System.IO.Path.GetFileName(path) + "   —   " + path;
+                _glossaryLabel.ForeColor = System.IO.File.Exists(path) ? SystemColors.ControlText : Color.Firebrick;
+            }
+        }
         private readonly Button _test = new Button();
         private readonly Label _status = new Label();
         private readonly Label _storedInfo = new Label();
@@ -61,7 +78,7 @@ namespace Supervertaler.MemoQ.Settings
             MinimizeBox = false;
             StartPosition = FormStartPosition.CenterParent;
             AutoScaleMode = AutoScaleMode.Font;
-            ClientSize = new Size(660, 656);
+            ClientSize = new Size(660, 686);
 
             // The ? in the title bar. This dialog is most of the plugin's UI, so
             // it is also the only place the documentation can be reached from
@@ -178,6 +195,26 @@ namespace Supervertaler.MemoQ.Settings
             // add-in owns no ribbon button, no menu item and no panel, so this
             // dialog is the single UI surface available — without it a memoQ user
             // could pick a prompt but never write or correct one.
+            // Which glossary is in force. One setting serves three consumers —
+            // the terminology pane, the prompts, and the QA check — and until
+            // this row the only place to see it was the terminology plugin's own
+            // options, three menus away. Same shared setting; Change… opens the
+            // same dialog the terminology plugin uses.
+            Caption("Glossary", y);
+            const int changeW = 86;
+            _glossaryLabel.Left = fieldX; _glossaryLabel.Top = y + 3; _glossaryLabel.Width = fieldW - changeW - 6;
+            _glossaryLabel.AutoEllipsis = true;
+            Controls.Add(_glossaryLabel);
+            var changeGlossary = new Button { Text = "Change…", Left = fieldX + fieldW - changeW, Top = y - 1, Width = changeW, Height = 24 };
+            changeGlossary.Click += (s, e) =>
+            {
+                using (var dlg = new GlossaryForm()) dlg.ShowDialog(this);
+                RefreshGlossaryLabel();
+            };
+            Controls.Add(changeGlossary);
+            RefreshGlossaryLabel();
+            y += rowH;
+
             Caption("Prompt", y);
             const int editW = 86;
             _promptPick.Left = fieldX; _promptPick.Top = y; _promptPick.Width = fieldW - editW - 6;

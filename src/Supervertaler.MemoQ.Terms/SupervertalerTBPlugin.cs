@@ -259,7 +259,14 @@ namespace Supervertaler.MemoQ
             }
 
             sb.Append("<div style=\"color:#6c757d\">").Append(Escape(entry.Source)).Append("</div>");
-            sb.Append("<div style=\"color:#adb5bd;font-size:8pt\">Supervertaler</div>");
+            // Name the glossary the hit came from. A translator who has just
+            // exported a new one from the prompt editor otherwise has no way of
+            // telling, from the pane, whether it is this glossary or the old one
+            // that is answering.
+            var glossaryName = System.IO.Path.GetFileName(SharedSettings.GlossaryPath ?? string.Empty);
+            sb.Append("<div style=\"color:#adb5bd;font-size:8pt\">Supervertaler")
+              .Append(glossaryName.Length > 0 ? " · " + Escape(glossaryName) : string.Empty)
+              .Append("</div>");
             sb.Append("</div>");
             return sb.ToString();
         }
