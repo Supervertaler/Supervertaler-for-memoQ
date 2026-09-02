@@ -6,3 +6,6 @@ obj/
 
 # Built bundles (the .mcpb is 29 MB)
 dist/
+
+# memoQ SDK packages: their redistributables, not ours to publish.
+memoQ-*-SDK-*.zip
