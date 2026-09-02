@@ -251,6 +251,7 @@ namespace Supervertaler.MemoQ.Core
                 case "GET /v1/prompts": HandlePromptList(ctx); return;
                 case "GET /v1/prompt": HandlePromptGet(ctx); return;
                 case "POST /v1/prompt": HandlePromptSave(ctx); return;
+                case "POST /v1/autoprompt/classify": HandleClassify(ctx); return;
                 case "POST /v1/autoprompt": HandleAutoPrompt(ctx); return;
                 default:
                     TryWrite(ctx, 404, Json(new ErrorBody { Error = "unknown endpoint " + method + " " + path }));
@@ -665,33 +666,21 @@ namespace Supervertaler.MemoQ.Core
                 var provider = SessionRunner.MapProviderForCore(general.Provider);
                 var endpoint = string.IsNullOrWhiteSpace(general.Endpoint) ? null : general.Endpoint.Trim();
 
-                // Phase 1: a short classification call for domain and a one-line
-                // description — the same step the Trados plugin runs.
-                var detectedDomain = analysis.PrimaryDomain;
-                var description = "";
-                try
+                // Phase 1: domain and a one-line description. Normally the editor
+                // has already run /v1/autoprompt/classify and the user confirmed
+                // or changed the domain, which arrives in the request; only a
+                // caller that skipped that step pays for the classification here.
+                string detectedDomain, description;
+                if (!string.IsNullOrWhiteSpace(req.Domain))
                 {
-                    var sample = global::Supervertaler.Core.DocumentContextClassifier.BuildSample(sources);
-                    if (!string.IsNullOrEmpty(sample))
-                    {
-                        string classified;
-                        using (var client = new global::Supervertaler.Core.LlmClient(provider, general.Model, apiKey, endpoint))
-                        {
-                            classified = client.SendPromptAsync(
-                                global::Supervertaler.Core.DocumentContextClassifier.BuildUserPrompt(sample),
-                                global::Supervertaler.Core.DocumentContextClassifier.SystemPrompt,
-                                maxTokens: 300, suppressLog: true).GetAwaiter().GetResult();
-                        }
-                        global::Supervertaler.Core.DocumentContextClassifier.Parse(classified, out var aiDomain, out var aiDesc);
-                        if (!string.IsNullOrEmpty(aiDomain)) { detectedDomain = aiDomain; description = aiDesc ?? ""; }
-                    }
+                    detectedDomain = req.Domain.Trim();
+                    description = req.Description ?? "";
                 }
-                catch (Exception ex)
+                else
                 {
-                    PluginLog.Write("AutoPrompt: classification failed; using keyword domain", ex);
+                    Classify(sources, analysis.PrimaryDomain, provider, general.Model, apiKey, endpoint,
+                        out detectedDomain, out description);
                 }
-
-                if (!string.IsNullOrWhiteSpace(req.Domain)) detectedDomain = req.Domain.Trim();
 
                 var summary = string.IsNullOrEmpty(description)
                     ? $"{analysis.SegmentCount:N0} segments | {analysis.WordCount:N0} words"
@@ -758,6 +747,94 @@ namespace Supervertaler.MemoQ.Core
         }
 
         /// <summary>
+        /// POST /v1/autoprompt/classify — the cheap first step: what kind of
+        /// document is this? The editor shows the answer and lets the user
+        /// confirm or correct it before the expensive generation call, as the
+        /// Trados plugin does. Returns the detected domain, a one-line
+        /// description, and the list of domains the generator has templates for.
+        /// </summary>
+        private void HandleClassify(HttpListenerContext ctx)
+        {
+            var req = Read<AutoPromptRequest>(ctx) ?? new AutoPromptRequest();
+            var context = _context;
+            var general = context?.General;
+            var apiKey = context?.Settings?.SecureSettings?.ApiKey;
+
+            if (general == null || string.IsNullOrWhiteSpace(apiKey))
+            {
+                TryWrite(ctx, 409, Json(new ErrorBody { Error = "No API key is configured in memoQ's Supervertaler settings." }));
+                return;
+            }
+
+            var doc = CaptureStore.Get(req.Document);
+            if (doc == null || doc.Sources.Count == 0)
+            {
+                TryWrite(ctx, 409, Json(new ErrorBody { Error = "Nothing captured yet. Run Pre-translate once, then try again." }));
+                return;
+            }
+
+            var sources = doc.Sources.Select(TagBridge.StripTagMarkers).ToList();
+            var analysis = global::Supervertaler.Core.DocumentAnalyzer.Analyze(sources);
+
+            Classify(sources, analysis.PrimaryDomain,
+                SessionRunner.MapProviderForCore(general.Provider), general.Model, apiKey,
+                string.IsNullOrWhiteSpace(general.Endpoint) ? null : general.Endpoint.Trim(),
+                out var domain, out var description);
+
+            TryWrite(ctx, 200, Json(new ClassifyResponse
+            {
+                Domain = domain,
+                Description = description,
+                KeywordDomain = analysis.PrimaryDomain,
+                Domains = global::Supervertaler.Core.DocumentContextClassifier.Domains,
+                SegmentCount = analysis.SegmentCount,
+                WordCount = analysis.WordCount
+            }));
+        }
+
+        /// <summary>One short model call: domain plus a one-line description. Falls back to the keyword domain on any failure.</summary>
+        private static void Classify(
+            List<string> sources, string keywordDomain,
+            string provider, string model, string apiKey, string endpoint,
+            out string domain, out string description)
+        {
+            domain = keywordDomain;
+            description = "";
+            try
+            {
+                var sample = global::Supervertaler.Core.DocumentContextClassifier.BuildSample(sources);
+                if (string.IsNullOrEmpty(sample)) return;
+
+                string classified;
+                using (var client = new global::Supervertaler.Core.LlmClient(provider, model, apiKey, endpoint))
+                {
+                    classified = client.SendPromptAsync(
+                        global::Supervertaler.Core.DocumentContextClassifier.BuildUserPrompt(sample),
+                        global::Supervertaler.Core.DocumentContextClassifier.SystemPrompt,
+                        maxTokens: 300, suppressLog: true).GetAwaiter().GetResult();
+                }
+
+                global::Supervertaler.Core.DocumentContextClassifier.Parse(classified, out var aiDomain, out var aiDesc);
+                if (!string.IsNullOrEmpty(aiDomain)) { domain = aiDomain; description = aiDesc ?? ""; }
+            }
+            catch (Exception ex)
+            {
+                PluginLog.Write("AutoPrompt: classification failed; using keyword domain", ex);
+            }
+        }
+
+        [DataContract]
+        internal class ClassifyResponse
+        {
+            [DataMember(Name = "domain")] public string Domain { get; set; }
+            [DataMember(Name = "description")] public string Description { get; set; }
+            [DataMember(Name = "keywordDomain")] public string KeywordDomain { get; set; }
+            [DataMember(Name = "domains")] public string[] Domains { get; set; }
+            [DataMember(Name = "segmentCount")] public int SegmentCount { get; set; }
+            [DataMember(Name = "wordCount")] public int WordCount { get; set; }
+        }
+
+        /// <summary>
         /// What the memoQ runtime actually does with a prompt — the ways it
         /// differs from the Trados plugin the meta-prompt was written for.
         /// </summary>
@@ -782,6 +859,18 @@ namespace Supervertaler.MemoQ.Core
             "own glossary where they conflict, because they are the translator's later decisions.\n" +
             "- Glossary terms supplied at request time are marked as either preferred or FORBIDDEN. Forbidden " +
             "terms are absolute. Preferred terms should be followed unless clearly wrong for the sentence.\n" +
+            "- IMPORTANT — the TERMINOLOGY DATA above did NOT come from a project termbase. It is the set of " +
+            "hits from the user's GENERAL glossary (patents, legal, technical, all mixed) that happen to occur " +
+            "in this document, and a general glossary carries senses that are wrong for a given text: " +
+            "\"application\" as a patent application (aanvrage) in a document about software applications, " +
+            "\"program\" as a course of study in a document about computer programs. Therefore: (a) read the " +
+            "document text and decide, term by term, whether the glossary sense is the sense this document " +
+            "uses; (b) where the document plainly uses a different sense, LOCK the document's sense and say " +
+            "explicitly that the glossary rendering does not apply here; (c) present glossary-derived " +
+            "mappings as \"preferred (from the general glossary)\", not as \"project termbase\", and never " +
+            "write \"never use X\" against a rendering merely because the glossary offered another — reserve " +
+            "prohibitions for terms actually marked FORBIDDEN. Getting this wrong locks a nonsense rendering " +
+            "into every segment of the job.\n" +
             "- Because the whole prompt is re-sent with every ~10-segment request, aim for 1500-3000 words " +
             "rather than 2000-5000: complete, but no padding.\n" +
             "- Use the placeholders {{SOURCE_LANGUAGE}} and {{TARGET_LANGUAGE}} for the language names wherever " +
@@ -794,6 +883,7 @@ namespace Supervertaler.MemoQ.Core
             [DataMember(Name = "document")] public string Document { get; set; }
             [DataMember(Name = "hint")] public string Hint { get; set; }
             [DataMember(Name = "domain")] public string Domain { get; set; }
+            [DataMember(Name = "description")] public string Description { get; set; }
             [DataMember(Name = "includeTerms")] public bool IncludeTerms { get; set; } = true;
             [DataMember(Name = "includeConfirmed")] public bool IncludeConfirmed { get; set; } = true;
         }

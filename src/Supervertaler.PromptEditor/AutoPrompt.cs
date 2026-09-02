@@ -150,13 +150,39 @@ namespace Supervertaler.PromptEditor
             [DataMember(Name = "confirmedPairs")] public int ConfirmedPairs { get; set; }
         }
 
+        public async Task<ClassifyResult> ClassifyAsync(string documentKey)
+        {
+            var body = new StringContent(Serialize(new AutoPromptRequest { Document = documentKey }), Encoding.UTF8, "application/json");
+            var response = await _http.PostAsync(_base + "/v1/autoprompt/classify", body).ConfigureAwait(false);
+            var json = await response.Content.ReadAsStringAsync().ConfigureAwait(false);
+            if (!response.IsSuccessStatusCode)
+            {
+                var err = Deserialize<ErrorBody>(json);
+                throw new InvalidOperationException(err?.Error ?? ("HTTP " + (int)response.StatusCode));
+            }
+            return Deserialize<ClassifyResult>(json);
+        }
+
         [DataContract]
         internal class AutoPromptRequest
         {
             [DataMember(Name = "document")] public string Document { get; set; }
             [DataMember(Name = "hint")] public string Hint { get; set; }
+            [DataMember(Name = "domain")] public string Domain { get; set; }
+            [DataMember(Name = "description")] public string Description { get; set; }
             [DataMember(Name = "includeTerms")] public bool IncludeTerms { get; set; }
             [DataMember(Name = "includeConfirmed")] public bool IncludeConfirmed { get; set; }
+        }
+
+        [DataContract]
+        internal class ClassifyResult
+        {
+            [DataMember(Name = "domain")] public string Domain { get; set; }
+            [DataMember(Name = "description")] public string Description { get; set; }
+            [DataMember(Name = "keywordDomain")] public string KeywordDomain { get; set; }
+            [DataMember(Name = "domains")] public string[] Domains { get; set; }
+            [DataMember(Name = "segmentCount")] public int SegmentCount { get; set; }
+            [DataMember(Name = "wordCount")] public int WordCount { get; set; }
         }
 
         [DataContract]
@@ -173,23 +199,32 @@ namespace Supervertaler.PromptEditor
     }
 
     /// <summary>
-    /// "Draft a prompt for this project": pick the captured document, add a
-    /// briefing if you have one, generate. The result opens in the editor as a
-    /// saved prompt for review — the same place every other prompt is edited.
+    /// "Draft a prompt for this project": pick the captured document, see what
+    /// the AI thinks it is and correct it if needed, add a briefing, generate.
+    /// The result opens in the editor as a saved prompt for review — the same
+    /// place every other prompt is edited.
+    ///
+    /// Two model calls, same as the Trados plugin: a short classification the
+    /// moment a document is chosen, so the user confirms the domain before the
+    /// long generation call is paid for.
     /// </summary>
     internal sealed class AutoPromptDialog : Form
     {
         private readonly MemoQBridgeClient _bridge;
         private readonly ComboBox _document = new ComboBox { DropDownStyle = ComboBoxStyle.DropDownList };
         private readonly Label _documentInfo = new Label { AutoSize = true, ForeColor = SystemColors.GrayText };
+        private readonly ComboBox _domain = new ComboBox { DropDownStyle = ComboBoxStyle.DropDown };
+        private readonly Label _detected = new Label { AutoSize = false, ForeColor = SystemColors.GrayText, Height = 34 };
         private readonly TextBox _hint = new TextBox { Multiline = true, ScrollBars = ScrollBars.Vertical, AcceptsReturn = true };
         private readonly CheckBox _terms = new CheckBox { Text = "Include glossary hits from the document", Checked = true, AutoSize = true };
         private readonly CheckBox _confirmed = new CheckBox { Text = "Include segments already confirmed in memoQ", Checked = true, AutoSize = true };
-        private readonly Button _generate = new Button { Text = "Generate", Width = 110, Height = 28 };
+        private readonly Button _generate = new Button { Text = "Generate", Width = 110, Height = 28, Enabled = false };
         private readonly Button _cancel = new Button { Text = "Cancel", Width = 90, Height = 28, DialogResult = DialogResult.Cancel };
         private readonly Label _status = new Label { AutoSize = true, ForeColor = SystemColors.GrayText };
 
         private MemoQBridgeClient.DocumentInfo[] _documents = new MemoQBridgeClient.DocumentInfo[0];
+        private string _detectedDescription = "";
+        private int _classifyRun;
 
         public MemoQBridgeClient.AutoPromptResult Result { get; private set; }
 
@@ -203,16 +238,24 @@ namespace Supervertaler.PromptEditor
             FormBorderStyle = FormBorderStyle.FixedDialog;
             StartPosition = FormStartPosition.CenterParent;
             MinimizeBox = false; MaximizeBox = false; ShowInTaskbar = false;
-            ClientSize = new Size(560, 372);
+            ClientSize = new Size(600, 452);
 
             var y = 14;
             Controls.Add(new Label { Text = "Document", Left = 14, Top = y + 4, AutoSize = true });
-            _document.Left = 120; _document.Top = y; _document.Width = 426;
+            _document.Left = 120; _document.Top = y; _document.Width = 466;
             Controls.Add(_document);
             y += 30;
             _documentInfo.Left = 120; _documentInfo.Top = y;
             Controls.Add(_documentInfo);
             y += 30;
+
+            Controls.Add(new Label { Text = "Domain", Left = 14, Top = y + 4, AutoSize = true });
+            _domain.Left = 120; _domain.Top = y; _domain.Width = 466;
+            Controls.Add(_domain);
+            y += 30;
+            _detected.Left = 120; _detected.Top = y; _detected.Width = 466;
+            Controls.Add(_detected);
+            y += 40;
 
             Controls.Add(new Label
             {
@@ -220,28 +263,28 @@ namespace Supervertaler.PromptEditor
                 Left = 14, Top = y, AutoSize = true
             });
             y += 22;
-            _hint.Left = 14; _hint.Top = y; _hint.Width = 532; _hint.Height = 110;
+            _hint.Left = 14; _hint.Top = y; _hint.Width = 572; _hint.Height = 96;
             Controls.Add(_hint);
-            y += 120;
+            y += 106;
 
             _terms.Left = 14; _terms.Top = y; Controls.Add(_terms); y += 24;
             _confirmed.Left = 14; _confirmed.Top = y; Controls.Add(_confirmed); y += 34;
 
             _status.Left = 14; _status.Top = y + 6; Controls.Add(_status);
-            _cancel.Left = 546 - 90; _cancel.Top = y; Controls.Add(_cancel);
+            _cancel.Left = 586 - 90; _cancel.Top = y; Controls.Add(_cancel);
             _generate.Left = _cancel.Left - 110 - 8; _generate.Top = y; Controls.Add(_generate);
 
             AcceptButton = _generate;
             CancelButton = _cancel;
 
-            _document.SelectedIndexChanged += (s, e) => ShowDocumentInfo();
+            _document.SelectedIndexChanged += async (s, e) => await OnDocumentChangedAsync();
             _generate.Click += async (s, e) => await GenerateAsync();
             Shown += async (s, e) => await LoadDocumentsAsync();
         }
 
         private async Task LoadDocumentsAsync()
         {
-            _status.Text = "Reading the project…";
+            _status.Text = "Reading the project\u2026";
             try
             {
                 var project = await _bridge.GetProjectAsync();
@@ -262,7 +305,7 @@ namespace Supervertaler.PromptEditor
                     if (d.IsVisitedBucket)
                         label = "Rows you have visited in the editor (any MT engine)";
                     else if (!string.IsNullOrWhiteSpace(d.DocumentName))
-                        label = d.DocumentName + (string.IsNullOrWhiteSpace(d.ProjectName) ? "" : "  —  " + d.ProjectName);
+                        label = d.DocumentName + (string.IsNullOrWhiteSpace(d.ProjectName) ? "" : "  \u2014  " + d.ProjectName);
                     else if (!string.IsNullOrWhiteSpace(d.Client))
                         label = d.Client + (string.IsNullOrWhiteSpace(d.Subject) ? "" : " / " + d.Subject);
                     else
@@ -275,29 +318,61 @@ namespace Supervertaler.PromptEditor
                 if (_documents.Length == 0)
                 {
                     _status.Text = project?.Note ?? "Nothing captured yet.";
-                    _generate.Enabled = false;
                 }
                 else
                 {
-                    _document.SelectedIndex = 0;
-                    _status.Text = (project.SourceLanguage ?? "?") + " → " + (project.TargetLanguage ?? "?");
+                    _status.Text = (project.SourceLanguage ?? "?") + " \u2192 " + (project.TargetLanguage ?? "?");
+                    _document.SelectedIndex = 0;   // triggers classification
                 }
             }
             catch (Exception ex)
             {
                 _status.Text = "Could not read the project: " + ex.Message;
-                _generate.Enabled = false;
             }
         }
 
-        private void ShowDocumentInfo()
+        private async Task OnDocumentChangedAsync()
         {
             var i = _document.SelectedIndex;
             if (i < 0 || i >= _documents.Length) { _documentInfo.Text = ""; return; }
             var d = _documents[i];
-            _documentInfo.Text = d.CapturedSegments + " segments captured, " + d.ConfirmedPairs + " confirmed"
-                + (string.IsNullOrWhiteSpace(d.Domain) ? "" : " · " + d.Domain)
-                + (d.Origin != null && d.Origin.StartsWith("rows the cursor") ? " · visited rows only" : "");
+
+            _documentInfo.Text = d.CapturedSegments + " segment" + (d.CapturedSegments == 1 ? "" : "s") + " captured, "
+                + d.ConfirmedPairs + " confirmed"
+                + (string.IsNullOrWhiteSpace(d.Domain) ? "" : " \u00b7 memoQ domain: " + d.Domain)
+                + (d.CapturedSegments < 5
+                    ? "   \u26a0 very little text \u2014 run Pre-translate first for a whole-document prompt"
+                    : "");
+
+            // Classify. A stale answer arriving after the user switched documents
+            // must not overwrite the newer one, hence the run counter.
+            var run = ++_classifyRun;
+            _generate.Enabled = false;
+            _domain.Items.Clear(); _domain.Text = "";
+            _detected.Text = "Working out what kind of document this is\u2026";
+            _detectedDescription = "";
+
+            try
+            {
+                var c = await _bridge.ClassifyAsync(d.Key);
+                if (run != _classifyRun) return;
+
+                _domain.Items.Clear();
+                foreach (var name in c.Domains ?? new string[0]) _domain.Items.Add(name);
+                _domain.Text = c.Domain ?? c.KeywordDomain ?? "";
+                _detectedDescription = c.Description ?? "";
+
+                _detected.Text = "Detected: " + (c.Domain ?? c.KeywordDomain ?? "?")
+                    + (string.IsNullOrWhiteSpace(c.Description) ? "" : " \u2014 " + c.Description)
+                    + ". Change it above if that is wrong.";
+                _generate.Enabled = true;
+            }
+            catch (Exception ex)
+            {
+                if (run != _classifyRun) return;
+                _detected.Text = "Could not classify (" + ex.Message + "). Type a domain, or leave blank.";
+                _generate.Enabled = true;
+            }
         }
 
         private async Task GenerateAsync()
@@ -306,8 +381,9 @@ namespace Supervertaler.PromptEditor
             if (i < 0 || i >= _documents.Length) return;
 
             _generate.Enabled = false; _cancel.Enabled = false;
-            _document.Enabled = false; _hint.Enabled = false; _terms.Enabled = false; _confirmed.Enabled = false;
-            _status.Text = "Drafting… this takes a minute or two (two model calls, the second a long one).";
+            _document.Enabled = false; _domain.Enabled = false; _hint.Enabled = false;
+            _terms.Enabled = false; _confirmed.Enabled = false;
+            _status.Text = "Drafting\u2026 this takes a minute or two.";
             UseWaitCursor = true;
 
             try
@@ -315,6 +391,8 @@ namespace Supervertaler.PromptEditor
                 Result = await _bridge.DraftAsync(new MemoQBridgeClient.AutoPromptRequest
                 {
                     Document = _documents[i].Key,
+                    Domain = _domain.Text.Trim(),
+                    Description = _detectedDescription,
                     Hint = _hint.Text.Trim(),
                     IncludeTerms = _terms.Checked,
                     IncludeConfirmed = _confirmed.Checked
@@ -329,7 +407,8 @@ namespace Supervertaler.PromptEditor
                 _status.Text = "";
                 MessageBox.Show(this, ex.Message, "AutoPrompt", MessageBoxButtons.OK, MessageBoxIcon.Warning);
                 _generate.Enabled = true; _cancel.Enabled = true;
-                _document.Enabled = true; _hint.Enabled = true; _terms.Enabled = true; _confirmed.Enabled = true;
+                _document.Enabled = true; _domain.Enabled = true; _hint.Enabled = true;
+                _terms.Enabled = true; _confirmed.Enabled = true;
             }
         }
     }
