@@ -203,6 +203,12 @@ namespace Supervertaler.PromptEditor
             memoqMenu.DropDownItems.Add(new ToolStripMenuItem("&Export this prompt's terms as a glossary…", null, (s, e) => ExportGlossary()));
             memoqMenu.DropDownItems.Add(new ToolStripMenuItem("&Choose the active glossary…", null, (s, e) => ChooseGlossary()));
             memoqMenu.DropDownItems.Add(new ToolStripMenuItem("Choose the active &prompt…", null, (s, e) => ChoosePrompt()));
+            memoqMenu.DropDownItems.Add(new ToolStripSeparator());
+            memoqMenu.DropDownItems.Add(new ToolStripMenuItem("&Activity…", null, (s, e) => ShowActivity())
+            {
+                ShortcutKeys = Keys.Control | Keys.L,
+                ToolTipText = "What the plugin is doing, live. memoQ's own progress dialog says only \"Processing\"."
+            });
 
             // The first setting to move out of memoQ's dialog. It says how you are
             // working at this moment, chat-driven or key-driven, which is not a
@@ -828,6 +834,31 @@ namespace Supervertaler.PromptEditor
             SelectPrompt(relative);
 
             return true;
+        }
+
+        /// <summary>
+        /// Shows the activity window, or brings the open one forward.
+        ///
+        /// Modeless and single-instance: it is meant to sit beside memoQ while a
+        /// job runs, so opening it must never block this window, and pressing
+        /// Ctrl+L twice should not give you two of them drifting apart.
+        /// </summary>
+        private ActivityForm _activity;
+
+        private void ShowActivity()
+        {
+            if (_activity != null && !_activity.IsDisposed)
+            {
+                if (_activity.WindowState == FormWindowState.Minimized)
+                    _activity.WindowState = FormWindowState.Normal;
+                _activity.BringToFront();
+                _activity.Activate();
+                return;
+            }
+
+            _activity = new ActivityForm { Owner = this };
+            _activity.FormClosed += (s, e) => _activity = null;
+            _activity.Show(this);
         }
 
         private void Reload()
