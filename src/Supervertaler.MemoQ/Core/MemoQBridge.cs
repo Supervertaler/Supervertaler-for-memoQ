@@ -747,10 +747,26 @@ namespace Supervertaler.MemoQ.Core
 
                 var content = global::Supervertaler.Core.PromptGenerator.ParseGeneratedPrompt(raw) ?? raw;
 
+                // The memoQ project's own name, which is what its title bar shows
+                // and what the translator calls the job. Used as-is: the pair is
+                // already in the frontmatter, the chooser shows it, and appending
+                // it produced "Example project (patent, en-nl) eng-dut" - the same
+                // fact twice, in two vocabularies.
+                //
+                // The language codes are a fallback for having nothing better to
+                // say, not a component of a good name.
                 var nameBits = new List<string>();
-                if (!string.IsNullOrWhiteSpace(doc.Client)) nameBits.Add(doc.Client);
-                else if (!string.IsNullOrWhiteSpace(plan.Domain)) nameBits.Add(plan.Domain);
-                nameBits.Add((doc.SourceLangCode ?? "?") + "-" + (doc.TargetLangCode ?? "?"));
+                if (!string.IsNullOrWhiteSpace(doc.ProjectName))
+                {
+                    nameBits.Add(doc.ProjectName.Trim());
+                }
+                else
+                {
+                    if (!string.IsNullOrWhiteSpace(doc.Client)) nameBits.Add(doc.Client.Trim());
+                    else if (!string.IsNullOrWhiteSpace(plan.Domain)) nameBits.Add(plan.Domain);
+
+                    nameBits.Add((doc.SourceLangCode ?? "?") + "-" + (doc.TargetLangCode ?? "?"));
+                }
 
                 PluginLog.Write($"AutoPrompt: drafted {content.Length} chars for {doc.Key} "
                     + $"(domain {plan.Domain}, {plan.TermCount} terms, {plan.PairCount} confirmed pairs)");
@@ -1006,6 +1022,15 @@ namespace Supervertaler.MemoQ.Core
             public string Domain;
             public string Subject;
             public string DocumentName;
+
+            /// <summary>
+            /// The memoQ project's own name, which is what the title bar shows and
+            /// therefore what the translator calls this job. Not in the MT
+            /// metadata - only a document GUID is - so it comes from resolving
+            /// that GUID against memoQ's folders.
+            /// </summary>
+            public string ProjectName;
+
             public string Origin;
 
             /// <summary>The capture key, which is what DocumentMemory is filed under.</summary>
@@ -1024,7 +1049,8 @@ namespace Supervertaler.MemoQ.Core
                 Client = captured?.Client,
                 Domain = captured?.Domain,
                 Subject = captured?.Subject,
-                Key = captured?.Key ?? documentKey
+                Key = captured?.Key ?? documentKey,
+                ProjectName = ProjectNameOf(captured?.DocumentId)
             };
 
             if (captured != null)
@@ -1067,6 +1093,19 @@ namespace Supervertaler.MemoQ.Core
             }
 
             return result;
+        }
+
+        /// <summary>
+        /// The project a document belongs to, or null. Labels only: memoQ gives a
+        /// plugin a GUID and nothing else, so this reads the folder the GUID lives
+        /// in and must never be used as a key.
+        /// </summary>
+        private static string ProjectNameOf(Guid? documentId)
+        {
+            if (documentId == null || documentId == Guid.Empty) return null;
+
+            try { return DocumentNames.Resolve(documentId.Value)?.Project; }
+            catch (Exception) { return null; }
         }
 
         /// <summary>

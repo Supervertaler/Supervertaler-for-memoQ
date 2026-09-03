@@ -54,6 +54,8 @@ namespace Supervertaler.PromptEditor
         private int _batches;
         private int _segments;
         private int _problems;
+        private int _single;
+        private int _drafts;
 
         /// <summary>
         /// How much of the log to show when the window opens.
@@ -145,6 +147,8 @@ namespace Supervertaler.PromptEditor
             _batches = 0;
             _segments = 0;
             _problems = 0;
+            _single = 0;
+            _drafts = 0;
 
             try
             {
@@ -305,6 +309,9 @@ namespace Supervertaler.PromptEditor
                 return text;
             }
 
+            if (body.StartsWith("translate: ", StringComparison.Ordinal)) _single++;
+            if (body.StartsWith("AutoPrompt", StringComparison.Ordinal)) _drafts++;
+
             if (!_everything.Checked && IsDiagnostic(body)) return null;
 
             return time + "  " + Friendly(body);
@@ -368,14 +375,30 @@ namespace Supervertaler.PromptEditor
 
         private void UpdateTotals()
         {
-            if (_batches == 0 && _segments == 0)
+            var parts = new List<string>();
+
+            if (_segments > 0)
+                parts.Add(_segments.ToString("N0") + " segment" + (_segments == 1 ? "" : "s")
+                          + " in " + _batches + " batch" + (_batches == 1 ? "" : "es"));
+
+            // Interactive lookups are the whole story when someone is working
+            // through the grid rather than pre-translating, and they used to
+            // count for nothing here.
+            if (_single > 0)
+                parts.Add(_single + " single segment" + (_single == 1 ? "" : "s"));
+
+            if (_drafts > 0)
+                parts.Add(_drafts + " AutoPrompt call" + (_drafts == 1 ? "" : "s"));
+
+            if (parts.Count == 0)
             {
-                _totals.Text = _problems > 0 ? _problems + " problem(s) – see above" : "Waiting for memoQ.";
+                _totals.Text = _problems > 0
+                    ? _problems + " problem(s) – see above"
+                    : (_list.Items.Count > 0 ? "Connected. No translation yet." : "Waiting for memoQ.");
                 return;
             }
 
-            _totals.Text = _segments.ToString("N0") + " segment" + (_segments == 1 ? "" : "s")
-                         + " in " + _batches + " batch" + (_batches == 1 ? "" : "es")
+            _totals.Text = string.Join("  ·  ", parts)
                          + (_problems > 0 ? "  ·  " + _problems + " problem(s)" : "  ·  no errors");
         }
 
