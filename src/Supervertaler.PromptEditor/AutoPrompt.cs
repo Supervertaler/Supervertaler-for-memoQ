@@ -222,6 +222,8 @@ namespace Supervertaler.PromptEditor
             [DataMember(Name = "description")] public string Description { get; set; }
             [DataMember(Name = "termCount")] public int TermCount { get; set; }
             [DataMember(Name = "confirmedPairCount")] public int ConfirmedPairCount { get; set; }
+            [DataMember(Name = "sourceLang")] public string SourceLang { get; set; }
+            [DataMember(Name = "targetLang")] public string TargetLang { get; set; }
         }
     }
 
