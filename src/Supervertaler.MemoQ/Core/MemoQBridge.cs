@@ -278,6 +278,7 @@ namespace Supervertaler.MemoQ.Core
                 case "GET /v1/prompt": HandlePromptGet(ctx); return;
                 case "POST /v1/prompt": HandlePromptSave(ctx); return;
                 case "POST /v1/autoprompt/classify": HandleClassify(ctx); return;
+                case "POST /v1/autoprompt/preview": HandleAutoPromptPreview(ctx); return;
                 case "POST /v1/autoprompt": HandleAutoPrompt(ctx); return;
 
                 // From the preview tool (memoQ → tool → here).
@@ -727,97 +728,17 @@ namespace Supervertaler.MemoQ.Core
 
             try
             {
-                var sources = doc.Sources;
-                var sourceLang = PromptBuilder.DescribeLanguage(doc.SourceLangCode);
-                var targetLang = PromptBuilder.DescribeLanguage(doc.TargetLangCode);
-
-                var analysis = global::Supervertaler.Core.DocumentAnalyzer.Analyze(sources);
-
-                // Glossary hits across the whole document, deduplicated.
-                var terms = new List<global::Supervertaler.Core.Models.TermEntry>();
-                if (req.IncludeTerms)
-                {
-                    var matches = TermIndex.Find(SharedSettings.GlossaryPath, string.Join("\n", sources))
-                                  ?? (IReadOnlyList<TermIndex.Match>)new TermIndex.Match[0];
-                    terms = matches
-                        .GroupBy(m => m.Entry.Source + "\t" + m.Entry.Target, StringComparer.OrdinalIgnoreCase)
-                        .Select(g => g.First().Entry)
-                        .Select(e => new global::Supervertaler.Core.Models.TermEntry
-                        {
-                            SourceTerm = e.Source,
-                            TargetTerm = e.Target,
-                            Forbidden = e.Forbidden,
-                            SourceLang = sourceLang,
-                            TargetLang = targetLang,
-                            TermbaseName = "Supervertaler glossary"
-                        })
-                        .ToList();
-                }
-
-                // The translator's confirmed pairs are the TM here: not fuzzy
-                // matches from an archive, but this document's own approved
-                // renderings.
-                var pairs = req.IncludeConfirmed
-                    ? DocumentMemory.GetAll(doc.Key, 60).Select(p => new global::Supervertaler.Core.Models.TmMatch
-                    {
-                        SourceText = p.Source,
-                        TargetText = p.Target,
-                        MatchPercentage = 100,
-                        TmName = "Confirmed in memoQ"
-                    }).ToList()
-                    : new List<global::Supervertaler.Core.Models.TmMatch>();
+                var plan = PlanAutoPrompt(req, doc, general, apiKey, mayClassify: true);
 
                 var provider = SessionRunner.MapProviderForCore(general.Provider);
                 var endpoint = string.IsNullOrWhiteSpace(general.Endpoint) ? null : general.Endpoint.Trim();
-
-                // Phase 1: domain and a one-line description. Normally the editor
-                // has already run /v1/autoprompt/classify and the user confirmed
-                // or changed the domain, which arrives in the request; only a
-                // caller that skipped that step pays for the classification here.
-                string detectedDomain, description;
-                if (!string.IsNullOrWhiteSpace(req.Domain))
-                {
-                    detectedDomain = req.Domain.Trim();
-                    description = req.Description ?? "";
-                }
-                else
-                {
-                    Classify(sources, analysis.PrimaryDomain, provider, general.Model, apiKey, endpoint,
-                        out detectedDomain, out description);
-                }
-
-                var summary = string.IsNullOrEmpty(description)
-                    ? $"{analysis.SegmentCount:N0} segments | {analysis.WordCount:N0} words"
-                    : $"Context: {description} | {analysis.SegmentCount:N0} segments | {analysis.WordCount:N0} words";
-
-                var meta = new List<string>();
-                if (!string.IsNullOrWhiteSpace(doc.Client)) meta.Add("Client: " + doc.Client);
-                if (!string.IsNullOrWhiteSpace(doc.Domain)) meta.Add("memoQ domain: " + doc.Domain);
-                if (!string.IsNullOrWhiteSpace(doc.Subject)) meta.Add("memoQ subject: " + doc.Subject);
-                var hint = string.Join("\n", new[] { string.Join(" | ", meta), req.Hint ?? "" }
-                    .Where(s => !string.IsNullOrWhiteSpace(s)));
-
-                var generationContext = new global::Supervertaler.Core.PromptGenerationContext
-                {
-                    SourceLang = sourceLang,
-                    TargetLang = targetLang,
-                    DetectedDomain = detectedDomain,
-                    AnalysisSummary = summary,
-                    SegmentCount = sources.Count,
-                    SourceSegments = sources,
-                    TermbaseTerms = terms,
-                    TotalTermCount = terms.Count,
-                    TmPairs = pairs,
-                    UserContextHint = hint,
-                    HostConstraints = MemoQHostConstraints
-                };
 
                 // Phase 2: the generation itself.
                 string raw;
                 using (var client = new global::Supervertaler.Core.LlmClient(provider, general.Model, apiKey, endpoint))
                 {
                     raw = client.SendPromptAsync(
-                        global::Supervertaler.Core.PromptGenerator.BuildMetaPrompt(generationContext),
+                        global::Supervertaler.Core.PromptGenerator.BuildMetaPrompt(plan.Context),
                         maxTokens: 32768).GetAwaiter().GetResult();
                 }
 
@@ -825,22 +746,22 @@ namespace Supervertaler.MemoQ.Core
 
                 var nameBits = new List<string>();
                 if (!string.IsNullOrWhiteSpace(doc.Client)) nameBits.Add(doc.Client);
-                else if (!string.IsNullOrWhiteSpace(detectedDomain)) nameBits.Add(detectedDomain);
+                else if (!string.IsNullOrWhiteSpace(plan.Domain)) nameBits.Add(plan.Domain);
                 nameBits.Add((doc.SourceLangCode ?? "?") + "-" + (doc.TargetLangCode ?? "?"));
 
                 PluginLog.Write($"AutoPrompt: drafted {content.Length} chars for {doc.Key} "
-                    + $"(domain {detectedDomain}, {terms.Count} terms, {pairs.Count} confirmed pairs)");
+                    + $"(domain {plan.Domain}, {plan.TermCount} terms, {plan.PairCount} confirmed pairs)");
 
                 TryWrite(ctx, 200, Json(new AutoPromptResponse
                 {
                     Content = content,
                     SuggestedName = string.Join(" ", nameBits),
-                    Domain = detectedDomain,
-                    Summary = summary,
+                    Domain = plan.Domain,
+                    Summary = plan.Summary,
                     Description = "Generated by AutoPrompt from the memoQ project"
-                        + (terms.Count == 0 ? " – glossary derived from the document (no glossary hits)" : ""),
-                    TermCount = terms.Count,
-                    ConfirmedPairCount = pairs.Count,
+                        + (plan.TermCount == 0 ? " – glossary derived from the document (no glossary hits)" : ""),
+                    TermCount = plan.TermCount,
+                    ConfirmedPairCount = plan.PairCount,
                     SourceLang = context.SourceLangCode,
                     TargetLang = context.TargetLangCode
                 }));
@@ -853,6 +774,194 @@ namespace Supervertaler.MemoQ.Core
         }
 
         /// <summary>
+        /// Everything AutoPrompt assembles before it says a word to the model: the
+        /// source text, the glossary hits, the confirmed pairs, the project
+        /// metadata and the host constraints.
+        ///
+        /// It exists so that the preview and the generation cannot disagree. A
+        /// preview that rebuilt the context separately would be a second
+        /// implementation of the same assembly, and the first time the two drifted
+        /// the preview would start lying about what was sent – which is worse
+        /// than having no preview at all.
+        /// </summary>
+        private sealed class AutoPromptPlan
+        {
+            public global::Supervertaler.Core.PromptGenerationContext Context;
+            public string Domain;
+            public string Summary;
+            public int TermCount;
+            public int PairCount;
+        }
+
+        /// <param name="mayClassify">
+        /// False for the preview, which must cost nothing.
+        /// </param>
+        private AutoPromptPlan PlanAutoPrompt(
+            AutoPromptRequest req, AutoPromptSource doc,
+            Settings.SupervertalerGeneralSettings general, string apiKey, bool mayClassify)
+        {
+            var sources = doc.Sources;
+            var sourceLang = PromptBuilder.DescribeLanguage(doc.SourceLangCode);
+            var targetLang = PromptBuilder.DescribeLanguage(doc.TargetLangCode);
+
+            var analysis = global::Supervertaler.Core.DocumentAnalyzer.Analyze(sources);
+
+            // Glossary hits across the whole document, deduplicated.
+            var terms = new List<global::Supervertaler.Core.Models.TermEntry>();
+            if (req.IncludeTerms)
+            {
+                var matches = TermIndex.Find(SharedSettings.GlossaryPath, string.Join("\n", sources))
+                              ?? (IReadOnlyList<TermIndex.Match>)new TermIndex.Match[0];
+                terms = matches
+                    .GroupBy(m => m.Entry.Source + "\t" + m.Entry.Target, StringComparer.OrdinalIgnoreCase)
+                    .Select(g => g.First().Entry)
+                    .Select(e => new global::Supervertaler.Core.Models.TermEntry
+                    {
+                        SourceTerm = e.Source,
+                        TargetTerm = e.Target,
+                        Forbidden = e.Forbidden,
+                        SourceLang = sourceLang,
+                        TargetLang = targetLang,
+                        TermbaseName = "Supervertaler glossary"
+                    })
+                    .ToList();
+            }
+
+            // The translator's confirmed pairs are the TM here: not fuzzy
+            // matches from an archive, but this document's own approved
+            // renderings.
+            var pairs = req.IncludeConfirmed
+                ? DocumentMemory.GetAll(doc.Key, 60).Select(p => new global::Supervertaler.Core.Models.TmMatch
+                {
+                    SourceText = p.Source,
+                    TargetText = p.Target,
+                    MatchPercentage = 100,
+                    TmName = "Confirmed in memoQ"
+                }).ToList()
+                : new List<global::Supervertaler.Core.Models.TmMatch>();
+
+            var provider = SessionRunner.MapProviderForCore(general.Provider);
+            var endpoint = string.IsNullOrWhiteSpace(general.Endpoint) ? null : general.Endpoint.Trim();
+
+            // Phase 1: domain and a one-line description. Normally the editor
+            // has already run /v1/autoprompt/classify and the user confirmed
+            // or changed the domain, which arrives in the request; only a
+            // caller that skipped that step pays for the classification here.
+            string detectedDomain, description;
+            if (!string.IsNullOrWhiteSpace(req.Domain))
+            {
+                detectedDomain = req.Domain.Trim();
+                description = req.Description ?? "";
+            }
+            else if (mayClassify)
+            {
+                Classify(sources, analysis.PrimaryDomain, provider, general.Model, apiKey, endpoint,
+                    out detectedDomain, out description);
+            }
+            else
+            {
+                // The preview costs nothing, so it settles for the keyword guess.
+                // In practice the editor has classified already and sends the
+                // domain the user confirmed.
+                detectedDomain = analysis.PrimaryDomain;
+                description = "";
+            }
+
+            var summary = string.IsNullOrEmpty(description)
+                ? $"{analysis.SegmentCount:N0} segments | {analysis.WordCount:N0} words"
+                : $"Context: {description} | {analysis.SegmentCount:N0} segments | {analysis.WordCount:N0} words";
+
+            var meta = new List<string>();
+            if (!string.IsNullOrWhiteSpace(doc.Client)) meta.Add("Client: " + doc.Client);
+            if (!string.IsNullOrWhiteSpace(doc.Domain)) meta.Add("memoQ domain: " + doc.Domain);
+            if (!string.IsNullOrWhiteSpace(doc.Subject)) meta.Add("memoQ subject: " + doc.Subject);
+            var hint = string.Join("\n", new[] { string.Join(" | ", meta), req.Hint ?? "" }
+                .Where(s => !string.IsNullOrWhiteSpace(s)));
+
+            return new AutoPromptPlan
+            {
+                Domain = detectedDomain,
+                Summary = summary,
+                TermCount = terms.Count,
+                PairCount = pairs.Count,
+                Context = new global::Supervertaler.Core.PromptGenerationContext
+                {
+                    SourceLang = sourceLang,
+                    TargetLang = targetLang,
+                    DetectedDomain = detectedDomain,
+                    AnalysisSummary = summary,
+                    SegmentCount = sources.Count,
+                    SourceSegments = sources,
+                    TermbaseTerms = terms,
+                    TotalTermCount = terms.Count,
+                    TmPairs = pairs,
+                    UserContextHint = hint,
+                    HostConstraints = MemoQHostConstraints
+                }
+            };
+
+        }
+
+        /// <summary>
+        /// POST /v1/autoprompt/preview – the meta-prompt itself, verbatim,
+        /// without sending it anywhere.
+        ///
+        /// AutoPrompt gathers its context from four places the translator cannot
+        /// see at once: the live document, the glossary, their own confirmed
+        /// segments, and memoQ's project metadata. Approving a call that takes
+        /// minutes and costs money on faith is a poor deal when the briefing box
+        /// is right there and one look at the assembled context is what tells you
+        /// whether it needs filling in.
+        /// </summary>
+        private void HandleAutoPromptPreview(HttpListenerContext ctx)
+        {
+            var req = Read<AutoPromptRequest>(ctx) ?? new AutoPromptRequest();
+            var context = _context;
+            var general = context?.General;
+
+            if (general == null)
+            {
+                TryWrite(ctx, 409, Json(new ErrorBody
+                {
+                    Error = "memoQ has not built a Supervertaler engine yet. Open a document first."
+                }));
+                return;
+            }
+
+            var doc = ResolveAutoPromptSource(req.Document);
+            if (doc.Sources.Count == 0)
+            {
+                TryWrite(ctx, 409, Json(new ErrorBody
+                {
+                    Error = "No document text is available yet. Open the document in memoQ so the preview "
+                          + "tool can read it, or run Pre-translate once, then try again."
+                }));
+                return;
+            }
+
+            try
+            {
+                var plan = PlanAutoPrompt(req, doc, general, context.ApiKey, mayClassify: false);
+
+                TryWrite(ctx, 200, Json(new AutoPromptPreviewResponse
+                {
+                    MetaPrompt = global::Supervertaler.Core.PromptGenerator.BuildMetaPrompt(plan.Context),
+                    Origin = doc.Origin,
+                    DocumentName = doc.DocumentName,
+                    SegmentCount = doc.Sources.Count,
+                    TermCount = plan.TermCount,
+                    ConfirmedPairCount = plan.PairCount,
+                    Provider = general.Provider,
+                    Model = general.Model
+                }));
+            }
+            catch (Exception ex)
+            {
+                PluginLog.Write("AutoPrompt preview failed", ex);
+                TryWrite(ctx, 500, Json(new ErrorBody { Error = "Could not assemble the context: " + ex.Message }));
+            }
+        }
+
         /// <summary>
         /// The text AutoPrompt should work from, and the document it belongs to.
         ///
@@ -1034,7 +1143,8 @@ namespace Supervertaler.MemoQ.Core
                 KeywordDomain = analysis.PrimaryDomain,
                 Domains = global::Supervertaler.Core.DocumentContextClassifier.Domains,
                 SegmentCount = analysis.SegmentCount,
-                WordCount = analysis.WordCount
+                WordCount = analysis.WordCount,
+                Origin = doc.Origin
             }));
         }
 
@@ -1078,6 +1188,26 @@ namespace Supervertaler.MemoQ.Core
             [DataMember(Name = "domains")] public string[] Domains { get; set; }
             [DataMember(Name = "segmentCount")] public int SegmentCount { get; set; }
             [DataMember(Name = "wordCount")] public int WordCount { get; set; }
+
+            /// <summary>
+            /// Where the text came from. The dialog used to report the capture
+            /// store's count, which read "1 segment captured" on a run that in
+            /// fact drafted from 374 paragraphs of the live document.
+            /// </summary>
+            [DataMember(Name = "origin")] public string Origin { get; set; }
+        }
+
+        [DataContract]
+        internal class AutoPromptPreviewResponse
+        {
+            [DataMember(Name = "metaPrompt")] public string MetaPrompt { get; set; }
+            [DataMember(Name = "origin")] public string Origin { get; set; }
+            [DataMember(Name = "documentName")] public string DocumentName { get; set; }
+            [DataMember(Name = "segmentCount")] public int SegmentCount { get; set; }
+            [DataMember(Name = "termCount")] public int TermCount { get; set; }
+            [DataMember(Name = "confirmedPairCount")] public int ConfirmedPairCount { get; set; }
+            [DataMember(Name = "provider")] public string Provider { get; set; }
+            [DataMember(Name = "model")] public string Model { get; set; }
         }
 
         /// <summary>

@@ -1,5 +1,8 @@
 using System;
+using System.Collections.Generic;
 using System.Drawing;
+using System.Linq;
+using System.Threading;
 using System.Windows.Forms;
 using Supervertaler.MemoQ.Core;
 using Supervertaler.MemoQ.Settings;
@@ -22,7 +25,7 @@ namespace Supervertaler.PromptEditor
     internal sealed class SettingsForm : Form
     {
         private readonly ComboBox _provider = new ComboBox();
-        private readonly TextBox _model = new TextBox();
+        private readonly ComboBox _model = new ComboBox();
         private readonly TextBox _endpoint = new TextBox();
         private readonly NumericUpDown _parallel = new NumericUpDown();
         private readonly NumericUpDown _batchSize = new NumericUpDown();
@@ -85,11 +88,27 @@ namespace Supervertaler.PromptEditor
             _provider.Left = fieldX; _provider.Top = y; _provider.Width = 200;
             _provider.DropDownStyle = ComboBoxStyle.DropDownList;
             _provider.Items.AddRange(LlmProviders.All);
+
+            // A different provider is a different catalogue. Guarded because
+            // assigning SelectedItem during load raises this too, and at that
+            // point the key has not been read yet.
+            _provider.SelectedIndexChanged += (s, e) => { if (!_loading) LoadModels(refresh: true); };
             Controls.Add(_provider);
             y += rowH;
 
             Caption("Model", y);
             _model.Left = fieldX; _model.Top = y; _model.Width = fieldW;
+
+            // Editable on purpose. The list comes from the provider, so it cannot
+            // cover a gateway, a local model, or anything the endpoint declines to
+            // advertise, and typing must keep working for all three.
+            _model.DropDownStyle = ComboBoxStyle.DropDown;
+            _model.AutoCompleteMode = AutoCompleteMode.SuggestAppend;
+            _model.AutoCompleteSource = AutoCompleteSource.ListItems;
+            _model.SelectedIndexChanged += (s, e) =>
+            {
+                if (_model.SelectedItem is ModelCatalog.Entry entry) _modelId = entry.Id;
+            };
             Controls.Add(_model);
             y += rowH;
 
@@ -173,16 +192,107 @@ namespace Supervertaler.PromptEditor
         }
 
         /// <summary>
+        /// The model id, kept apart from what the combo displays. The list shows a
+        /// readable name with the id after it, and it is the id that goes to the
+        /// provider.
+        /// </summary>
+        private string _modelId = "";
+
+        /// <summary>Set while <see cref="LoadCurrent"/> populates the controls.</summary>
+        private bool _loading;
+
+        /// <summary>
+        /// Fills the dropdown from the cache immediately, then asks the provider in
+        /// the background and updates if the answer differs. Nothing here blocks:
+        /// a provider that is slow or unreachable must not stop the dialog opening,
+        /// and the typed value is always preserved.
+        /// </summary>
+        private async void LoadModels(bool refresh)
+        {
+            var provider = (_provider.SelectedItem as string) ?? LlmProviders.Anthropic;
+
+            Show(ModelCatalog.Cached(provider));
+
+            try
+            {
+                var fresh = await ModelCatalog.RefreshAsync(
+                    provider, ApiKeyInUse(), _endpoint.Text.Trim(), refresh, CancellationToken.None)
+                    .ConfigureAwait(true);
+
+                if (fresh != null && !IsDisposed) Show(fresh);
+            }
+            catch
+            {
+                // Reported inside the catalogue; the cache is already on screen.
+            }
+        }
+
+        private void Show(List<ModelCatalog.Entry> entries)
+        {
+            if (entries == null || entries.Count == 0) return;
+
+            var typed = _modelId;
+
+            _model.BeginUpdate();
+            _model.Items.Clear();
+            foreach (var e in entries) _model.Items.Add(e);
+            _model.EndUpdate();
+
+            // Re-select what was configured, or leave it in the box when the
+            // provider does not list it — which is normal for a gateway.
+            var match = entries.FirstOrDefault(e =>
+                string.Equals(e.Id, typed, StringComparison.OrdinalIgnoreCase));
+
+            if (match != null) _model.SelectedItem = match;
+            else _model.Text = typed;
+
+            _modelId = typed;
+        }
+
+        /// <summary>
+        /// The id to send to the provider. The list shows "Display name   (id)",
+        /// so a picked row is matched back to its id; anything else is taken
+        /// literally, which is how a gateway or a local model gets entered.
+        /// </summary>
+        private string ChosenModelId()
+        {
+            var typed = (_model.Text ?? string.Empty).Trim();
+
+            foreach (var item in _model.Items)
+            {
+                if (item is ModelCatalog.Entry entry
+                    && string.Equals(entry.ToString(), typed, StringComparison.Ordinal))
+                    return entry.Id;
+            }
+
+            return typed;
+        }
+
+        private string ApiKeyInUse()
+        {
+            var typed = _apiKey.Text.Trim();
+            return typed.Length > 0 ? typed : ApiKeys.Resolve((_provider.SelectedItem as string), null).Key;
+        }
+
+        /// <summary>
         /// Reads what is in force. memoQ seeds this file from its settings
         /// resource the first time it builds an engine, so these are the values
         /// the plugin will actually use rather than this program's own defaults.
         /// </summary>
         private void LoadCurrent()
         {
+            _loading = true;
+            try { LoadCurrentCore(); }
+            finally { _loading = false; }
+        }
+
+        private void LoadCurrentCore()
+        {
             var provider = SharedSettings.ProviderOr(LlmProviders.Anthropic);
             _provider.SelectedItem = Array.IndexOf(LlmProviders.All, provider) >= 0 ? provider : LlmProviders.Anthropic;
 
-            _model.Text = SharedSettings.ModelOr("claude-opus-5");
+            _modelId = SharedSettings.ModelOr("claude-opus-5");
+            _model.Text = _modelId;
             _endpoint.Text = SharedSettings.EndpointOr(string.Empty);
             _parallel.Value = Math.Max(1, Math.Min(16, SharedSettings.ParallelOr(4)));
             _batchSize.Value = Math.Max(1, Math.Min(100, SharedSettings.BatchSizeOr(20)));
@@ -195,12 +305,15 @@ namespace Supervertaler.PromptEditor
             var key = ApiKeys.Resolve(provider, null);
             _apiKey.Text = key.Key;
             _apiKeySource.Text = key.HasKey ? "Key in use: " + key.Source : "No API key is set.";
+
+            // Last, because listing models needs the key and the endpoint.
+            LoadModels(refresh: false);
         }
 
         private void Save()
         {
             SharedSettings.Provider = (_provider.SelectedItem as string) ?? LlmProviders.Anthropic;
-            SharedSettings.Model = _model.Text.Trim();
+            SharedSettings.Model = ChosenModelId();
             SharedSettings.Endpoint = _endpoint.Text.Trim();
             SharedSettings.Parallel = (int)_parallel.Value;
             SharedSettings.BatchSize = (int)_batchSize.Value;

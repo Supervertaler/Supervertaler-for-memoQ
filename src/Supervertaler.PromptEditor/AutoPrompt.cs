@@ -190,6 +190,36 @@ namespace Supervertaler.PromptEditor
             return Deserialize<ClassifyResult>(json);
         }
 
+        /// <summary>
+        /// What the plugin is about to send, without sending it. Free: the plugin
+        /// assembles the same context the draft would use and hands back the text.
+        /// </summary>
+        public async Task<AutoPromptPreviewResult> PreviewAsync(AutoPromptRequest request)
+        {
+            var body = new StringContent(Serialize(request), Encoding.UTF8, "application/json");
+            var response = await _http.PostAsync(_base + "/v1/autoprompt/preview", body).ConfigureAwait(false);
+            var json = await response.Content.ReadAsStringAsync().ConfigureAwait(false);
+            if (!response.IsSuccessStatusCode)
+            {
+                var err = Deserialize<ErrorBody>(json);
+                throw new InvalidOperationException(err?.Error ?? ("HTTP " + (int)response.StatusCode));
+            }
+            return Deserialize<AutoPromptPreviewResult>(json);
+        }
+
+        [DataContract]
+        internal class AutoPromptPreviewResult
+        {
+            [DataMember(Name = "metaPrompt")] public string MetaPrompt { get; set; }
+            [DataMember(Name = "origin")] public string Origin { get; set; }
+            [DataMember(Name = "documentName")] public string DocumentName { get; set; }
+            [DataMember(Name = "segmentCount")] public int SegmentCount { get; set; }
+            [DataMember(Name = "termCount")] public int TermCount { get; set; }
+            [DataMember(Name = "confirmedPairCount")] public int ConfirmedPairCount { get; set; }
+            [DataMember(Name = "provider")] public string Provider { get; set; }
+            [DataMember(Name = "model")] public string Model { get; set; }
+        }
+
         [DataContract]
         internal class AutoPromptRequest
         {
@@ -210,6 +240,7 @@ namespace Supervertaler.PromptEditor
             [DataMember(Name = "domains")] public string[] Domains { get; set; }
             [DataMember(Name = "segmentCount")] public int SegmentCount { get; set; }
             [DataMember(Name = "wordCount")] public int WordCount { get; set; }
+            [DataMember(Name = "origin")] public string Origin { get; set; }
         }
 
         [DataContract]
@@ -247,6 +278,7 @@ namespace Supervertaler.PromptEditor
         private readonly TextBox _hint = new TextBox { Multiline = true, ScrollBars = ScrollBars.Vertical, AcceptsReturn = true };
         private readonly CheckBox _terms = new CheckBox { Text = "Include glossary hits from the document", Checked = true, AutoSize = true };
         private readonly CheckBox _confirmed = new CheckBox { Text = "Include segments already confirmed in memoQ", Checked = true, AutoSize = true };
+        private readonly Button _preview = new Button { Text = "Preview context…", Width = 130, Height = 28, Enabled = false };
         private readonly Button _generate = new Button { Text = "Generate", Width = 110, Height = 28, Enabled = false };
         private readonly Button _cancel = new Button { Text = "Cancel", Width = 90, Height = 28, DialogResult = DialogResult.Cancel };
         private readonly Label _status = new Label { AutoSize = true, ForeColor = SystemColors.GrayText };
@@ -267,7 +299,7 @@ namespace Supervertaler.PromptEditor
             FormBorderStyle = FormBorderStyle.FixedDialog;
             StartPosition = FormStartPosition.CenterParent;
             MinimizeBox = false; MaximizeBox = false; ShowInTaskbar = false;
-            ClientSize = new Size(600, 452);
+            ClientSize = new Size(600, 480);
 
             var y = 14;
             Controls.Add(new Label { Text = "Document", Left = 14, Top = y + 4, AutoSize = true });
@@ -299,15 +331,17 @@ namespace Supervertaler.PromptEditor
             _terms.Left = 14; _terms.Top = y; Controls.Add(_terms); y += 24;
             _confirmed.Left = 14; _confirmed.Top = y; Controls.Add(_confirmed); y += 34;
 
-            _status.Left = 14; _status.Top = y + 6; Controls.Add(_status);
+            _status.Left = 14; _status.Top = y + 36; Controls.Add(_status);
             _cancel.Left = 586 - 90; _cancel.Top = y; Controls.Add(_cancel);
             _generate.Left = _cancel.Left - 110 - 8; _generate.Top = y; Controls.Add(_generate);
+            _preview.Left = _generate.Left - 130 - 8; _preview.Top = y; Controls.Add(_preview);
 
             AcceptButton = _generate;
             CancelButton = _cancel;
 
             _document.SelectedIndexChanged += async (s, e) => await OnDocumentChangedAsync();
             _generate.Click += async (s, e) => await GenerateAsync();
+            _preview.Click += async (s, e) => await ShowContextAsync();
             Shown += async (s, e) => await LoadDocumentsAsync();
         }
 
@@ -340,7 +374,7 @@ namespace Supervertaler.PromptEditor
                         var stem = Path.GetFileNameWithoutExtension(d.DocumentName);
                         var showProject = !string.IsNullOrWhiteSpace(d.ProjectName)
                             && !string.Equals(stem, d.ProjectName, StringComparison.OrdinalIgnoreCase);
-                        label = d.DocumentName + (showProject ? "  \u2014  " + d.ProjectName : "");
+                        label = d.DocumentName + (showProject ? "  \u2013  " + d.ProjectName : "");
                     }
                     else if (!string.IsNullOrWhiteSpace(d.Client))
                         label = d.Client + (string.IsNullOrWhiteSpace(d.Subject) ? "" : " / " + d.Subject);
@@ -373,17 +407,16 @@ namespace Supervertaler.PromptEditor
             if (i < 0 || i >= _documents.Length) { _documentInfo.Text = ""; return; }
             var d = _documents[i];
 
-            _documentInfo.Text = d.CapturedSegments + " segment" + (d.CapturedSegments == 1 ? "" : "s") + " captured, "
-                + d.ConfirmedPairs + " confirmed"
-                + (string.IsNullOrWhiteSpace(d.Domain) ? "" : " \u00b7 memoQ domain: " + d.Domain)
-                + (d.CapturedSegments < 5
-                    ? "   \u26a0 very little text \u2014 run Pre-translate first for a whole-document prompt"
-                    : "");
+            // Provisional. The real figure arrives with the classification
+            // below, because the plugin prefers the live document when the preview
+            // tool has it \u2013 and it usually does, which is why this line once
+            // read "1 segment captured" for a draft made from 374 paragraphs.
+            _documentInfo.Text = d.ConfirmedPairs + " confirmed \u00b7 reading the document\u2026";
 
             // Classify. A stale answer arriving after the user switched documents
             // must not overwrite the newer one, hence the run counter.
             var run = ++_classifyRun;
-            _generate.Enabled = false;
+            _generate.Enabled = false; _preview.Enabled = false;
             _domain.Items.Clear(); _domain.Text = "";
             _detected.Text = "Working out what kind of document this is\u2026";
             _detectedDescription = "";
@@ -398,16 +431,71 @@ namespace Supervertaler.PromptEditor
                 _domain.Text = c.Domain ?? c.KeywordDomain ?? "";
                 _detectedDescription = c.Description ?? "";
 
+                _documentInfo.Text = c.SegmentCount.ToString("N0") + " segment"
+                    + (c.SegmentCount == 1 ? "" : "s")
+                    + (string.IsNullOrWhiteSpace(c.Origin) ? "" : " from " + c.Origin)
+                    + ", " + c.WordCount.ToString("N0") + " words \u00b7 "
+                    + d.ConfirmedPairs + " confirmed"
+                    + (string.IsNullOrWhiteSpace(d.Domain) ? "" : " \u00b7 memoQ domain: " + d.Domain)
+                    + (c.SegmentCount < 5
+                        ? "   \u26a0 very little text \u2013 open the document in memoQ, or pre-translate"
+                        : "");
+
                 _detected.Text = "Detected: " + (c.Domain ?? c.KeywordDomain ?? "?")
-                    + (string.IsNullOrWhiteSpace(c.Description) ? "" : " \u2014 " + c.Description)
+                    + (string.IsNullOrWhiteSpace(c.Description) ? "" : " \u2013 " + c.Description)
                     + ". Change it above if that is wrong.";
-                _generate.Enabled = true;
+                _generate.Enabled = true; _preview.Enabled = true;
             }
             catch (Exception ex)
             {
                 if (run != _classifyRun) return;
+                _documentInfo.Text = d.ConfirmedPairs + " confirmed";
                 _detected.Text = "Could not classify (" + ex.Message + "). Type a domain, or leave blank.";
-                _generate.Enabled = true;
+                _generate.Enabled = true; _preview.Enabled = true;
+            }
+        }
+
+        /// <summary>
+        /// The exact instructions the drafting call will carry, in a window you can
+        /// read and copy. Nothing is sent, and the briefing box stays editable, so
+        /// the natural loop is: look, add what is missing, look again, generate.
+        /// </summary>
+        private async Task ShowContextAsync()
+        {
+            var i = _document.SelectedIndex;
+            if (i < 0 || i >= _documents.Length) return;
+
+            _preview.Enabled = false;
+            _status.Text = "Assembling the context…";
+            UseWaitCursor = true;
+
+            try
+            {
+                var assembled = await _bridge.PreviewAsync(new MemoQBridgeClient.AutoPromptRequest
+                {
+                    Document = _documents[i].Key,
+                    Domain = _domain.Text.Trim(),
+                    Description = _detectedDescription,
+                    Hint = _hint.Text.Trim(),
+                    IncludeTerms = _terms.Checked,
+                    IncludeConfirmed = _confirmed.Checked
+                });
+
+                UseWaitCursor = false;
+                _status.Text = "";
+
+                using (var viewer = new ContextPreviewForm(assembled))
+                    viewer.ShowDialog(this);
+            }
+            catch (Exception ex)
+            {
+                UseWaitCursor = false;
+                _status.Text = "";
+                MessageBox.Show(this, ex.Message, "AutoPrompt", MessageBoxButtons.OK, MessageBoxIcon.Warning);
+            }
+            finally
+            {
+                _preview.Enabled = true;
             }
         }
 
@@ -416,7 +504,7 @@ namespace Supervertaler.PromptEditor
             var i = _document.SelectedIndex;
             if (i < 0 || i >= _documents.Length) return;
 
-            _generate.Enabled = false; _cancel.Enabled = false;
+            _generate.Enabled = false; _preview.Enabled = false; _cancel.Enabled = false;
             _document.Enabled = false; _domain.Enabled = false; _hint.Enabled = false;
             _terms.Enabled = false; _confirmed.Enabled = false;
             _status.Text = "Drafting\u2026 this takes a minute or two.";
@@ -442,10 +530,99 @@ namespace Supervertaler.PromptEditor
                 UseWaitCursor = false;
                 _status.Text = "";
                 MessageBox.Show(this, ex.Message, "AutoPrompt", MessageBoxButtons.OK, MessageBoxIcon.Warning);
-                _generate.Enabled = true; _cancel.Enabled = true;
+                _generate.Enabled = true; _preview.Enabled = true; _cancel.Enabled = true;
                 _document.Enabled = true; _domain.Enabled = true; _hint.Enabled = true;
                 _terms.Enabled = true; _confirmed.Enabled = true;
             }
+        }
+    }
+
+    /// <summary>
+    /// A read-only look at the drafting instructions. Resizable and monospaced
+    /// because what is being read is several hundred lines of prompt with a
+    /// glossary table in it, and selectable because the usual next step after
+    /// spotting something wrong is to paste a piece of it somewhere.
+    /// </summary>
+    internal sealed class ContextPreviewForm : Form
+    {
+        public ContextPreviewForm(MemoQBridgeClient.AutoPromptPreviewResult p)
+        {
+            AutoScaleDimensions = new SizeF(96F, 96F);
+            AutoScaleMode = AutoScaleMode.Dpi;
+            Text = "What AutoPrompt will send";
+            StartPosition = FormStartPosition.CenterParent;
+            ClientSize = new Size(820, 620);
+            MinimumSize = new Size(520, 400);
+            MinimizeBox = false; ShowInTaskbar = false;
+
+            var summary = new Label
+            {
+                Dock = DockStyle.Top,
+                Height = 42,
+                Padding = new Padding(10, 8, 10, 0),
+                ForeColor = SystemColors.GrayText,
+                Text = p.SegmentCount.ToString("N0") + " segment" + (p.SegmentCount == 1 ? "" : "s")
+                     + (string.IsNullOrWhiteSpace(p.Origin) ? "" : " from " + p.Origin)
+                     + (string.IsNullOrWhiteSpace(p.DocumentName) ? "" : " (" + p.DocumentName + ")")
+                     + "  \u00b7  " + p.TermCount + " glossary term" + (p.TermCount == 1 ? "" : "s")
+                     + "  \u00b7  " + p.ConfirmedPairCount + " confirmed pair"
+                     + (p.ConfirmedPairCount == 1 ? "" : "s")
+                     + Environment.NewLine
+                     + "Going to " + (p.Provider ?? "?") + " " + (p.Model ?? "?")
+                     + ". Nothing has been sent \u2013 close this and press Generate to send it."
+            };
+
+            var text = new TextBox
+            {
+                Dock = DockStyle.Fill,
+                Multiline = true,
+                ReadOnly = true,
+                ScrollBars = ScrollBars.Both,
+                WordWrap = false,
+                Font = new Font("Consolas", 9F),
+                BackColor = SystemColors.Window,
+                Text = Displayable(p.MetaPrompt)
+            };
+
+            var close = new Button { Text = "Close", Width = 90, Height = 28, DialogResult = DialogResult.OK };
+            var bar = new Panel { Dock = DockStyle.Bottom, Height = 44 };
+            bar.Controls.Add(close);
+            bar.Resize += (s, e) => { close.Left = bar.ClientSize.Width - close.Width - 10; close.Top = 8; };
+
+            Controls.Add(text);
+            Controls.Add(bar);
+            Controls.Add(summary);
+
+            AcceptButton = close;
+            CancelButton = close;
+            Shown += (s, e) => { text.Select(0, 0); close.Focus(); };
+        }
+
+        /// <summary>
+        /// How much of a Win32 edit control is worth filling.
+        ///
+        /// The meta-prompt embeds the whole document, so its size is the
+        /// document's size: about 32 KB for the 374-paragraph patent this was
+        /// built against, but a book-length job would be megabytes and a
+        /// multiline TextBox holding that is a several-second freeze on every
+        /// scroll. The cap is on the display only – the full text still goes to
+        /// the model, and the note says so rather than letting a truncated read
+        /// pass for the whole thing.
+        /// </summary>
+        private const int DisplayLimit = 400 * 1024;
+
+        private static string Displayable(string metaPrompt)
+        {
+            // The wire carries bare newlines; a TextBox renders those as one long
+            // line, so normalise without doubling what is already CRLF.
+            var text = (metaPrompt ?? "").Replace("\r\n", "\n").Replace("\n", Environment.NewLine);
+            if (text.Length <= DisplayLimit) return text;
+
+            var hidden = text.Length - DisplayLimit;
+            return text.Substring(0, DisplayLimit)
+                 + Environment.NewLine + Environment.NewLine
+                 + "[ " + hidden.ToString("N0") + " more characters are not shown here. "
+                 + "All of them are sent. ]";
         }
     }
 }

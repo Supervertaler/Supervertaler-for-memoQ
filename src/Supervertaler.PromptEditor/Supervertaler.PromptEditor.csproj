@@ -62,6 +62,9 @@
     <Compile Include="..\Supervertaler.MemoQ\Core\GlossaryDirection.cs">
       <Link>Shared\GlossaryDirection.cs</Link>
     </Compile>
+    <Compile Include="..\Supervertaler.MemoQ\Core\ModelCatalog.cs">
+      <Link>Shared\ModelCatalog.cs</Link>
+    </Compile>
   </ItemGroup>
 
 </Project>
