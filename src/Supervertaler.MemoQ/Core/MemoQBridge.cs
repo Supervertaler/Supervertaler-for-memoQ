@@ -713,20 +713,21 @@ namespace Supervertaler.MemoQ.Core
                 return;
             }
 
-            var doc = CaptureStore.Get(req.Document);
-            if (doc == null || doc.Sources.Count == 0)
+            var doc = ResolveAutoPromptSource(req.Document);
+            if (doc.Sources.Count == 0)
             {
                 TryWrite(ctx, 409, Json(new ErrorBody
                 {
-                    Error = "Nothing captured yet. Run Pre-translate once (with the Pre-translate-only "
-                          + "box ticked it costs nothing), then try again."
+                    Error = "No document text is available yet. Open the document in memoQ so the preview "
+                          + "tool can read it, or run Pre-translate once (with the Pre-translate-only box "
+                          + "ticked it costs nothing), then try again."
                 }));
                 return;
             }
 
             try
             {
-                var sources = doc.Sources.Select(TagBridge.StripTagMarkers).ToList();
+                var sources = doc.Sources;
                 var sourceLang = PromptBuilder.DescribeLanguage(doc.SourceLangCode);
                 var targetLang = PromptBuilder.DescribeLanguage(doc.TargetLangCode);
 
@@ -852,6 +853,115 @@ namespace Supervertaler.MemoQ.Core
         }
 
         /// <summary>
+        /// <summary>
+        /// The text AutoPrompt should work from, and the document it belongs to.
+        ///
+        /// Two sources exist and they are very unequal. The capture store fills as
+        /// segments pass through translation, so on a project the translator has
+        /// merely opened it holds whatever rows they happened to visit — one, in
+        /// the case that prompted this. The preview tool has had the entire
+        /// document since memoQ opened it. Classifying and drafting from one
+        /// sentence produced a "general" domain for a patent, which is what a
+        /// reader of the resulting prompt would have had to live with.
+        ///
+        /// So: prefer the live document when it is richer, and keep the capture
+        /// store's metadata either way, because client, domain and subject arrive
+        /// on translation requests and the preview channel carries none of them.
+        /// </summary>
+        private sealed class AutoPromptSource
+        {
+            public List<string> Sources = new List<string>();
+            public string SourceLangCode;
+            public string TargetLangCode;
+            public string Client;
+            public string Domain;
+            public string Subject;
+            public string DocumentName;
+            public string Origin;
+
+            /// <summary>The capture key, which is what DocumentMemory is filed under.</summary>
+            public string Key;
+        }
+
+        private AutoPromptSource ResolveAutoPromptSource(string documentKey)
+        {
+            var captured = CaptureStore.Get(documentKey);
+            var context = _context;
+
+            var result = new AutoPromptSource
+            {
+                SourceLangCode = captured?.SourceLangCode ?? context?.SourceLangCode,
+                TargetLangCode = captured?.TargetLangCode ?? context?.TargetLangCode,
+                Client = captured?.Client,
+                Domain = captured?.Domain,
+                Subject = captured?.Subject,
+                Key = captured?.Key ?? documentKey
+            };
+
+            if (captured != null)
+            {
+                result.Sources = captured.Sources.Select(TagBridge.StripTagMarkers).ToList();
+                result.Origin = "captured segments";
+            }
+
+            // The live document, when the preview tool is connected and holds more
+            // than has been captured. Its rows are paragraphs, which is if anything
+            // better for classification than a scattering of sentences.
+            if (PreviewStore.ToolAlive)
+            {
+                var live = PreviewStore.Documents()
+                    .Where(d => d != null)
+                    .Select(d => new { d.DocumentGuid, d.DocumentName, Rows = PreviewStore.Rows(d.DocumentGuid) })
+                    .OrderByDescending(d => d.Rows.Count)
+                    .FirstOrDefault();
+
+                if (live != null && live.Rows.Count > result.Sources.Count)
+                {
+                    result.Sources = live.Rows
+                        .Select(r => TagBridge.StripTagMarkers(r.Source ?? string.Empty))
+                        .Where(t => !string.IsNullOrWhiteSpace(t))
+                        .ToList();
+
+                    result.DocumentName = live.DocumentName ?? result.DocumentName;
+                    result.Origin = "the live document";
+
+                    var first = live.Rows.FirstOrDefault();
+                    if (first != null)
+                    {
+                        result.SourceLangCode = first.SourceLangCode ?? result.SourceLangCode;
+                        result.TargetLangCode = first.TargetLangCode ?? result.TargetLangCode;
+                    }
+                }
+            }
+
+            return result;
+        }
+
+        /// <summary>
+        /// memoQ's own answer, when the model has too little text to give one.
+        /// A project carries Domain and Subject in its metadata — "Patents" here —
+        /// and that beats defaulting to "general" on a document the classifier
+        /// never really saw.
+        /// </summary>
+        private static string DomainFromProject(string domain, string subject)
+        {
+            foreach (var candidate in new[] { domain, subject })
+            {
+                if (string.IsNullOrWhiteSpace(candidate)) continue;
+
+                var needle = candidate.Trim().ToLowerInvariant().TrimEnd('s');
+
+                foreach (var known in global::Supervertaler.Core.DocumentContextClassifier.Domains)
+                {
+                    var k = (known ?? string.Empty).ToLowerInvariant();
+                    if (k.Length == 0 || k == "general") continue;
+                    if (k.TrimEnd('s') == needle) return known;
+                }
+            }
+
+            return null;
+        }
+
         /// POST /v1/autoprompt/classify — the cheap first step: what kind of
         /// document is this? The editor shows the answer and lets the user
         /// confirm or correct it before the expensive generation call, as the
@@ -871,20 +981,40 @@ namespace Supervertaler.MemoQ.Core
                 return;
             }
 
-            var doc = CaptureStore.Get(req.Document);
-            if (doc == null || doc.Sources.Count == 0)
+            var doc = ResolveAutoPromptSource(req.Document);
+            if (doc.Sources.Count == 0)
             {
-                TryWrite(ctx, 409, Json(new ErrorBody { Error = "Nothing captured yet. Run Pre-translate once, then try again." }));
+                TryWrite(ctx, 409, Json(new ErrorBody
+                {
+                    Error = "No document text is available yet. Open the document in memoQ so the preview "
+                          + "tool can read it, or run Pre-translate once, then try again."
+                }));
                 return;
             }
 
-            var sources = doc.Sources.Select(TagBridge.StripTagMarkers).ToList();
+            var sources = doc.Sources;
             var analysis = global::Supervertaler.Core.DocumentAnalyzer.Analyze(sources);
 
             Classify(sources, analysis.PrimaryDomain,
                 SessionRunner.MapProviderForCore(general.Provider), general.Model, apiKey,
                 string.IsNullOrWhiteSpace(general.Endpoint) ? null : general.Endpoint.Trim(),
                 out var domain, out var description);
+
+            // memoQ knows what kind of project this is. Prefer that over a guess
+            // the model could not really make.
+            if (string.IsNullOrWhiteSpace(domain) || domain.Equals("general", StringComparison.OrdinalIgnoreCase))
+            {
+                var fromProject = DomainFromProject(doc.Domain, doc.Subject);
+                if (fromProject != null)
+                {
+                    domain = fromProject;
+                    description = (string.IsNullOrWhiteSpace(description) ? "" : description + " ")
+                        + $"(domain taken from the memoQ project, which is set to {doc.Domain ?? doc.Subject}.)";
+                }
+            }
+
+            PluginLog.Write($"AutoPrompt classify: {sources.Count} source(s) from {doc.Origin}, "
+                + $"domain={domain}");
 
             TryWrite(ctx, 200, Json(new ClassifyResponse
             {
