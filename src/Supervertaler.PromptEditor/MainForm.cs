@@ -515,7 +515,7 @@ namespace Supervertaler.PromptEditor
             // and a suffix always means something.
             // Quotes because at least one prompt in the live library writes the
             // value as "memoq" with them; the flag means the same either way.
-            var app = (p.App ?? "both").Trim().Trim('"', ''');
+            var app = (p.App ?? "both").Trim().Trim(QuoteChars);
             var forThisApp = app.Length == 0
                 || app.Equals("both", StringComparison.OrdinalIgnoreCase)
                 || app.Equals(ThisApp, StringComparison.OrdinalIgnoreCase);
@@ -535,6 +535,10 @@ namespace Supervertaler.PromptEditor
                       + "and will fall back to the instructions in its own settings if it is somehow selected."
             };
         }
+
+        /// <summary>At least one prompt in the live library writes the flag as
+        /// "memoq" with quotes; it means the same either way.</summary>
+        private static readonly char[] QuoteChars = { (char)34, (char)39 };
 
         private static string Describe(string app)
         {
