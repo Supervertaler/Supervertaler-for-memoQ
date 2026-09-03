@@ -143,6 +143,12 @@ namespace Supervertaler.MemoQ.Core
         /// </summary>
         public void RecordLanguagePair()
         {
+            // Not from a test run. The build's own smoke test creates an eng-nld
+            // engine, and without this it wrote that pair into the user's settings,
+            // where an export made with memoQ closed would have been stamped with
+            // it. Same switch that already stops seeding and key resolution.
+            if (SharedSettings.InHarness) return;
+
             var pair = (SourceLangCode ?? "?") + "|" + (TargetLangCode ?? "?");
             if (string.Equals(pair, _recordedPair, StringComparison.Ordinal)) return;
             _recordedPair = pair;
