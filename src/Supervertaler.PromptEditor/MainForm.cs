@@ -46,6 +46,20 @@ namespace Supervertaler.PromptEditor
 
         private PromptTemplate _current;
         private bool _loading;
+
+        /// <summary>
+        /// Set while the syntax highlighter is repainting.
+        ///
+        /// A RichTextBox raises TextChanged for SelectionColor and SelectionFont,
+        /// so the highlighter's own repaint arrived as if the user had typed. That
+        /// marked an untouched prompt as modified within 350ms of opening it, and
+        /// it restarted the debounce timer, which fired the highlighter, which
+        /// raised TextChanged again - a loop that re-highlighted the whole
+        /// document three times a second for as long as the editor was open, and
+        /// made "Save changes?" unanswerable: discarding cleared the flag and the
+        /// next tick set it again.
+        /// </summary>
+        private bool _highlighting;
         private bool _dirty;
 
         private readonly string _openAtRelativePath;
@@ -658,7 +672,11 @@ namespace Supervertaler.PromptEditor
 
             _dirty = false;
             UpdateDirtyUi();
+
             Highlight();
+
+            _dirty = false;
+            UpdateDirtyUi();
         }
 
         private static string KeyOf(string frontmatterLine)
@@ -695,15 +713,21 @@ namespace Supervertaler.PromptEditor
             }
         }
 
-        private void Save()
+        /// <summary>
+        /// Writes the current prompt. Returns false when it did not, so a caller
+        /// that was about to close a window or move away on the strength of a save
+        /// can stop instead. Answering "Save changes?" with Yes and having the save
+        /// quietly fail is how an unanswerable dialog gets built.
+        /// </summary>
+        private bool Save()
         {
-            if (_current == null || !_dirty) return;
+            if (_current == null || !_dirty) return true;
 
             if (_current.IsReadOnly)
             {
                 MessageBox.Show(this, "This prompt is read-only.", "Supervertaler",
                     MessageBoxButtons.OK, MessageBoxIcon.Information);
-                return;
+                return false;
             }
 
             var name = _name.Text.Trim();
@@ -712,7 +736,7 @@ namespace Supervertaler.PromptEditor
                 MessageBox.Show(this, "A prompt needs a name.", "Supervertaler",
                     MessageBoxButtons.OK, MessageBoxIcon.Warning);
                 _name.Focus();
-                return;
+                return false;
             }
 
             _current.Name = name;
@@ -729,7 +753,7 @@ namespace Supervertaler.PromptEditor
             {
                 MessageBox.Show(this, "Could not save.\r\n\r\n" + ex.Message, "Supervertaler",
                     MessageBoxButtons.OK, MessageBoxIcon.Error);
-                return;
+                return false;
             }
 
             _dirty = false;
@@ -741,6 +765,8 @@ namespace Supervertaler.PromptEditor
             var relative = _current.RelativePath;
             LoadTree();
             SelectPrompt(relative);
+
+            return true;
         }
 
         private void Reload()
@@ -1288,7 +1314,7 @@ namespace Supervertaler.PromptEditor
 
         private void EditorTextChanged(object sender, EventArgs e)
         {
-            if (_loading) return;
+            if (_loading || _highlighting) return;
 
             MarkDirty();
             _highlightTimer.Stop();
@@ -1299,8 +1325,16 @@ namespace Supervertaler.PromptEditor
         {
             if (_editor.IsDisposed || !_editor.IsHandleCreated) return;
 
-            var found = MarkdownHighlighter.Apply(_editor, _editorFont);
-            ReportWarnings(found);
+            _highlighting = true;
+            try
+            {
+                var found = MarkdownHighlighter.Apply(_editor, _editorFont);
+                ReportWarnings(found);
+            }
+            finally
+            {
+                _highlighting = false;
+            }
         }
 
         /// <summary>
@@ -1350,7 +1384,11 @@ namespace Supervertaler.PromptEditor
 
         private void MarkDirty()
         {
-            if (_loading || _current == null) return;
+            if (_loading || _highlighting || _current == null) return;
+
+            // A read-only prompt cannot be edited, so anything that reaches here
+            // for one is machinery, not the user.
+            if (_current.IsReadOnly) return;
             if (_dirty) return;
 
             _dirty = true;
@@ -1375,18 +1413,35 @@ namespace Supervertaler.PromptEditor
             UpdateDirtyUi();
         }
 
+        /// <summary>
+        /// True when it is safe to move on: nothing to save, saved, or discarded.
+        /// </summary>
         private bool ConfirmDiscard()
         {
             if (!_dirty || _current == null) return true;
+
+            // Nothing could have been written to a read-only prompt, so there is
+            // nothing to ask about. Discard and carry on.
+            if (_current.IsReadOnly)
+            {
+                _dirty = false;
+                UpdateDirtyUi();
+                return true;
+            }
 
             var answer = MessageBox.Show(this,
                 "Save changes to \"" + (_current.Name ?? "this prompt") + "\"?",
                 "Supervertaler", MessageBoxButtons.YesNoCancel, MessageBoxIcon.Question);
 
             if (answer == DialogResult.Cancel) return false;
-            if (answer == DialogResult.Yes) Save();
-            else { _dirty = false; UpdateDirtyUi(); }
 
+            // A refused save must not read as a completed one - that is what left
+            // the question being asked again on the next click, with no answer
+            // that ended it. No still discards, so there is always a way out.
+            if (answer == DialogResult.Yes) return Save();
+
+            _dirty = false;
+            UpdateDirtyUi();
             return true;
         }
 
