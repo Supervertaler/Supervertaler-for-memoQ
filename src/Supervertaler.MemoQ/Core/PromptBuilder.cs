@@ -61,6 +61,7 @@ namespace Supervertaler.MemoQ.Core
             // this engine in the MT settings, and turning off document context
             // should not silently discard it.
             AppendFuzzyMatch(sb, bundle);
+            AppendRowState(sb, bundle);
 
             if (settings.UseDocumentContext)
             {
@@ -83,6 +84,8 @@ namespace Supervertaler.MemoQ.Core
                 AppendTerminology(sb, bundle, ownTerms);
                 AppendForbiddenTerms(sb, bundle, ownTerms);
             }
+
+            AppendFragmentRule(sb, bundle.Source);
 
             sb.AppendLine("Source segment:");
             sb.AppendLine(TagBridge.ToTaggedText(bundle.Source));
@@ -195,6 +198,16 @@ namespace Supervertaler.MemoQ.Core
         /// </summary>
         public const string FuzzyMatchKind = "SupervertalerFuzzyMatch";
 
+
+        /// <summary>
+        /// Carries memoQ's translation state for the row being translated. Rides
+        /// on the bundle for the same reason the fuzzy match does: it reaches
+        /// PromptBuilder without a new parameter on every method between here and
+        /// the session, and <see cref="SegmentContextItem"/> already has a numeric
+        /// field to put it in.
+        /// </summary>
+        public const string RowStatusKind = "SupervertalerRowStatus";
+
         /// <summary>
         /// The best fuzzy translation-memory match, when the user has routed it to
         /// us under memoQ's <em>Send best fuzzy TM match to</em>. It is a rendering
@@ -216,6 +229,58 @@ namespace Supervertaler.MemoQ.Core
                 + "translate actually differs in.");
             sb.AppendLine("- " + TagBridge.ToPlainText(match.SourceSegment));
             sb.AppendLine("  -> " + TagBridge.ToPlainText(match.TargetSegment));
+            sb.AppendLine();
+        }
+
+        /// <summary>
+        /// Asks for a fragment to be translated as a fragment.
+        ///
+        /// MatchPatch is why this exists: memoQ sends only the substring that
+        /// differs from a TM hit, and a model given a phrase with a prompt written
+        /// for sentences returns it capitalised and full-stopped, which is then
+        /// spliced into the middle of a translation. There is no flag identifying
+        /// a MatchPatch request, so the test is on the text, which means headings,
+        /// list items and table cells get the same benefit.
+        ///
+        /// Deliberately conservative: anything ending in sentence punctuation, and
+        /// anything long enough to be a sentence without it, is left alone.
+        /// </summary>
+        private static void AppendFragmentRule(StringBuilder sb, Segment source)
+        {
+            var text = source?.PlainText;
+            if (string.IsNullOrWhiteSpace(text)) return;
+
+            var trimmed = text.Trim();
+            if (trimmed.Length > 60 || trimmed.IndexOf('\n') >= 0) return;
+            if (".!?:;\u3002\uFF01\uFF1F".IndexOf(trimmed[trimmed.Length - 1]) >= 0) return;
+
+            sb.AppendLine("This source is a fragment rather than a complete sentence, and may be spliced "
+                + "into the middle of an existing translation. Translate it as a fragment: add no final "
+                + "punctuation the source does not have, and capitalise the first word only if the "
+                + "source's first word is capitalised.");
+            sb.AppendLine();
+        }
+
+        /// <summary>
+        /// What memoQ says about the row itself. Only one state changes the
+        /// request: a rejected row means the translator read a rendering and
+        /// turned it down, and a model asked again without being told that
+        /// reliably offers the same thing back.
+        ///
+        /// Confirmed rows are deliberately not treated as "skip". memoQ only
+        /// sends one when the user's Pre-translate scope asked for it, and
+        /// overriding that choice from inside a plugin would be wrong.
+        /// </summary>
+        private static void AppendRowState(StringBuilder sb, TranslationBundle bundle)
+        {
+            var state = SegmentsOfKind(bundle, RowStatusKind).FirstOrDefault();
+            if (state == null) return;
+
+            if (!RowStatus.IsRejected((int)state.NumericValue)) return;
+
+            sb.AppendLine("The translator has rejected a previous translation of this segment. Do not "
+                + "repeat it. Produce a genuinely different rendering: reconsider the terminology, the "
+                + "sentence structure and the register rather than paraphrasing what was refused.");
             sb.AppendLine();
         }
 

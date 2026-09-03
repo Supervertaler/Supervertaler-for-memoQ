@@ -1,4 +1,5 @@
 using System;
+using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
 using MemoQ.Addins.Common.DataStructures;
@@ -35,12 +36,12 @@ namespace Supervertaler.MemoQ
 
         public TranslationResult TranslateCorrectSegment(Segment segm, Segment tmSource, Segment tmTarget)
         {
-            return TranslateOne(segm, tmSource, tmTarget);
+            return TranslateOne(segm, tmSource, tmTarget, null);
         }
 
         public TranslationResult[] TranslateCorrectSegment(Segment[] segs, Segment[] tmSources, Segment[] tmTargets)
         {
-            return TranslateMany(segs, tmSources, tmTargets);
+            return TranslateMany(segs, tmSources, tmTargets, null);
         }
 
         // ---- ISessionWithMetadata ---------------------------------------------
@@ -50,7 +51,7 @@ namespace Supervertaler.MemoQ
         {
             _context.NoteMetadata(metadata);
             LogMetadataOnce(metadata);
-            return TranslateOne(segm, tmSource, tmTarget);
+            return TranslateOne(segm, tmSource, tmTarget, RowAt(metadata, 0));
         }
 
         public TranslationResult[] TranslateCorrectSegment(
@@ -58,7 +59,7 @@ namespace Supervertaler.MemoQ
         {
             _context.NoteMetadata(metadata);
             LogMetadataOnce(metadata);
-            return TranslateMany(segs, tmSources, tmTargets);
+            return TranslateMany(segs, tmSources, tmTargets, metadata);
         }
 
         // ---- shared -----------------------------------------------------------
@@ -70,7 +71,8 @@ namespace Supervertaler.MemoQ
         /// expect. Set Parallel requests' companion BatchSize to 1 to send them
         /// one at a time.
         /// </summary>
-        private TranslationResult[] TranslateMany(Segment[] segs, Segment[] tmSources, Segment[] tmTargets)
+        private TranslationResult[] TranslateMany(
+            Segment[] segs, Segment[] tmSources, Segment[] tmTargets, MTRequestMetadata metadata)
         {
             if (segs == null) return new TranslationResult[0];
 
@@ -82,7 +84,7 @@ namespace Supervertaler.MemoQ
                 return Task.Run(() => BatchTranslator.TranslateAsync(
                         segs, _context,
                         (segment, i, ct) => Task.FromResult(
-                            TranslateOne(segment, At(tmSources, i), At(tmTargets, i))),
+                            TranslateOne(segment, At(tmSources, i), At(tmTargets, i), RowAt(metadata, i))),
                         CancellationToken.None, tmSources, tmTargets))
                     .GetAwaiter().GetResult();
             }
@@ -92,7 +94,7 @@ namespace Supervertaler.MemoQ
 
                 var results = new TranslationResult[segs.Length];
                 for (var i = 0; i < segs.Length; i++)
-                    results[i] = TranslateOne(segs[i], At(tmSources, i), At(tmTargets, i));
+                    results[i] = TranslateOne(segs[i], At(tmSources, i), At(tmTargets, i), RowAt(metadata, i));
                 return results;
             }
         }
@@ -106,7 +108,24 @@ namespace Supervertaler.MemoQ
             return segments != null && index >= 0 && index < segments.Length ? segments[index] : null;
         }
 
-        private TranslationResult TranslateOne(Segment source, Segment tmSource, Segment tmTarget)
+        /// <summary>
+        /// The metadata for one row of the request. memoQ documents SegmentIndex
+        /// as the row's position, so that is matched first; the positional
+        /// fallback covers a request that leaves it unset.
+        /// </summary>
+        private static SegmentMetadata RowAt(MTRequestMetadata metadata, int index)
+        {
+            var rows = metadata?.SegmentLevelMetadata;
+            if (rows == null || rows.Count == 0) return null;
+
+            foreach (var row in rows)
+                if (row != null && row.SegmentIndex == index) return row;
+
+            return index >= 0 && index < rows.Count ? rows[index] : null;
+        }
+
+        private TranslationResult TranslateOne(
+            Segment source, Segment tmSource, Segment tmTarget, SegmentMetadata row)
         {
             if (source == null || source.IsEmptyText)
                 return new TranslationResult { Translation = Segment.Empty, Confidence = 0 };
@@ -120,15 +139,24 @@ namespace Supervertaler.MemoQ
             if (tmSource != null && tmTarget != null
                 && !tmSource.IsEmptyText && !tmTarget.IsEmptyText)
             {
-                bundle.SegmentContext = new System.Collections.Generic.List<SegmentContextItem>
+                Context(bundle).Add(new SegmentContextItem
                 {
-                    new SegmentContextItem
-                    {
-                        Kind = PromptBuilder.FuzzyMatchKind,
-                        SourceSegment = tmSource,
-                        TargetSegment = tmTarget
-                    }
-                };
+                    Kind = PromptBuilder.FuzzyMatchKind,
+                    SourceSegment = tmSource,
+                    TargetSegment = tmTarget
+                });
+            }
+
+            // memoQ's state for this row. Only a rejected one changes the request,
+            // but it is carried whenever it is known so the prompt builder decides
+            // rather than the session.
+            if (row != null)
+            {
+                Context(bundle).Add(new SegmentContextItem
+                {
+                    Kind = PromptBuilder.RowStatusKind,
+                    NumericValue = row.SegmentStatus
+                });
             }
 
             try
@@ -156,6 +184,12 @@ namespace Supervertaler.MemoQ
             }
         }
 
+        private static System.Collections.Generic.List<SegmentContextItem> Context(TranslationBundle bundle)
+        {
+            return bundle.SegmentContext
+                ?? (bundle.SegmentContext = new System.Collections.Generic.List<SegmentContextItem>());
+        }
+
         private bool _metadataLogged;
 
         /// <summary>
@@ -175,8 +209,38 @@ namespace Supervertaler.MemoQ
                 + $"client={(string.IsNullOrEmpty(metadata.Client) ? "(empty)" : "set")}, "
                 + $"domain={(string.IsNullOrEmpty(metadata.Domain) ? "(empty)" : "set")}, "
                 + $"subject={(string.IsNullOrEmpty(metadata.Subject) ? "(empty)" : "set")}, "
-                + $"segmentLevel={metadata.SegmentLevelMetadata?.Count ?? 0} item(s), "
+                + $"segmentLevel={metadata.SegmentLevelMetadata?.Count ?? 0} item(s){DescribeRows(metadata)}, "
                 + $"held={DocumentMemory.CountFor(_context.MemoryKey)} confirmed pair(s)");
+        }
+
+        /// <summary>
+        /// What memoQ actually puts in the per-row metadata. The SDK says the
+        /// field exists and nothing else, so this records the shape of it once per
+        /// session: whether row identities arrive, and which states. Row GUIDs are
+        /// not logged — they identify a customer's segments.
+        /// </summary>
+        private static string DescribeRows(MTRequestMetadata metadata)
+        {
+            var rows = metadata?.SegmentLevelMetadata;
+            if (rows == null || rows.Count == 0) return string.Empty;
+
+            var withId = 0;
+            var states = new System.Collections.Generic.Dictionary<int, int>();
+
+            foreach (var row in rows)
+            {
+                if (row == null) continue;
+                if (row.SegmentID != Guid.Empty) withId++;
+
+                var status = row.SegmentStatus;
+                states[status] = states.TryGetValue(status, out var n) ? n + 1 : 1;
+            }
+
+            var described = string.Join(", ", states
+                .OrderBy(kv => kv.Key)
+                .Select(kv => RowStatus.Describe(kv.Key) + " x" + kv.Value));
+
+            return $" [{withId} with a row id; {described}]";
         }
 
         public void Dispose() { }

@@ -33,13 +33,22 @@ namespace Supervertaler.MemoQ
         public override Image SmallIcon => IconLoader.Small;
 
         /// <summary>
-        /// False. This is MatchPatch, which is a different feature from fuzzy
-        /// forwarding: memoQ would send only the substring that differs between
-        /// the segment and a TM hit, with no segment context at all. Worth trying
-        /// one day with a prompt written for fragments; a prompt written for whole
-        /// segments handles them badly.
+        /// True: offer this engine to MatchPatch, which is a different feature
+        /// from fuzzy forwarding. memoQ sends only the substring that differs
+        /// between the segment and a TM hit, with project metadata but no segment
+        /// context, and splices the answer back into the TM target.
+        ///
+        /// What makes it usable is that the prompt now recognises a fragment and
+        /// asks for it to be translated as one. There is no flag on the request
+        /// saying "this is MatchPatch", and no reliable way to infer it, so the
+        /// rule keys off the text itself and helps headings, list items and table
+        /// cells just as much.
+        ///
+        /// It costs requests: memoQ asks per fragment as the translator moves
+        /// through rows that have a fuzzy match, so the user chooses it in the
+        /// MatchPatch dropdown rather than getting it by default.
         /// </summary>
-        public override bool SupportsFuzzyCorrection => false;
+        public override bool SupportsFuzzyCorrection => true;
 
         /// <summary>
         /// How many sessions memoQ may run at once. Clamped: a batch run at 32
