@@ -41,6 +41,44 @@ fi
 MEMOQ_WIN="$(cygpath -w "$MEMOQ_DIR")"
 echo "memoQ:  $MEMOQ_WIN"
 
+# --- the shared submodule is on a branch ------------------------------------
+# core/ is one repository, Supervertaler-Plugin-Core, that this repo and
+# Supervertaler-for-Trados both contain. Each pins a commit of it.
+#
+# "git submodule update" checks out that commit as a DETACHED HEAD, which is
+# the default and is fine until someone commits there. Then the commit belongs
+# to no branch, no push can find it, and the next submodule update discards it
+# without a word. That is not hypothetical: two real fixes sat stranded that
+# way for a day before anyone looked.
+#
+# Checked here rather than left to discipline, because the failure is silent
+# and the build is the one thing that always runs.
+if [[ -d "$ROOT/core/.git" || -f "$ROOT/core/.git" ]]; then
+    if ! git -C "$ROOT/core" symbolic-ref -q HEAD >/dev/null; then
+        echo "ERROR: core/ is on a detached HEAD." >&2
+        echo "  Commits made there belong to no branch and will be lost by a" >&2
+        echo "  submodule update. Nothing here can push them." >&2
+        echo >&2
+        echo "  Fix:  git -C core checkout main" >&2
+        exit 1
+    fi
+
+    CORE_BRANCH="$(git -C "$ROOT/core" rev-parse --abbrev-ref HEAD)"
+    CORE_AHEAD="$(git -C "$ROOT/core" rev-list --count "@{upstream}..HEAD" 2>/dev/null || echo 0)"
+    CORE_BEHIND="$(git -C "$ROOT/core" rev-list --count "HEAD..@{upstream}" 2>/dev/null || echo 0)"
+
+    CORE_NOTE="core:   $CORE_BRANCH"
+    [[ "$CORE_AHEAD" != "0" ]] && CORE_NOTE="$CORE_NOTE, $CORE_AHEAD unpushed commit(s)"
+    [[ "$CORE_BEHIND" != "0" ]] && CORE_NOTE="$CORE_NOTE, $CORE_BEHIND behind origin"
+    echo "$CORE_NOTE"
+
+    # A warning, not a failure: building on unpushed work is normal while it is
+    # being written. Losing track of it is what is not.
+    if [[ "$CORE_AHEAD" != "0" ]]; then
+        echo "        Shared with Supervertaler-for-Trados - push when it settles." >&2
+    fi
+fi
+
 # --- memoQ must be closed ---------------------------------------------------
 # A loaded add-in DLL is locked by memoQ.exe; copying over it fails with a
 # confusing sharing violation rather than anything that names the cause.
