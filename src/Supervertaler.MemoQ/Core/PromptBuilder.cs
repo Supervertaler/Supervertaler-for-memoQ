@@ -368,8 +368,26 @@ namespace Supervertaler.MemoQ.Core
             // This wording lives here rather than in the user's editable
             // instructions on purpose: it must hold however they have rewritten
             // their prompt.
-            sb.AppendLine("Client terminology. Use these renderings unless one is clearly wrong for");
-            sb.AppendLine("this particular sentence – an entry can be right in general and wrong in context:");
+            //
+            // The second sentence exists because a prompt written by AutoPrompt
+            // carries its own PROJECT-SPECIFIC GLOSSARY table, and this block is
+            // usually the same terms again: the glossary file is exported from
+            // that very table. Two lists of the same terms in one prompt, in two
+            // notations, with nothing saying how they relate, is the state the
+            // Trados plugin is in, and its own notes record the resulting
+            // contradictions as an open question.
+            //
+            // The file wins, and the reason is not arbitrary. The terminology
+            // plugin re-reads it whenever it changes, so it is what the translator
+            // curated most recently; the prompt is a document they would have to
+            // regenerate. Saying which one governs costs a sentence and removes
+            // the whole class of conflict.
+            sb.AppendLine("Client terminology. These are the glossary entries that occur in this segment,");
+            sb.AppendLine("taken from the live glossary file. Where the instructions above also carry a");
+            sb.AppendLine("glossary, this is the same terminology filtered to what is in front of you; if");
+            sb.AppendLine("the two ever disagree, follow these, because this file is the one the translator");
+            sb.AppendLine("edits. Use these renderings unless one is clearly wrong for this particular");
+            sb.AppendLine("sentence – an entry can be right in general and wrong in context:");
             foreach (var t in terms.Distinct()) sb.AppendLine(t);
             sb.AppendLine();
         }
@@ -391,8 +409,12 @@ namespace Supervertaler.MemoQ.Core
 
             if (forbidden.Count == 0) return;
 
-            sb.AppendLine("Forbidden terms. These are absolute – never use them, in any form,");
-            sb.AppendLine("even if they seem to fit:");
+            // Absolute, and above everything the instructions say. A prompt's own
+            // glossary can lock a rendering that the translator has since banned in
+            // the file, and without this the model is handed both with no
+            // tiebreaker.
+            sb.AppendLine("Forbidden terms. These are absolute – never use them, in any form, even if they");
+            sb.AppendLine("seem to fit and even if the instructions above name one as the locked rendering:");
             foreach (var t in forbidden) sb.AppendLine("- " + t);
             sb.AppendLine();
         }

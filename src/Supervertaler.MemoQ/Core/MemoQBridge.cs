@@ -955,6 +955,11 @@ namespace Supervertaler.MemoQ.Core
             "own glossary where they conflict, because they are the translator's later decisions.\n" +
             "- Glossary terms supplied at request time are marked as either preferred or FORBIDDEN. Forbidden " +
             "terms are absolute. Preferred terms should be followed unless clearly wrong for the sentence.\n" +
+            "- Those runtime terms come from a glossary file the translator edits, which is normally exported " +
+            "from this prompt's own glossary table, so the two are the same terminology in two places. The " +
+            "prompt should say that where they disagree the runtime terms govern, because the file is the copy " +
+            "the translator maintains, and that a runtime FORBIDDEN term overrides this prompt's glossary even " +
+            "when the glossary locks that exact rendering.\n" +
             "- IMPORTANT – the TERMINOLOGY DATA above did NOT come from a project termbase. It is the set of " +
             "hits from the user's GENERAL glossary (patents, legal, technical, all mixed) that happen to occur " +
             "in this document, and a general glossary carries senses that are wrong for a given text: " +

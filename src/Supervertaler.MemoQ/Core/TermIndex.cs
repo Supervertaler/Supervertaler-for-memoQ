@@ -110,19 +110,32 @@ namespace Supervertaler.MemoQ.Core
             // Longest source first: a longer term is the more specific statement
             // about this text, and claiming its span stops a shorter one inside it
             // from also matching.
-            foreach (var entry in candidates)
+            //
+            // Entries that share a source are grouped and reported together. They
+            // are not rivals for the span, they are complementary statements about
+            // one term: a glossary routinely holds "device -> inrichting" next to
+            // "device -> apparaat, forbidden", meaning use the first and never the
+            // second. Letting the first claim the span silently dropped the second,
+            // so the ban never reached the model — which is exactly the instruction
+            // the translator most wanted enforced.
+            foreach (var group in candidates
+                .GroupBy(e => e.Source, StringComparer.OrdinalIgnoreCase)
+                .OrderByDescending(g => g.Key.Length))
             {
+                var source = group.Key;
                 var from = 0;
-                while (from <= plainText.Length - entry.Source.Length)
+
+                while (from <= plainText.Length - source.Length)
                 {
-                    var at = plainText.IndexOf(entry.Source, from, StringComparison.OrdinalIgnoreCase);
+                    var at = plainText.IndexOf(source, from, StringComparison.OrdinalIgnoreCase);
                     if (at < 0) break;
 
-                    var end = at + entry.Source.Length;
+                    var end = at + source.Length;
                     if (IsWholeWord(plainText, at, end) && !AnyTaken(taken, at, end))
                     {
                         for (var i = at; i < end; i++) taken[i] = true;
-                        matches.Add(new Match { Entry = entry, Start = at, Length = entry.Source.Length });
+                        foreach (var entry in group)
+                            matches.Add(new Match { Entry = entry, Start = at, Length = source.Length });
                     }
 
                     from = at + 1;
