@@ -122,7 +122,12 @@ namespace Supervertaler.PromptEditor
             fileMenu.DropDownItems.Add(new ToolStripMenuItem("E&xit", null, (s, e) => Close()));
 
             var memoqMenu = new ToolStripMenuItem("&memoQ");
-            memoqMenu.DropDownItems.Add(new ToolStripMenuItem("&Draft a prompt for the open project…", null, (s, e) => DraftForProject())
+            // Named for the feature, not for what it does. AutoPrompt is what the
+            // Trados plugin calls it in every string it shows, and what the docs
+            // and the website call it, so a user who has read about AutoPrompt
+            // finds a button called AutoPrompt. The tooltip carries the
+            // explanation the name drops.
+            memoqMenu.DropDownItems.Add(new ToolStripMenuItem("&AutoPrompt…", null, (s, e) => DraftForProject())
             {
                 ToolTipText = "AutoPrompt: have the AI write a prompt tailored to the document open in memoQ"
             });
@@ -182,7 +187,7 @@ namespace Supervertaler.PromptEditor
             };
             BuildInsertMenu();
 
-            var draft = new ToolStripButton("Draft for memoQ project…")
+            var draft = new ToolStripButton("AutoPrompt…")
             {
                 DisplayStyle = ToolStripItemDisplayStyle.Text,
                 ToolTipText = "AutoPrompt: have the AI write a prompt tailored to the document open in memoQ"

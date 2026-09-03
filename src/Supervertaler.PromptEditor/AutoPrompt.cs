@@ -263,7 +263,7 @@ namespace Supervertaler.PromptEditor
 
             AutoScaleDimensions = new SizeF(96F, 96F);
             AutoScaleMode = AutoScaleMode.Dpi;
-            Text = "Draft a prompt for the memoQ project";
+            Text = "AutoPrompt – draft a prompt for this memoQ project";
             FormBorderStyle = FormBorderStyle.FixedDialog;
             StartPosition = FormStartPosition.CenterParent;
             MinimizeBox = false; MaximizeBox = false; ShowInTaskbar = false;
