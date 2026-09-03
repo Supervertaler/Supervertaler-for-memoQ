@@ -23,6 +23,7 @@ namespace Supervertaler.PromptEditor
             MinimizeBox = false;
             MaximizeBox = false;
             ShowInTaskbar = false;
+            AppIcon.Apply(this);
             ClientSize = new Size(420, 118);
 
             var caption = new Label

@@ -78,14 +78,7 @@ namespace Supervertaler.PromptEditor
             StartPosition = FormStartPosition.CenterScreen;
             MinimumSize = new Size(820, 520);
 
-            try
-            {
-                Icon = Icon.ExtractAssociatedIcon(Application.ExecutablePath);
-            }
-            catch
-            {
-                // A missing icon is not worth failing to open the editor over.
-            }
+            AppIcon.Apply(this);
 
             _editorFont = new Font("Consolas", 10.5f);
 

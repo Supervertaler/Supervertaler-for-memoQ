@@ -49,6 +49,33 @@ namespace Supervertaler.MemoQ.Preview
         private static volatile bool _quit;
         private static NotifyIcon _icon;
 
+        /// <summary>
+        /// The Supervertaler mark at the size the notification area wants.
+        ///
+        /// Asking the .ico for SmallIconSize picks the frame Windows would
+        /// otherwise have to rescale, which matters here because the tray is
+        /// where this program lives: it has no window of its own.
+        /// </summary>
+        private static System.Drawing.Icon TrayIcon()
+        {
+            try
+            {
+                using (var stream = System.Reflection.Assembly.GetExecutingAssembly()
+                    .GetManifestResourceStream("Supervertaler.MemoQ.Preview.Resources.sv-icon.ico"))
+                {
+                    if (stream != null)
+                        return new System.Drawing.Icon(stream, SystemInformation.SmallIconSize);
+                }
+            }
+            catch (Exception ex)
+            {
+                Log("tray icon: " + ex.Message);
+            }
+
+            // A generic glyph in the tray beats no tray presence at all.
+            return System.Drawing.SystemIcons.Application;
+        }
+
         [STAThread]
         private static void Main(string[] args)
         {
@@ -67,7 +94,7 @@ namespace Supervertaler.MemoQ.Preview
 
                 using (_icon = new NotifyIcon
                 {
-                    Icon = System.Drawing.SystemIcons.Application,
+                    Icon = TrayIcon(),
                     Visible = true,
                     Text = "Supervertaler – memoQ live document link"
                 })

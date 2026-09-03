@@ -48,6 +48,7 @@ namespace Supervertaler.PromptEditor
             StartPosition = FormStartPosition.CenterParent;
             MinimizeBox = false;
             MaximizeBox = false;
+            AppIcon.Apply(this);
             ClientSize = new Size(620, 396);
 
             const int labelX = 16;

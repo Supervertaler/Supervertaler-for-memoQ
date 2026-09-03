@@ -299,6 +299,7 @@ namespace Supervertaler.PromptEditor
             FormBorderStyle = FormBorderStyle.FixedDialog;
             StartPosition = FormStartPosition.CenterParent;
             MinimizeBox = false; MaximizeBox = false; ShowInTaskbar = false;
+            AppIcon.Apply(this);
             ClientSize = new Size(600, 480);
 
             var y = 14;
@@ -551,6 +552,7 @@ namespace Supervertaler.PromptEditor
             AutoScaleMode = AutoScaleMode.Dpi;
             Text = "What AutoPrompt will send";
             StartPosition = FormStartPosition.CenterParent;
+            AppIcon.Apply(this);
             ClientSize = new Size(820, 620);
             MinimumSize = new Size(520, 400);
             MinimizeBox = false; ShowInTaskbar = false;

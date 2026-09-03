@@ -37,6 +37,17 @@
   -->
   <Import Project="..\..\core\Supervertaler.Core.props" />
 
+  <!--
+    Embedded as well as set as the exe icon: ExtractAssociatedIcon returns
+    one rescaled frame, and reading the .ico directly lets Windows pick the
+    right frame per window and per DPI.
+  -->
+  <ItemGroup>
+    <EmbeddedResource Include="..\Supervertaler.MemoQ\Resources\sv-icon.ico">
+      <LogicalName>Supervertaler.PromptEditor.Resources.sv-icon.ico</LogicalName>
+    </EmbeddedResource>
+  </ItemGroup>
+
   <ItemGroup>
     <!-- For the bridge client (AutoPrompt): not in net48's default SDK reference set. -->
     <Reference Include="System.Net.Http" />

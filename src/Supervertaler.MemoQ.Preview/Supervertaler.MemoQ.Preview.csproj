@@ -32,6 +32,21 @@
     <PreviewSdkDir>C:\Program Files\memoQ\memoQ PDF Preview\</PreviewSdkDir>
   </PropertyGroup>
 
+  <PropertyGroup>
+    <ApplicationIcon>..\Supervertaler.MemoQ\Resources\sv-icon.ico</ApplicationIcon>
+  </PropertyGroup>
+
+  <!--
+    The tray is the only place this program is ever visible, so it is the
+    one place the mark has to be right. Embedded rather than extracted from
+    the exe so the notification area can take the 16px frame directly.
+  -->
+  <ItemGroup>
+    <EmbeddedResource Include="..\Supervertaler.MemoQ\Resources\sv-icon.ico">
+      <LogicalName>Supervertaler.MemoQ.Preview.Resources.sv-icon.ico</LogicalName>
+    </EmbeddedResource>
+  </ItemGroup>
+
   <ItemGroup>
     <Reference Include="MemoQ.PreviewInterfaces">
       <HintPath>$(PreviewSdkDir)MemoQ.PreviewInterfaces.dll</HintPath>
