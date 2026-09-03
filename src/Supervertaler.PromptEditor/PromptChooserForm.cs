@@ -107,6 +107,39 @@ namespace Supervertaler.PromptEditor
             public override string ToString() => Display;
         }
 
+        /// <summary>
+        /// True when a prompt's own name already spells out both language codes,
+        /// in which case repeating them beside it tells the reader nothing.
+        /// </summary>
+        private static bool NamesTheLanguages(string name, string sourceLang, string targetLang)
+        {
+            if (string.IsNullOrWhiteSpace(name)) return false;
+
+            return name.IndexOf(sourceLang ?? "", StringComparison.OrdinalIgnoreCase) >= 0
+                && name.IndexOf(targetLang ?? "", StringComparison.OrdinalIgnoreCase) >= 0;
+        }
+
+        /// <summary>
+        /// What to append for a prompt that only one product can run. Nothing for
+        /// a prompt available to both, which is most of them - so the note stands
+        /// out rather than becoming wallpaper.
+        ///
+        /// A Trados prompt selected here would run: memoQ fills neither
+        /// {{SELECTION}} nor {{PROJECT}}, and an unfilled placeholder becomes an
+        /// empty string rather than an error, so the model receives an instruction
+        /// with a hole in it and answers anyway.
+        /// </summary>
+        private static string ProductNote(string app)
+        {
+            switch ((app ?? "").Trim().ToLowerInvariant())
+            {
+                case "memoq": return "\u00b7  memoQ only";
+                case "trados": return "\u00b7  Trados only \u2013 memoQ cannot fill its placeholders";
+                case "workbench": return "\u00b7  Workbench only";
+                default: return null;
+            }
+        }
+
         private void Populate()
         {
             var needle = _filter.Text?.Trim();
@@ -123,11 +156,23 @@ namespace Supervertaler.PromptEditor
                 var folder = string.IsNullOrWhiteSpace(p.Category) ? "" : p.Category + "  /  ";
                 var display = folder + p.Name;
 
+                // The language pair, unless the name already carries it. AutoPrompt
+                // names a prompt after its client and its language codes, so a
+                // generated one read "BRANTS (ORFF) dut-NL-eng-GB    dut-NL to
+                // eng-GB" - the same fact twice, in the one list where the point is
+                // to tell prompts apart at a glance.
                 var pair = string.IsNullOrWhiteSpace(p.SourceLang) || string.IsNullOrWhiteSpace(p.TargetLang)
                     ? null
                     : p.SourceLang + " to " + p.TargetLang;
 
-                if (pair != null) display += "      " + pair;
+                if (pair != null && !NamesTheLanguages(p.Name, p.SourceLang, p.TargetLang))
+                    display += "      " + pair;
+
+                // Which product it targets. The tree marks this and the chooser did
+                // not, which is the wrong way round: the tree is for browsing, and
+                // this is the list you pick the prompt memoQ will actually run from.
+                var only = ProductNote(p.App);
+                if (only != null) display += "      " + only;
 
                 if (!string.IsNullOrEmpty(needle)
                     && display.IndexOf(needle, StringComparison.OrdinalIgnoreCase) < 0
