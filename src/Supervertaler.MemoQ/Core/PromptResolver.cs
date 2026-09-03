@@ -139,9 +139,48 @@ namespace Supervertaler.MemoQ.Core
                     match.Content, sourceLanguage, targetLanguage);
             }
 
-            PluginLog.Write($"PromptResolver: '{promptRelativePath}' not found in the library – "
-                + "using the instructions from the options dialog instead");
+            PluginLog.Write("PromptResolver: " + (ExplainUnavailable(promptRelativePath)
+                ?? $"'{promptRelativePath}' not found in the library")
+                + " – using the instructions from the options dialog instead");
+
             return inlineInstructions;
+        }
+
+        /// <summary>
+        /// Why a selected prompt is not being used, or null when it is fine.
+        ///
+        /// The library is shared with Supervertaler for Trados and a prompt can be
+        /// marked for one product only, in which case Available filters it out and
+        /// the translation quietly falls back. That is the right behaviour — a
+        /// Trados prompt is wrong here, down to comment delimiters memoQ's font
+        /// cannot render — but reporting it as "not found in the library" hid the
+        /// reason and made it look like a missing file.
+        /// </summary>
+        public static string ExplainUnavailable(string promptRelativePath)
+        {
+            if (string.IsNullOrWhiteSpace(promptRelativePath)) return null;
+
+            try
+            {
+                var library = new global::Supervertaler.Core.PromptLibrary();
+                var prompt = library.GetAllPrompts().FirstOrDefault(p => p != null
+                    && string.Equals(p.RelativePath, promptRelativePath, StringComparison.OrdinalIgnoreCase));
+
+                if (prompt == null) return null;
+
+                if (!IsForMemoQ(prompt.App))
+                    return $"'{promptRelativePath}' is marked for {prompt.App} and cannot be used in memoQ";
+
+                if (!IsTranslationPrompt(prompt))
+                    return $"'{promptRelativePath}' is not a translation prompt";
+
+                return null;
+            }
+            catch (Exception ex)
+            {
+                PluginLog.Write("PromptResolver: could not explain an unavailable prompt", ex);
+                return null;
+            }
         }
 
         /// <summary>Forces the next lookup to re-read the folder. For the options dialog.</summary>

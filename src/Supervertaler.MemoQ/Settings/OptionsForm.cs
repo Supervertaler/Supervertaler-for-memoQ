@@ -354,7 +354,18 @@ namespace Supervertaler.MemoQ.Settings
                 : stored;
             _inlineInstructions = NormaliseForDisplay(prompt);
             _systemPrompt.Text = _inlineInstructions;
-            PopulatePrompts(SharedSettings.PromptPathOr(g.PromptPath));
+            var selectedPrompt = SharedSettings.PromptPathOr(g.PromptPath);
+            PopulatePrompts(selectedPrompt);
+
+            // The dropdown cannot offer a prompt belonging to the other product,
+            // so a stored one simply vanishes from the list. Say why, once, where
+            // the user can do something about it.
+            var unavailable = PromptResolver.ExplainUnavailable(selectedPrompt);
+            if (unavailable != null)
+            {
+                _status.ForeColor = Color.Firebrick;
+                _status.Text = "Selected prompt not in use: " + unavailable;
+            }
             _maxParallel.Value = Math.Max(1, Math.Min(16, SharedSettings.ParallelOr(g.MaxParallelRequests)));
             _batchSize.Value = Math.Max(1, Math.Min(100, SharedSettings.BatchSizeOr(g.BatchSize)));
             _useTerminology.Checked = SharedSettings.UseTerminologyContextOr(g.UseTerminologyContext);

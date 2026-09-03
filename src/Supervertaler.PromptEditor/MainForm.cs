@@ -494,17 +494,54 @@ namespace Supervertaler.PromptEditor
             return node;
         }
 
+        /// <summary>
+        /// The product this editor belongs to. The library is shared with
+        /// Supervertaler for Trados, and the two need different prompts: memoQ
+        /// delivers single unnumbered segments as well as batches, its tags arrive
+        /// in a different notation, and the translator-comment delimiters had to
+        /// change because memoQ's default font cannot render the Trados ones. A
+        /// prompt written for one is wrong in the other, and until now the only
+        /// way to see which was which was to open it.
+        /// </summary>
+        private const string ThisApp = "memoq";
+
         private static TreeNode BuildLeaf(PromptTemplate p)
         {
             var label = p.Name;
             if (p.IsReadOnly) label += "  (read-only)";
             if (p.IsTransform) label += "  [transform]";
 
+            // Named only when it is not for both, so the common case stays quiet
+            // and a suffix always means something.
+            // Quotes because at least one prompt in the live library writes the
+            // value as "memoq" with them; the flag means the same either way.
+            var app = (p.App ?? "both").Trim().Trim('"', ''');
+            var forThisApp = app.Length == 0
+                || app.Equals("both", StringComparison.OrdinalIgnoreCase)
+                || app.Equals(ThisApp, StringComparison.OrdinalIgnoreCase);
+
+            if (!app.Equals("both", StringComparison.OrdinalIgnoreCase) && app.Length > 0)
+                label += "   · " + Describe(app);
+
+            // Dimmed rather than coloured: this is one binary fact, and dimming
+            // already carries "does not apply here" without asking anyone to learn
+            // a colour code or to be able to tell two colours apart.
             return new TreeNode(label)
             {
                 Tag = p,
-                ForeColor = p.IsReadOnly ? SystemColors.GrayText : SystemColors.WindowText
+                ForeColor = p.IsReadOnly || !forThisApp ? SystemColors.GrayText : SystemColors.WindowText,
+                ToolTipText = forThisApp ? null
+                    : "This prompt is marked for " + Describe(app) + ". memoQ will not offer it, "
+                      + "and will fall back to the instructions in its own settings if it is somehow selected."
             };
+        }
+
+        private static string Describe(string app)
+        {
+            if (app.Equals("memoq", StringComparison.OrdinalIgnoreCase)) return "memoQ only";
+            if (app.Equals("trados", StringComparison.OrdinalIgnoreCase)) return "Trados only";
+            if (app.Equals("workbench", StringComparison.OrdinalIgnoreCase)) return "Workbench only";
+            return app;
         }
 
         private void TreeBeforeSelect(object sender, TreeViewCancelEventArgs e)
