@@ -270,7 +270,9 @@ namespace Supervertaler.MemoQ
                     + $"{translation?.NumberOfInlineTags ?? 0} tag(s) | "
                     + $"recall: used {recalled?.Count ?? 0} of "
                     + $"{DocumentMemory.CountFor(context.MemoryKey)} held | "
-                    + $"terms: {ownTerms?.Count ?? 0}");
+                    + $"terms: {ownTerms?.Count ?? 0}"
+                    + DescribeForwardedMatch(bundle)
+                    + DescribeRowState(bundle));
 
                 return new TranslationResult
                 {
@@ -296,5 +298,34 @@ namespace Supervertaler.MemoQ
                 };
             }
         }
+        /// <summary>
+        /// Whether memoQ forwarded a fuzzy TM match for this segment, and how big
+        /// it was. Sizes only: the match is a customer's own translation.
+        ///
+        /// Added because the feature was otherwise unverifiable. Fuzzy forwarding
+        /// changes nothing visible except the wording that comes back, so without
+        /// this line the only way to tell it had worked was to read the output and
+        /// guess.
+        /// </summary>
+        private static string DescribeForwardedMatch(TranslationBundle bundle)
+        {
+            var match = bundle?.SegmentContext?.FirstOrDefault(
+                i => i != null && string.Equals(i.Kind, PromptBuilder.FuzzyMatchKind, StringComparison.OrdinalIgnoreCase));
+
+            if (match?.SourceSegment == null || match.TargetSegment == null) return " | fuzzy: none";
+
+            return $" | fuzzy: {match.SourceSegment.PlainText?.Length ?? 0} src chars -> "
+                + $"{match.TargetSegment.PlainText?.Length ?? 0} target chars";
+        }
+
+        /// <summary>memoQ's state for the row, when it sent one.</summary>
+        private static string DescribeRowState(TranslationBundle bundle)
+        {
+            var state = bundle?.SegmentContext?.FirstOrDefault(
+                i => i != null && string.Equals(i.Kind, PromptBuilder.RowStatusKind, StringComparison.OrdinalIgnoreCase));
+
+            return state == null ? string.Empty : $" | row: {RowStatus.Describe((int)state.NumericValue)}";
+        }
+
     }
 }
