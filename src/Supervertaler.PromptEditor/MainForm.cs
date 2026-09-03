@@ -95,6 +95,11 @@ namespace Supervertaler.PromptEditor
         {
             try
             {
+                // The built-in prompts are not RetagFiles' to rename - their names
+                // belong to the definitions - so they are brought into line first,
+                // by the definitions themselves.
+                _library.SyncDefaultPromptApps();
+
                 var moved = _library.RetagFiles();
                 _lastRetag = moved;
                 if (moved.Count == 0) return;
