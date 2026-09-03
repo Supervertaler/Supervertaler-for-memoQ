@@ -62,14 +62,65 @@ namespace Supervertaler.PromptEditor
         private bool _highlighting;
         private bool _dirty;
 
-        private readonly string _openAtRelativePath;
+        private string _openAtRelativePath;
 
         public MainForm(string openAtRelativePath)
         {
             _openAtRelativePath = openAtRelativePath;
             BuildUi();
+            RetagPromptFiles();
             LoadTree();
             SelectPrompt(_openAtRelativePath);
+        }
+
+        /// <summary>
+        /// Gives every prompt file the marker its app field says it should have,
+        /// and repairs the active-prompt setting for anything that moved.
+        ///
+        /// Cheap and idempotent, so it runs at every start rather than once behind
+        /// a flag: a prompt whose product changed in another session, or a file
+        /// renamed by hand in Explorer, is corrected the next time the editor
+        /// opens. Nothing is renamed unless the marker is actually wrong.
+        ///
+        /// One thing this cannot repair is the Trados plugin's own record of its
+        /// selected prompt, which lives in its settings and is not ours to write.
+        /// A Trados-only prompt that gets its marker for the first time therefore
+        /// has to be re-selected there once.
+        /// </summary>
+        private void RetagPromptFiles()
+        {
+            try
+            {
+                var moved = _library.RetagFiles();
+                if (moved.Count == 0) return;
+
+                var active = SharedSettings.PromptPath;
+                foreach (var m in moved)
+                {
+                    if (string.Equals(m.OldRelativePath, active, StringComparison.OrdinalIgnoreCase))
+                    {
+                        SharedSettings.PromptPath = m.NewRelativePath;
+                        break;
+                    }
+                }
+
+                // Anything opened by path from the command line moved too.
+                if (_openAtRelativePath != null)
+                {
+                    foreach (var m in moved)
+                    {
+                        if (string.Equals(m.OldRelativePath, _openAtRelativePath, StringComparison.OrdinalIgnoreCase))
+                        {
+                            _openAtRelativePath = m.NewRelativePath;
+                            break;
+                        }
+                    }
+                }
+            }
+            catch (Exception)
+            {
+                // A library that cannot be tidied is still a library worth opening.
+            }
         }
 
         // -- construction --------------------------------------------------
