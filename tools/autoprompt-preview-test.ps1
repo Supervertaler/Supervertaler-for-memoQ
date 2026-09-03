@@ -46,7 +46,16 @@ foreach ($i in 1..30) {
     $partType.GetField('DocumentName').SetValue($p, 'Preview document.docx')
     $partType.GetField('SourceLangCode').SetValue($p, 'dut-NL')
     $partType.GetField('TargetLangCode').SetValue($p, 'eng-GB')
-    $partType.GetField('Source').SetValue($p, "De uitvinding betreft een werkwijze voor het verlagen van methaanemissie, paragraaf $i.")
+
+    # Every other paragraph carries a tag pair, and one of them writes a
+    # subscript the tagged way while the rest use the Unicode character - the
+    # mixed representation that a project prompt has to notice and lock.
+    $body = if ($i % 2 -eq 0) {
+        "De uitvinding verlaagt de CH<t1>4</t1>-emissie, paragraaf $i."
+    } else {
+        "De uitvinding verlaagt de CH$([char]0x2084)-emissie, paragraaf $i."
+    }
+    $partType.GetField('Source').SetValue($p, $body)
     $partType.GetField('Target').SetValue($p, '')
     $parts.Add($p)
 }
@@ -56,6 +65,24 @@ $preview.GetMethod('NoteTool').Invoke($null, [object[]]@($true)) | Out-Null
 
 $bridge = [Activator]::CreateInstance($bridgeType, $true)
 $doc = $bridgeType.GetMethod('ResolveAutoPromptSource', $NonPublicInstance).Invoke($bridge, [object[]]@('no-such-key'))
+
+# ---- tags reach the drafting call, and only the drafting call ------------
+# A project prompt has to pin down tag behaviour, and it cannot describe what it
+# was never shown - the memoQ prompt for a real job missed a mixed subscript
+# representation the Trados one caught, purely because the markers were stripped
+# before drafting. Analysis is the opposite case: a tag marker is not a word,
+# and letting one behave like a keyword skews domain detection and glossary
+# matching alike.
+$docType = $doc.GetType()
+$tagged = $docType.GetField('Sources').GetValue($doc)
+$plain = $docType.GetField('Plain').GetValue($doc)
+
+$taggedHits = @($tagged | Where-Object { $_ -like '*<t1>*' }).Count
+$plainHits = @($plain | Where-Object { $_ -like '*<t1>*' }).Count
+
+Check ($taggedHits -eq 15) "tag markers survive for drafting: $taggedHits of 30 paragraphs"
+Check ($plainHits -eq 0) "and are gone from the text analysis reads: $plainHits"
+Check ($plain.Count -eq $tagged.Count) "both views cover the same paragraphs: $($plain.Count)"
 
 # ---- the plan ------------------------------------------------------------
 $requestType = $bridgeType.GetNestedType('AutoPromptRequest', [Reflection.BindingFlags]'NonPublic,Public')
@@ -97,6 +124,7 @@ $meta = $build.Invoke($null, [object[]]@($ctx))
 
 Check ($meta.Length -gt 1000) "the meta-prompt is assembled: $($meta.Length) chars"
 Check ($meta -like '*paragraaf 30*') 'the preview contains the document text the draft would send'
+Check ($meta -like '*CH<t1>4</t1>*') 'the drafting model can see the tags it is being asked to write rules about'
 Check ($meta -like '*UK spelling*') 'the preview contains the briefing'
 
 # Same context object, so the two can only agree. Building it twice must give

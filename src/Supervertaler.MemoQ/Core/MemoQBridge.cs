@@ -804,13 +804,13 @@ namespace Supervertaler.MemoQ.Core
             var sourceLang = PromptBuilder.DescribeLanguage(doc.SourceLangCode);
             var targetLang = PromptBuilder.DescribeLanguage(doc.TargetLangCode);
 
-            var analysis = global::Supervertaler.Core.DocumentAnalyzer.Analyze(sources);
+            var analysis = global::Supervertaler.Core.DocumentAnalyzer.Analyze(doc.Plain);
 
             // Glossary hits across the whole document, deduplicated.
             var terms = new List<global::Supervertaler.Core.Models.TermEntry>();
             if (req.IncludeTerms)
             {
-                var matches = TermIndex.Find(SharedSettings.GlossaryPath, string.Join("\n", sources))
+                var matches = TermIndex.Find(SharedSettings.GlossaryPath, string.Join("\n", doc.Plain))
                               ?? (IReadOnlyList<TermIndex.Match>)new TermIndex.Match[0];
                 terms = matches
                     .GroupBy(m => m.Entry.Source + "\t" + m.Entry.Target, StringComparer.OrdinalIgnoreCase)
@@ -855,7 +855,7 @@ namespace Supervertaler.MemoQ.Core
             }
             else if (mayClassify)
             {
-                Classify(sources, analysis.PrimaryDomain, provider, general.Model, apiKey, endpoint,
+                Classify(doc.Plain, analysis.PrimaryDomain, provider, general.Model, apiKey, endpoint,
                     out detectedDomain, out description);
             }
             else
@@ -979,7 +979,24 @@ namespace Supervertaler.MemoQ.Core
         /// </summary>
         private sealed class AutoPromptSource
         {
+            /// <summary>
+            /// The segments as they arrive, tag markers and all. This is what the
+            /// drafting call sees, because a document's tag behaviour is one of the
+            /// things a project prompt most needs to pin down and it is invisible
+            /// once the markers are gone. The prompt AutoPrompt wrote for the
+            /// Trados side of the same job devotes a whole section to this document
+            /// mixing tagged digits with Unicode subscripts; the memoQ side could
+            /// not, because the evidence was stripped before drafting.
+            /// </summary>
             public List<string> Sources = new List<string>();
+
+            /// <summary>
+            /// The same segments with the markers removed, for the passes that want
+            /// prose: keyword analysis, domain classification and glossary
+            /// matching. A tag marker is not a word, and letting one act like one
+            /// skews all three.
+            /// </summary>
+            public List<string> Plain = new List<string>();
             public string SourceLangCode;
             public string TargetLangCode;
             public string Client;
@@ -1009,7 +1026,8 @@ namespace Supervertaler.MemoQ.Core
 
             if (captured != null)
             {
-                result.Sources = captured.Sources.Select(TagBridge.StripTagMarkers).ToList();
+                result.Sources = captured.Sources.ToList();
+                result.Plain = result.Sources.Select(TagBridge.StripTagMarkers).ToList();
                 result.Origin = "captured segments";
             }
 
@@ -1027,9 +1045,11 @@ namespace Supervertaler.MemoQ.Core
                 if (live != null && live.Rows.Count > result.Sources.Count)
                 {
                     result.Sources = live.Rows
-                        .Select(r => TagBridge.StripTagMarkers(r.Source ?? string.Empty))
-                        .Where(t => !string.IsNullOrWhiteSpace(t))
+                        .Select(r => r.Source ?? string.Empty)
+                        .Where(t => !string.IsNullOrWhiteSpace(TagBridge.StripTagMarkers(t)))
                         .ToList();
+
+                    result.Plain = result.Sources.Select(TagBridge.StripTagMarkers).ToList();
 
                     result.DocumentName = live.DocumentName ?? result.DocumentName;
                     result.Origin = "the live document";
@@ -1112,7 +1132,8 @@ namespace Supervertaler.MemoQ.Core
                 return;
             }
 
-            var sources = doc.Sources;
+            // Classification reads prose: tag markers are not evidence of a domain.
+            var sources = doc.Plain;
             var analysis = global::Supervertaler.Core.DocumentAnalyzer.Analyze(sources);
 
             Classify(sources, analysis.PrimaryDomain,
@@ -1232,6 +1253,14 @@ namespace Supervertaler.MemoQ.Core
             "- Inline formatting arrives as tag markers such as <t1>...</t1> or <b>...</b>. The prompt must " +
             "require every marker to be reproduced exactly, in the equivalent position, never invented, dropped " +
             "or renumbered.\n" +
+            "- The document sample below retains its tag markers, so inspect them. Note any pattern worth " +
+            "locking: a symbol or digit that appears sometimes inside a tag pair and sometimes as a plain " +
+            "Unicode character, tags wrapping nothing but a symbol, or tags nested unusually. Where the same " +
+            "thing is represented two ways in one document, the prompt must forbid harmonising it in either " +
+            "direction: normalising a tagged digit into a Unicode character destroys a tag pair, and expanding " +
+            "a Unicode character into a tagged digit invents one. Do NOT state which notation the runtime uses " +
+            "as though it were fixed \u2013 the sample may have been rendered by a different channel than the " +
+            "one that will deliver the segments. State the rule in terms of what arrives.\n" +
             "- The runtime appends, per request, the glossary terms found in that request's segments and up to " +
             "five of the translator's own CONFIRMED translations from this document as reference. The prompt " +
             "should say that confirmed translations supplied at request time take precedence over the prompt's " +
