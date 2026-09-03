@@ -292,6 +292,9 @@ namespace Supervertaler.MemoQ.Core
                 case "GET /v1/active": HandleActiveSegment(ctx); return;
                 case "POST /v1/goto": HandleGoTo(ctx); return;
                 case "GET /v1/qa-check": HandleQaCheck(ctx); return;
+                case "GET /v1/supermemory-banks": HandleSuperMemoryBanks(ctx); return;
+                case "GET /v1/supermemory-context": HandleSuperMemoryContext(ctx); return;
+                case "GET /v1/supermemory-search": HandleSuperMemorySearch(ctx); return;
                 case "GET /v1/inconsistencies": HandleInconsistencies(ctx); return;
                 case "POST /v1/glossary/activate": HandleGlossaryActivate(ctx); return;
                 default:
@@ -1630,6 +1633,85 @@ namespace Supervertaler.MemoQ.Core
 
             if (doc == null) { problem = "No document has been seen yet. Open one in memoQ and click into a segment."; return null; }
             return PreviewStore.Rows(doc.DocumentGuid);
+        }
+
+        // ── SuperMemory ──────────────────────────────────────────────
+        //
+        // The translator's own notes on a client: terminology decisions and the
+        // reasoning behind them, style rules, standing instructions. Read-only,
+        // and read on demand rather than injected: this is the path used when
+        // someone says "look at the memory bank for this project" mid-chat.
+        //
+        // Query-string parameter names match the Trados bridge exactly, because
+        // one MCP server exe serves both products.
+
+        private void HandleSuperMemoryBanks(HttpListenerContext ctx)
+        {
+            TryWrite(ctx, 200, Json(SuperMemory.Banks(SharedSettings.MemoryBank)));
+        }
+
+        private void HandleSuperMemoryContext(HttpListenerContext ctx)
+        {
+            var q = ctx.Request.QueryString;
+
+            // No bank named falls back to the one selected for this project,
+            // which is normally nothing. It never falls back to "whichever was
+            // used last": a bank supplies one client's terminology, and the
+            // wrong one reads exactly like the right one.
+            var bank = Trim(q["bank"]) ?? SharedSettings.MemoryBank;
+
+            int budget;
+            if (!int.TryParse(q["tokenBudget"], out budget)) budget = 0;
+
+            var context = _context;
+
+            TryWrite(ctx, 200, Json(SuperMemory.Context(
+                bank,
+                Trim(q["q"]),
+                Trim(q["domain"]),
+                budget,
+                PromptBuilder.DescribeLanguage(context?.SourceLangCode),
+                PromptBuilder.DescribeLanguage(context?.TargetLangCode),
+                LatestClientName())));
+        }
+
+        private void HandleSuperMemorySearch(HttpListenerContext ctx)
+        {
+            var q = ctx.Request.QueryString;
+
+            int limit;
+            if (!int.TryParse(q["limit"], out limit)) limit = 0;
+
+            TryWrite(ctx, 200, Json(SuperMemory.Search(
+                Trim(q["bank"]) ?? SharedSettings.MemoryBank,
+                Trim(q["q"]),
+                limit)));
+        }
+
+        /// <summary>
+        /// The memoQ project's Client field, from the most recent document seen.
+        ///
+        /// Only a label: the reader uses it to title the block, since the bank
+        /// itself is the selection. Null is a perfectly good answer.
+        /// </summary>
+        private static string LatestClientName()
+        {
+            try
+            {
+                return CaptureStore.Snapshot()
+                    .Select(d => d?.Client)
+                    .FirstOrDefault(c => !string.IsNullOrWhiteSpace(c));
+            }
+            catch (Exception)
+            {
+                return null;
+            }
+        }
+
+        private static string Trim(string value)
+        {
+            if (string.IsNullOrWhiteSpace(value)) return null;
+            return value.Trim();
         }
 
         private void HandleQaCheck(HttpListenerContext ctx)

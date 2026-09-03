@@ -5,7 +5,10 @@
       "name": "help",
       "access": "read",
       "description": "Show the user a curated menu of what they can ask this memoQ assistant to do. ALWAYS call this when the user asks what they can do, what you can do, what commands or tools are available, or asks for help - then present the returned card verbatim (it is Markdown). It also explains the one thing that surprises everyone: translations are STAGED, not written, and reach memoQ when the user runs Pre-translate.",
-      "inputSchema": { "type": "object", "properties": {} },
+      "inputSchema": {
+        "type": "object",
+        "properties": {}
+      },
       "method": "GET",
       "path": "/v1/help",
       "paramMap": {},
@@ -16,7 +19,10 @@
       "name": "get_project",
       "access": "read",
       "description": "What the plugin knows about the memoQ project: language pair, client/domain/subject, each captured document with its segment and confirmed-pair counts, and how many translations are currently staged. The plugin only sees what memoQ sends it - if this comes back empty, ask the user to run Pre-translate once (any model, even a cheap one) or visit some segments, and the picture fills in.",
-      "inputSchema": { "type": "object", "properties": {} },
+      "inputSchema": {
+        "type": "object",
+        "properties": {}
+      },
       "method": "GET",
       "path": "/v1/project",
       "paramMap": {},
@@ -30,14 +36,39 @@
       "inputSchema": {
         "type": "object",
         "properties": {
-          "document": { "type": ["string", "null"], "description": "Document key from get_project. Omit for the most recently active document.", "default": null },
-          "offset": { "type": ["integer", "null"], "description": "First segment to return (0-based).", "default": null },
-          "limit": { "type": ["integer", "null"], "description": "Maximum segments to return (default 200, cap 500).", "default": null }
+          "document": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "Document key from get_project. Omit for the most recently active document.",
+            "default": null
+          },
+          "offset": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "description": "First segment to return (0-based).",
+            "default": null
+          },
+          "limit": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "description": "Maximum segments to return (default 200, cap 500).",
+            "default": null
+          }
         }
       },
       "method": "GET",
       "path": "/v1/segments",
-      "paramMap": { "document": "document", "offset": "offset", "limit": "limit" },
+      "paramMap": {
+        "document": "document",
+        "offset": "offset",
+        "limit": "limit"
+      },
       "fixedQuery": {},
       "fixedBody": {}
     },
@@ -45,7 +76,10 @@
       "name": "get_active_segment",
       "access": "read",
       "description": "Where the user's cursor is in memoQ right now. Returns the paragraph (part) it is in with full source and target, plus activeSource/activeTarget: the sentence within that paragraph that is actually selected – the memoQ grid row – when the paragraph has several. Needs the Supervertaler preview tool running (memoQ starts it automatically once registered); if it is not, this says so. Use before requests such as 'translate this one' or 'what does this segment say'.",
-      "inputSchema": { "type": "object", "properties": {} },
+      "inputSchema": {
+        "type": "object",
+        "properties": {}
+      },
       "method": "GET",
       "path": "/v1/active",
       "paramMap": {},
@@ -59,16 +93,57 @@
       "inputSchema": {
         "type": "object",
         "properties": {
-          "index": { "type": ["integer", "null"], "description": "1-based index as returned by get_segments.", "default": null },
-          "partId": { "type": ["string", "null"], "description": "Alternatively the exact part id from get_segments / get_active_segment.", "default": null },
-          "document": { "type": ["string", "null"], "description": "Document GUID or name when several are open. Omit for the most recently active.", "default": null },
-          "sourceStart": { "type": ["integer", "null"], "description": "Optional: 0-based start of the sentence within the paragraph's source text.", "default": null },
-          "sourceLength": { "type": ["integer", "null"], "description": "Optional: length of that sentence.", "default": null }
+          "index": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "description": "1-based index as returned by get_segments.",
+            "default": null
+          },
+          "partId": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "Alternatively the exact part id from get_segments / get_active_segment.",
+            "default": null
+          },
+          "document": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "Document GUID or name when several are open. Omit for the most recently active.",
+            "default": null
+          },
+          "sourceStart": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "description": "Optional: 0-based start of the sentence within the paragraph's source text.",
+            "default": null
+          },
+          "sourceLength": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "description": "Optional: length of that sentence.",
+            "default": null
+          }
         }
       },
       "method": "POST",
       "path": "/v1/goto",
-      "paramMap": { "index": "index", "partId": "partId", "document": "document", "sourceStart": "sourceStart", "sourceLength": "sourceLength" },
+      "paramMap": {
+        "index": "index",
+        "partId": "partId",
+        "document": "document",
+        "sourceStart": "sourceStart",
+        "sourceLength": "sourceLength"
+      },
       "fixedQuery": {},
       "fixedBody": {}
     },
@@ -79,14 +154,33 @@
       "inputSchema": {
         "type": "object",
         "properties": {
-          "limit": { "type": ["integer", "null"], "description": "Maximum issues to return (default 50, cap 200).", "default": null },
-          "document": { "type": ["string", "null"], "description": "Document GUID or name when several are open.", "default": null }
+          "limit": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "description": "Maximum issues to return (default 50, cap 200).",
+            "default": null
+          },
+          "document": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "Document GUID or name when several are open.",
+            "default": null
+          }
         }
       },
       "method": "GET",
       "path": "/v1/qa-check",
-      "paramMap": { "limit": "limit", "document": "document" },
-      "fixedQuery": { "type": "numbers" },
+      "paramMap": {
+        "limit": "limit",
+        "document": "document"
+      },
+      "fixedQuery": {
+        "type": "numbers"
+      },
       "fixedBody": {}
     },
     {
@@ -96,14 +190,33 @@
       "inputSchema": {
         "type": "object",
         "properties": {
-          "limit": { "type": ["integer", "null"], "description": "Maximum issues to return (default 50, cap 200).", "default": null },
-          "document": { "type": ["string", "null"], "description": "Document GUID or name when several are open.", "default": null }
+          "limit": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "description": "Maximum issues to return (default 50, cap 200).",
+            "default": null
+          },
+          "document": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "Document GUID or name when several are open.",
+            "default": null
+          }
         }
       },
       "method": "GET",
       "path": "/v1/qa-check",
-      "paramMap": { "limit": "limit", "document": "document" },
-      "fixedQuery": { "type": "tags" },
+      "paramMap": {
+        "limit": "limit",
+        "document": "document"
+      },
+      "fixedQuery": {
+        "type": "tags"
+      },
       "fixedBody": {}
     },
     {
@@ -113,14 +226,33 @@
       "inputSchema": {
         "type": "object",
         "properties": {
-          "limit": { "type": ["integer", "null"], "description": "Maximum issues to return (default 50, cap 200).", "default": null },
-          "document": { "type": ["string", "null"], "description": "Document GUID or name when several are open.", "default": null }
+          "limit": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "description": "Maximum issues to return (default 50, cap 200).",
+            "default": null
+          },
+          "document": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "Document GUID or name when several are open.",
+            "default": null
+          }
         }
       },
       "method": "GET",
       "path": "/v1/qa-check",
-      "paramMap": { "limit": "limit", "document": "document" },
-      "fixedQuery": { "type": "nbsp" },
+      "paramMap": {
+        "limit": "limit",
+        "document": "document"
+      },
+      "fixedQuery": {
+        "type": "nbsp"
+      },
       "fixedBody": {}
     },
     {
@@ -130,14 +262,33 @@
       "inputSchema": {
         "type": "object",
         "properties": {
-          "limit": { "type": ["integer", "null"], "description": "Maximum issues to return (default 50, cap 200).", "default": null },
-          "document": { "type": ["string", "null"], "description": "Document GUID or name when several are open.", "default": null }
+          "limit": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "description": "Maximum issues to return (default 50, cap 200).",
+            "default": null
+          },
+          "document": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "Document GUID or name when several are open.",
+            "default": null
+          }
         }
       },
       "method": "GET",
       "path": "/v1/qa-check",
-      "paramMap": { "limit": "limit", "document": "document" },
-      "fixedQuery": { "type": "terminology" },
+      "paramMap": {
+        "limit": "limit",
+        "document": "document"
+      },
+      "fixedQuery": {
+        "type": "terminology"
+      },
       "fixedBody": {}
     },
     {
@@ -147,14 +298,39 @@
       "inputSchema": {
         "type": "object",
         "properties": {
-          "limit": { "type": ["integer", "null"], "description": "Maximum groups to return (default 50, cap 500).", "default": null },
-          "offset": { "type": ["integer", "null"], "description": "Groups to skip, for paging.", "default": null },
-          "document": { "type": ["string", "null"], "description": "Document GUID or name when several are open.", "default": null }
+          "limit": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "description": "Maximum groups to return (default 50, cap 500).",
+            "default": null
+          },
+          "offset": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "description": "Groups to skip, for paging.",
+            "default": null
+          },
+          "document": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "Document GUID or name when several are open.",
+            "default": null
+          }
         }
       },
       "method": "GET",
       "path": "/v1/inconsistencies",
-      "paramMap": { "limit": "limit", "offset": "offset", "document": "document" },
+      "paramMap": {
+        "limit": "limit",
+        "offset": "offset",
+        "document": "document"
+      },
       "fixedQuery": {},
       "fixedBody": {}
     },
@@ -165,13 +341,30 @@
       "inputSchema": {
         "type": "object",
         "properties": {
-          "document": { "type": ["string", "null"], "description": "Document key from get_project. Omit for the most recently active document.", "default": null },
-          "limit": { "type": ["integer", "null"], "description": "Maximum pairs (default 100, cap 500).", "default": null }
+          "document": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "Document key from get_project. Omit for the most recently active document.",
+            "default": null
+          },
+          "limit": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "description": "Maximum pairs (default 100, cap 500).",
+            "default": null
+          }
         }
       },
       "method": "GET",
       "path": "/v1/confirmed",
-      "paramMap": { "document": "document", "limit": "limit" },
+      "paramMap": {
+        "document": "document",
+        "limit": "limit"
+      },
       "fixedQuery": {},
       "fixedBody": {}
     },
@@ -182,13 +375,20 @@
       "inputSchema": {
         "type": "object",
         "properties": {
-          "text": { "type": "string", "description": "Text to scan for glossary terms - a segment, a phrase, or a single word." }
+          "text": {
+            "type": "string",
+            "description": "Text to scan for glossary terms - a segment, a phrase, or a single word."
+          }
         },
-        "required": ["text"]
+        "required": [
+          "text"
+        ]
       },
       "method": "GET",
       "path": "/v1/terms",
-      "paramMap": { "text": "text" },
+      "paramMap": {
+        "text": "text"
+      },
       "fixedQuery": {},
       "fixedBody": {}
     },
@@ -199,15 +399,35 @@
       "inputSchema": {
         "type": "object",
         "properties": {
-          "source": { "type": "string", "description": "Source-language term." },
-          "target": { "type": "string", "description": "Approved target-language term (or the banned term when forbidden=true)." },
-          "forbidden": { "type": ["boolean", "null"], "description": "True to mark the target as forbidden rather than preferred.", "default": null }
+          "source": {
+            "type": "string",
+            "description": "Source-language term."
+          },
+          "target": {
+            "type": "string",
+            "description": "Approved target-language term (or the banned term when forbidden=true)."
+          },
+          "forbidden": {
+            "type": [
+              "boolean",
+              "null"
+            ],
+            "description": "True to mark the target as forbidden rather than preferred.",
+            "default": null
+          }
         },
-        "required": ["source", "target"]
+        "required": [
+          "source",
+          "target"
+        ]
       },
       "method": "POST",
       "path": "/v1/terms",
-      "paramMap": { "source": "source", "target": "target", "forbidden": "forbidden" },
+      "paramMap": {
+        "source": "source",
+        "target": "target",
+        "forbidden": "forbidden"
+      },
       "fixedQuery": {},
       "fixedBody": {}
     },
@@ -224,19 +444,40 @@
             "items": {
               "type": "object",
               "properties": {
-                "source": { "type": "string", "description": "Segment source text, verbatim from get_segments." },
-                "target": { "type": "string", "description": "Your translation, tags reproduced." }
+                "source": {
+                  "type": "string",
+                  "description": "Segment source text, verbatim from get_segments."
+                },
+                "target": {
+                  "type": "string",
+                  "description": "Your translation, tags reproduced."
+                }
               },
-              "required": ["source", "target"]
+              "required": [
+                "source",
+                "target"
+              ]
             }
           },
-          "label": { "type": ["string", "null"], "description": "Shown to the user as the origin of these translations (default \"Claude\").", "default": null }
+          "label": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "Shown to the user as the origin of these translations (default \"Claude\").",
+            "default": null
+          }
         },
-        "required": ["pairs"]
+        "required": [
+          "pairs"
+        ]
       },
       "method": "POST",
       "path": "/v1/stage",
-      "paramMap": { "pairs": "pairs", "label": "label" },
+      "paramMap": {
+        "pairs": "pairs",
+        "label": "label"
+      },
       "fixedQuery": {},
       "fixedBody": {}
     },
@@ -244,7 +485,10 @@
       "name": "get_staged",
       "access": "read",
       "description": "List everything currently staged, with how many times memoQ has already pulled each one (timesServed > 0 means it reached the grid at least once).",
-      "inputSchema": { "type": "object", "properties": {} },
+      "inputSchema": {
+        "type": "object",
+        "properties": {}
+      },
       "method": "GET",
       "path": "/v1/staged",
       "paramMap": {},
@@ -255,7 +499,10 @@
       "name": "clear_staged",
       "access": "write",
       "description": "Clear the staging area. Use when the user wants to start over, or after a job is delivered. Does not touch anything already pulled into memoQ.",
-      "inputSchema": { "type": "object", "properties": {} },
+      "inputSchema": {
+        "type": "object",
+        "properties": {}
+      },
       "method": "POST",
       "path": "/v1/staged/clear",
       "paramMap": {},
@@ -266,7 +513,10 @@
       "name": "list_prompts",
       "access": "read",
       "description": "List the prompts in the shared Supervertaler prompt library (name, path, category, description). The same library the Trados plugin and the prompt editor use.",
-      "inputSchema": { "type": "object", "properties": {} },
+      "inputSchema": {
+        "type": "object",
+        "properties": {}
+      },
       "method": "GET",
       "path": "/v1/prompts",
       "paramMap": {},
@@ -280,13 +530,20 @@
       "inputSchema": {
         "type": "object",
         "properties": {
-          "path": { "type": "string", "description": "Relative path of the prompt, e.g. \"Translate/Default/Default Translation Prompt.md\"." }
+          "path": {
+            "type": "string",
+            "description": "Relative path of the prompt, e.g. \"Translate/Default/Default Translation Prompt.md\"."
+          }
         },
-        "required": ["path"]
+        "required": [
+          "path"
+        ]
       },
       "method": "GET",
       "path": "/v1/prompt",
-      "paramMap": { "path": "path" },
+      "paramMap": {
+        "path": "path"
+      },
       "fixedQuery": {},
       "fixedBody": {}
     },
@@ -297,16 +554,132 @@
       "inputSchema": {
         "type": "object",
         "properties": {
-          "name": { "type": "string", "description": "Prompt name, e.g. \"Acme patent EN-NL\"." },
-          "category": { "type": ["string", "null"], "description": "Library folder (default \"Translate\"). Must start with \"Translate\" to appear in memoQ's dropdown.", "default": null },
-          "description": { "type": ["string", "null"], "description": "One-line description shown in pickers.", "default": null },
-          "content": { "type": "string", "description": "The prompt body (Markdown)." }
+          "name": {
+            "type": "string",
+            "description": "Prompt name, e.g. \"Acme patent EN-NL\"."
+          },
+          "category": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "Library folder (default \"Translate\"). Must start with \"Translate\" to appear in memoQ's dropdown.",
+            "default": null
+          },
+          "description": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "One-line description shown in pickers.",
+            "default": null
+          },
+          "content": {
+            "type": "string",
+            "description": "The prompt body (Markdown)."
+          }
         },
-        "required": ["name", "content"]
+        "required": [
+          "name",
+          "content"
+        ]
       },
       "method": "POST",
       "path": "/v1/prompt",
-      "paramMap": { "name": "name", "category": "category", "description": "description", "content": "content" },
+      "paramMap": {
+        "name": "name",
+        "category": "category",
+        "description": "description",
+        "content": "content"
+      },
+      "fixedQuery": {},
+      "fixedBody": {}
+    },
+    {
+      "name": "list_supermemory_banks",
+      "access": "read",
+      "description": "List the translator's memory banks - their own notes on a client: terminology decisions and the reasoning behind them, style rules, standing instructions. Call this FIRST when the user says something like \"check the memory bank for this project\", so you can name the right one. Do not guess a bank from the project name: each bank holds one client's conventions and the wrong one is worse than none. The bank named _shared is not a sibling - it layers underneath whichever bank you read and loses to it where they disagree.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {}
+      },
+      "method": "GET",
+      "path": "/v1/supermemory-banks",
+      "paramMap": {},
+      "fixedQuery": {},
+      "fixedBody": {}
+    },
+    {
+      "name": "get_supermemory_context",
+      "access": "read",
+      "description": "Read a memory bank as a formatted block: client brief, style rules and terminology decisions, with the _shared house defaults layered underneath. These are choices the translator made deliberately and cannot be derived from the source text, so contradicting one is an error rather than a stylistic difference. Use it before translating or advising on a project. The reply's \"trimmed\" list names anything that did not fit the token budget - if it is present you do NOT have the whole bank, and can ask again with a larger tokenBudget.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "bank": {
+            "type": "string",
+            "description": "Bank folder name, from list_supermemory_banks. An unknown name is an error rather than a silent fall back to another bank."
+          },
+          "q": {
+            "type": "string",
+            "description": "Optional. Bias retrieval towards this text, e.g. the term being asked about."
+          },
+          "domain": {
+            "type": "string",
+            "description": "Optional subject-matter hint, e.g. \"patent\"."
+          },
+          "tokenBudget": {
+            "type": "integer",
+            "description": "Optional. Defaults to 6000, which is deliberately small because this answer stays in the conversation and is re-sent every turn. Raise it only when \"trimmed\" says you are missing something."
+          }
+        },
+        "required": [
+          "bank"
+        ]
+      },
+      "method": "GET",
+      "path": "/v1/supermemory-context",
+      "paramMap": {
+        "bank": "bank",
+        "q": "q",
+        "domain": "domain",
+        "tokenBudget": "tokenBudget"
+      },
+      "fixedQuery": {},
+      "fixedBody": {}
+    },
+    {
+      "name": "search_supermemory",
+      "access": "read",
+      "description": "Keyword-search a memory bank and the _shared overlay, returning scored snippets with their file paths. Use it to check whether the translator has already decided something - a term, a phrasing, a client preference - before you invent an answer. The reply lists which banks were searched: no hits means it is not written down in those banks, which is different from it not mattering.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "bank": {
+            "type": "string",
+            "description": "Bank folder name, from list_supermemory_banks."
+          },
+          "q": {
+            "type": "string",
+            "description": "What to look for."
+          },
+          "limit": {
+            "type": "integer",
+            "description": "Optional, default 10, maximum 50."
+          }
+        },
+        "required": [
+          "bank",
+          "q"
+        ]
+      },
+      "method": "GET",
+      "path": "/v1/supermemory-search",
+      "paramMap": {
+        "bank": "bank",
+        "q": "q",
+        "limit": "limit"
+      },
       "fixedQuery": {},
       "fixedBody": {}
     }

@@ -40,6 +40,7 @@ namespace Supervertaler.MemoQ.Core
         private static readonly object _lock = new object();
 
         private const string GlossaryKey = "glossary";
+        private const string MemoryBankKey = "membank";
         private const string BridgeModeKey = "bridgemode";
         private const string ProviderKey = "provider";
         private const string ModelKey = "model";
@@ -112,6 +113,23 @@ namespace Supervertaler.MemoQ.Core
         {
             get => Read(GlossaryKey);
             set => Write(GlossaryKey, value);
+        }
+
+        /// <summary>
+        /// The memory bank this translator has chosen, as a folder name under
+        /// the shared memory-banks root. Empty by default and stays empty until
+        /// something sets it.
+        ///
+        /// Empty means "none", never "whichever was used last". A bank carries
+        /// one client's terminology and standing instructions, so inheriting the
+        /// previous job's bank supplies confident, wrong answers that read
+        /// exactly like right ones. Nothing here guesses a bank from the project
+        /// name for the same reason.
+        /// </summary>
+        public static string MemoryBank
+        {
+            get => Read(MemoryBankKey);
+            set => Write(MemoryBankKey, value);
         }
 
         /// <summary>
