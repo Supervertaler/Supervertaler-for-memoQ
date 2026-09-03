@@ -64,6 +64,10 @@ namespace Supervertaler.PromptEditor
 
         private string _openAtRelativePath;
 
+        /// <summary>What the last retag moved, so a reload can follow the file it had open.</summary>
+        private List<Supervertaler.Core.PromptLibrary.Retagged> _lastRetag =
+            new List<Supervertaler.Core.PromptLibrary.Retagged>();
+
         public MainForm(string openAtRelativePath)
         {
             _openAtRelativePath = openAtRelativePath;
@@ -92,6 +96,7 @@ namespace Supervertaler.PromptEditor
             try
             {
                 var moved = _library.RetagFiles();
+                _lastRetag = moved;
                 if (moved.Count == 0) return;
 
                 var active = SharedSettings.PromptPath;
@@ -825,7 +830,22 @@ namespace Supervertaler.PromptEditor
             if (!ConfirmDiscard()) return;
 
             var relative = _current?.RelativePath;
+
             _library.Refresh();
+
+            // Reconcile the markers too. F5 is what someone presses after editing
+            // frontmatter in a text editor, and changing "app:" there should have
+            // the same effect as changing it in the dropdown - otherwise the
+            // filename and the field sit disagreeing until the next restart.
+            RetagPromptFiles();
+
+            if (relative != null)
+            {
+                var moved = _lastRetag.FirstOrDefault(m =>
+                    string.Equals(m.OldRelativePath, relative, StringComparison.OrdinalIgnoreCase));
+                if (moved != null) relative = moved.NewRelativePath;
+            }
+
             LoadTree();
             SelectPrompt(relative);
         }
