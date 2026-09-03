@@ -59,6 +59,9 @@
     <Compile Include="..\Supervertaler.MemoQ\Core\ApiKeys.cs">
       <Link>Shared\ApiKeys.cs</Link>
     </Compile>
+    <Compile Include="..\Supervertaler.MemoQ\Core\GlossaryDirection.cs">
+      <Link>Shared\GlossaryDirection.cs</Link>
+    </Compile>
   </ItemGroup>
 
 </Project>

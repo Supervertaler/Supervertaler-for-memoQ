@@ -208,6 +208,7 @@ namespace Supervertaler.MemoQ
             // After the lookup, because that is what loads the file and reads its
             // declared languages.
             context.WarnIfGlossaryFacesTheWrongWay();
+            context.WarnIfPromptFacesTheWrongWay();
 
             // A selected library prompt wins over the typed instructions; the
             // typed ones are the fallback when nothing is selected or the prompt

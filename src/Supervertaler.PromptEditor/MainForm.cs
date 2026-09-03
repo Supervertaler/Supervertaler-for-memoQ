@@ -36,7 +36,8 @@ namespace Supervertaler.PromptEditor
         private ToolStripButton _save;
         private ToolStripDropDownButton _insert;
         private ToolStripStatusLabel _status;
-        private ToolStripStatusLabel _glossary;
+        private ToolStripButton _glossary;
+        private ToolStripButton _prompt;
         private ToolStripStatusLabel _dirtyLabel;
         private SplitContainer _split;
 
@@ -128,6 +129,7 @@ namespace Supervertaler.PromptEditor
             memoqMenu.DropDownItems.Add(new ToolStripSeparator());
             memoqMenu.DropDownItems.Add(new ToolStripMenuItem("&Export this prompt's terms as a glossary…", null, (s, e) => ExportGlossary()));
             memoqMenu.DropDownItems.Add(new ToolStripMenuItem("&Choose the active glossary…", null, (s, e) => ChooseGlossary()));
+            memoqMenu.DropDownItems.Add(new ToolStripMenuItem("Choose the active &prompt…", null, (s, e) => ChoosePrompt()));
 
             // The first setting to move out of memoQ's dialog. It says how you are
             // working at this moment, chat-driven or key-driven, which is not a
@@ -193,6 +195,44 @@ namespace Supervertaler.PromptEditor
                 _insert, new ToolStripSeparator(),
                 draft
             });
+
+            // What memoQ will actually use, in the one place you cannot miss it.
+            // These two decide every translation between them, and both used to be
+            // findable only by opening a dialog: the glossary sat in the far
+            // bottom-right corner of the status bar with nothing to say it could
+            // be clicked, and the prompt was visible only inside memoQ's own
+            // options dialog, six clicks deep.
+            var context = new ToolStrip
+            {
+                GripStyle = ToolStripGripStyle.Hidden,
+                Renderer = new ToolStripProfessionalRenderer(),
+                Padding = new Padding(4, 2, 4, 2)
+            };
+
+            _prompt = new ToolStripButton
+            {
+                DisplayStyle = ToolStripItemDisplayStyle.Text,
+                AutoToolTip = false
+            };
+            _prompt.Click += (s, e) => ChoosePrompt();
+
+            _glossary = new ToolStripButton
+            {
+                DisplayStyle = ToolStripItemDisplayStyle.Text,
+                AutoToolTip = false
+            };
+            _glossary.Click += (s, e) => ChooseGlossary();
+
+            context.Items.AddRange(new ToolStripItem[]
+            {
+                new ToolStripLabel("In use by memoQ:") { ForeColor = SystemColors.GrayText },
+                _prompt,
+                new ToolStripSeparator(),
+                _glossary
+            });
+
+            RefreshPrompt();
+            RefreshGlossary();
 
             _tree = new TreeView
             {
@@ -297,24 +337,16 @@ namespace Supervertaler.PromptEditor
             var strip = new StatusStrip();
             _status = new ToolStripStatusLabel { Spring = true, TextAlign = ContentAlignment.MiddleLeft };
 
-            // The active glossary lives here because it is state rather than an
-            // action: worth seeing at all times, not worth a button. Clicking it
-            // opens the same chooser the memoQ menu does.
-            _glossary = new ToolStripStatusLabel
-            {
-                IsLink = true,
-                LinkBehavior = LinkBehavior.HoverUnderline,
-                Margin = new Padding(0, 3, 14, 2)
-            };
-            _glossary.Click += (s, e) => ChooseGlossary();
-            RefreshGlossary();
-
             _dirtyLabel = new ToolStripStatusLabel { Text = "" };
             strip.Items.Add(_status);
-            strip.Items.Add(_glossary);
             strip.Items.Add(_dirtyLabel);
 
             Controls.Add(_split);
+
+            // Added before the toolbar so it sits below it: docked children are
+            // laid out from the back of the collection forwards, so the last Top
+            // control added claims the top of the window.
+            Controls.Add(context);
             Controls.Add(toolbar);
 
             // Added after the toolbar on purpose: docked children are laid out
@@ -894,6 +926,117 @@ namespace Supervertaler.PromptEditor
             _status.Text = "Glossary written and made active: " + path;
         }
 
+        /// <summary>
+        /// Names the prompt memoQ will use. It governs more of a translation than
+        /// anything else here and, until now, could only be seen inside memoQ's
+        /// own options dialog.
+        /// </summary>
+        private void RefreshPrompt()
+        {
+            var path = SharedSettings.PromptPath;
+
+            if (string.IsNullOrWhiteSpace(path))
+            {
+                _prompt.Text = "Prompt: the instructions in memoQ's settings";
+                _prompt.ForeColor = SystemColors.GrayText;
+                _prompt.ToolTipText = "No library prompt is selected, so memoQ uses the Instructions box "
+                    + "in its own Supervertaler settings. Click to choose a prompt.";
+                return;
+            }
+
+            var name = Path.GetFileNameWithoutExtension(path);
+            var prompt = FindPrompt(path);
+
+            _prompt.Text = "Prompt: " + name;
+
+            if (prompt == null)
+            {
+                _prompt.ForeColor = Color.Firebrick;
+                _prompt.ToolTipText = "memoQ has this prompt selected, but it is not in the library or is "
+                    + "marked for another product. memoQ will fall back to the Instructions box in its "
+                    + "own settings.";
+                return;
+            }
+
+            // A prompt that declares a pair is checked against the project memoQ
+            // last worked in, the same test the glossary gets.
+            var declared = string.IsNullOrWhiteSpace(prompt.SourceLang) || string.IsNullOrWhiteSpace(prompt.TargetLang)
+                ? null
+                : prompt.SourceLang + " to " + prompt.TargetLang;
+
+            var project = string.IsNullOrWhiteSpace(SharedSettings.SourceLang) || string.IsNullOrWhiteSpace(SharedSettings.TargetLang)
+                ? null
+                : SharedSettings.SourceLang + " to " + SharedSettings.TargetLang;
+
+            var mismatched = declared != null && project != null
+                && GlossaryDirection.Compare(SharedSettings.SourceLang, SharedSettings.TargetLang,
+                        prompt.SourceLang, prompt.TargetLang) != GlossaryDirection.Relation.Aligned;
+
+            _prompt.ForeColor = mismatched ? Color.Firebrick : SystemColors.ControlText;
+            _prompt.ToolTipText = mismatched
+                ? $"This prompt was written for {declared}, but the project is {project}. Its "
+                  + "instructions and locked terminology are for the other direction."
+                : (declared == null ? path : path + "   (" + declared + ")");
+        }
+
+        private static Supervertaler.Core.Models.PromptTemplate FindPrompt(string relativePath)
+        {
+            try
+            {
+                return new Supervertaler.Core.PromptLibrary().GetAllPrompts()
+                    .FirstOrDefault(p => p != null && ForThisApp(p)
+                        && string.Equals(p.RelativePath, relativePath, StringComparison.OrdinalIgnoreCase));
+            }
+            catch
+            {
+                return null;
+            }
+        }
+
+        private static bool ForThisApp(Supervertaler.Core.Models.PromptTemplate p)
+        {
+            var app = (p.App ?? "both").Trim().Trim(QuoteChars);
+            return app.Length == 0
+                || app.Equals("both", StringComparison.OrdinalIgnoreCase)
+                || app.Equals(ThisApp, StringComparison.OrdinalIgnoreCase);
+        }
+
+        /// <summary>
+        /// Picks the prompt memoQ will use, writing it to the shared settings the
+        /// plugin reads. Works with memoQ closed, like the glossary chooser.
+        /// Prompts belonging to the other product are not offered: memoQ cannot
+        /// run them and would fall back silently.
+        /// </summary>
+        private void ChoosePrompt()
+        {
+            List<Supervertaler.Core.Models.PromptTemplate> prompts;
+            try
+            {
+                prompts = new Supervertaler.Core.PromptLibrary().GetAllPrompts()
+                    .Where(p => p != null && !p.IsQuickLauncher && ForThisApp(p))
+                    .OrderBy(p => p.Category ?? string.Empty, StringComparer.OrdinalIgnoreCase)
+                    .ThenBy(p => p.Name ?? string.Empty, StringComparer.OrdinalIgnoreCase)
+                    .ToList();
+            }
+            catch (Exception ex)
+            {
+                MessageBox.Show(this, "Could not read the prompt library.\r\n\r\n" + ex.Message,
+                    "Choose a prompt", MessageBoxButtons.OK, MessageBoxIcon.Error);
+                return;
+            }
+
+            using (var dialog = new PromptChooserForm(prompts, SharedSettings.PromptPath))
+            {
+                if (dialog.ShowDialog(this) != DialogResult.OK) return;
+
+                SharedSettings.PromptPath = dialog.SelectedPath ?? string.Empty;
+                RefreshPrompt();
+                _status.Text = string.IsNullOrEmpty(dialog.SelectedPath)
+                    ? "memoQ will use the instructions in its own settings."
+                    : "Active prompt: " + dialog.SelectedPath;
+            }
+        }
+
         /// <summary>Shows which glossary is active, or says plainly that none is.</summary>
         /// <summary>How Supervertaler translates: the same settings memoQ shows.</summary>
         private void ShowSettings()
@@ -927,16 +1070,14 @@ namespace Supervertaler.PromptEditor
             {
                 _glossary.Text = "Glossary: none";
                 _glossary.ForeColor = SystemColors.GrayText;
-                _glossary.LinkColor = SystemColors.GrayText;
                 _glossary.ToolTipText = "No glossary is active, so the terminology pane, the prompts "
-                    + "and the terminology check have nothing to work from.";
+                    + "and the terminology check have nothing to work from. Click to choose one.";
                 return;
             }
 
             var missing = !File.Exists(path);
             _glossary.Text = "Glossary: " + Path.GetFileName(path) + (missing ? " (missing)" : "");
             _glossary.ForeColor = missing ? Color.Firebrick : SystemColors.ControlText;
-            _glossary.LinkColor = _glossary.ForeColor;
             _glossary.ToolTipText = (missing ? "This file no longer exists:\r\n" : "Active glossary:\r\n") + path
                 + "\r\n\r\nClick to choose a different one.";
         }

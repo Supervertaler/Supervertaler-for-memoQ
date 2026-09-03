@@ -220,6 +220,7 @@ namespace Supervertaler.MemoQ.Core
                 : null;
 
             context.WarnIfGlossaryFacesTheWrongWay();
+            context.WarnIfPromptFacesTheWrongWay();
 
             var recalled = general.UseDocumentContext
                 ? DocumentMemory.GetRelevant(context.MemoryKey, chunk[0], SessionRunner.MaxRecalledPairs)

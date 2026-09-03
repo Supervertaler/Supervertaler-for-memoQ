@@ -191,6 +191,42 @@ namespace Supervertaler.MemoQ.Core
                 SourceLangCode, TargetLangCode));
         }
 
+        private static string _promptWarnedFor;
+
+        /// <summary>
+        /// Says so when the selected prompt was written for another language pair.
+        /// A prompt names its languages in its role, locks terminology one way
+        /// round and carries register rules for one target, so running it
+        /// backwards produces a confident translation against instructions for the
+        /// opposite job. The glossary already warns about this; the prompt is the
+        /// larger half of the same mistake.
+        ///
+        /// Only prompts that declare a pair are checked, so nothing written before
+        /// the declaration existed starts complaining.
+        /// </summary>
+        public void WarnIfPromptFacesTheWrongWay()
+        {
+            var path = General.PromptPath;
+            if (string.IsNullOrWhiteSpace(path)) return;
+
+            if (!PromptResolver.TryGetLanguages(path, out var promptSource, out var promptTarget)) return;
+
+            var relation = GlossaryDirection.Compare(
+                SourceLangCode, TargetLangCode, promptSource, promptTarget);
+
+            if (relation == GlossaryDirection.Relation.Aligned
+                || relation == GlossaryDirection.Relation.Undeclared) return;
+
+            var key = path + "|" + SourceLangCode + "|" + TargetLangCode;
+            if (string.Equals(key, _promptWarnedFor, StringComparison.Ordinal)) return;
+            _promptWarnedFor = key;
+
+            PluginLog.Write($"PROMPT DIRECTION: the selected prompt '{path}' was written for "
+                + $"{promptSource} to {promptTarget}, but this project is {SourceLangCode} to "
+                + $"{TargetLangCode}. Its instructions, locked terminology and register rules are "
+                + "for the other direction. Select a prompt for this pair, or draft one.");
+        }
+
         public void NoteMetadata(MTRequestMetadata metadata)
         {
             if (metadata == null) return;

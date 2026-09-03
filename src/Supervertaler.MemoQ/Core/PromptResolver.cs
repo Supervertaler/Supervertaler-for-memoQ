@@ -156,6 +156,29 @@ namespace Supervertaler.MemoQ.Core
         /// cannot render — but reporting it as "not found in the library" hid the
         /// reason and made it look like a missing file.
         /// </summary>
+        /// <summary>
+        /// The language pair the selected prompt declares, or null. Split out so
+        /// the caller can compare it with the project's without this class having
+        /// to know about engines.
+        /// </summary>
+        public static bool TryGetLanguages(string promptRelativePath, out string source, out string target)
+        {
+            source = null;
+            target = null;
+            if (string.IsNullOrWhiteSpace(promptRelativePath)) return false;
+
+            var prompt = Available().FirstOrDefault(p =>
+                string.Equals(p.RelativePath, promptRelativePath, StringComparison.OrdinalIgnoreCase));
+
+            if (prompt == null
+                || string.IsNullOrWhiteSpace(prompt.SourceLang)
+                || string.IsNullOrWhiteSpace(prompt.TargetLang)) return false;
+
+            source = prompt.SourceLang;
+            target = prompt.TargetLang;
+            return true;
+        }
+
         public static string ExplainUnavailable(string promptRelativePath)
         {
             if (string.IsNullOrWhiteSpace(promptRelativePath)) return null;
