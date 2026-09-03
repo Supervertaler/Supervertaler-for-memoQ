@@ -24,11 +24,15 @@ $NonPublicInstance = [Reflection.BindingFlags]'NonPublic,Instance'
 $bridgeType = $plugin.GetType('Supervertaler.MemoQ.Core.MemoQBridge')
 $fromProject = $bridgeType.GetMethod('DomainFromProject', $NonPublicStatic)
 
+# Order matters: memoQ's guidance is that Subject holds the subject matter and
+# Domain holds the end client, so Subject must win when the two disagree.
 $cases = @(
-    @('Patents', $null, 'patent'),      # memoQ's plural, our singular
-    @($null, 'Patents', 'patent'),      # subject when domain is empty
+    @('Patents', $null, 'patent'),        # domain alone still works
+    @($null, 'Patents', 'patent'),        # subject alone
+    @('Acme Corp', 'Patents', 'patent'),  # the recommended filling: subject wins
+    @('Legal', 'Patents', 'patent'),      # both usable, subject still wins
     @('Legal', $null, 'legal'),
-    @('Something Else', $null, $null),  # unknown stays unknown
+    @('Something Else', $null, $null),    # unknown stays unknown
     @($null, $null, $null)
 )
 $ok = $true

@@ -938,14 +938,25 @@ namespace Supervertaler.MemoQ.Core
         }
 
         /// <summary>
-        /// memoQ's own answer, when the model has too little text to give one.
-        /// A project carries Domain and Subject in its metadata — "Patents" here —
-        /// and that beats defaulting to "general" on a document the classifier
-        /// never really saw.
+        /// memoQ's own answer, when the model has too little text to give one. A
+        /// project carries both fields in its metadata, and that beats defaulting
+        /// to "general" on a document the classifier never really saw.
+        ///
+        /// Subject is tried first, deliberately. memoQ's own guidance is that
+        /// Subject holds the subject matter and Domain holds the end client, which
+        /// is the opposite of what the names suggest and is why translators have
+        /// asked which is which for years. Reading Domain first offered a client
+        /// name as a subject-matter guess on any project filled in the recommended
+        /// way. Domain stays as the second guess, because plenty of projects do
+        /// use it for subject matter regardless.
+        ///
+        /// Note that this ordering governs only this fallback. The prompt itself
+        /// shows the model both fields under memoQ's own labels and interprets
+        /// neither, which is the right treatment for a convention this contested.
         /// </summary>
         private static string DomainFromProject(string domain, string subject)
         {
-            foreach (var candidate in new[] { domain, subject })
+            foreach (var candidate in new[] { subject, domain })
             {
                 if (string.IsNullOrWhiteSpace(candidate)) continue;
 
