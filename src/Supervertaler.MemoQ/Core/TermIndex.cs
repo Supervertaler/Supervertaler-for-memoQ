@@ -214,13 +214,15 @@ namespace Supervertaler.MemoQ.Core
                 if (samePath && stamp == _loadedStamp) return;
 
                 _entries = Parse(path);
+                ReadHeader(path);
                 Rebuild();
                 _loadedPath = path;
                 _loadedStamp = stamp;
 
                 PluginLog.Write($"TermIndex: loaded {_entries.Count} term(s) "
                     + $"({_entries.Count(e => e.Forbidden)} forbidden, "
-                    + $"{_byFirstWord.Count} bucket(s)) from {Path.GetFileName(path)}");
+                    + $"{_byFirstWord.Count} bucket(s)) from {Path.GetFileName(path)}"
+                    + (DeclaredPair == null ? " [no language declared]" : $" [{DeclaredPair}]"));
             }
         }
 
@@ -244,6 +246,58 @@ namespace Supervertaler.MemoQ.Core
                 bucket.Sort((a, b) => b.Source.Length.CompareTo(a.Source.Length));
 
             _unbucketed.Sort((a, b) => b.Source.Length.CompareTo(a.Source.Length));
+        }
+
+        /// <summary>
+        /// The language pair the glossary declares, as "eng to dut", or null when
+        /// the file does not say. Read from a <c>#! source=… target=…</c> line.
+        /// </summary>
+        public static string DeclaredPair =>
+            DeclaredSource == null || DeclaredTarget == null ? null : DeclaredSource + " to " + DeclaredTarget;
+
+        public static string DeclaredSource { get; private set; }
+
+        public static string DeclaredTarget { get; private set; }
+
+        /// <summary>
+        /// Reads the machine-readable header. Ordinary <c>#</c> lines stay prose
+        /// for the reader; only <c>#!</c> carries settings, so a hand-written
+        /// comment can never be mistaken for one.
+        /// </summary>
+        private static void ReadHeader(string path)
+        {
+            DeclaredSource = null;
+            DeclaredTarget = null;
+
+            try
+            {
+                foreach (var raw in File.ReadAllLines(path, Encoding.UTF8))
+                {
+                    var line = raw?.Trim();
+                    if (string.IsNullOrEmpty(line)) continue;
+
+                    // Stop at the first entry: the header belongs at the top.
+                    if (!line.StartsWith("#")) break;
+                    if (!line.StartsWith("#!")) continue;
+
+                    foreach (var part in line.Substring(2).Split(new[] { ' ', '\t' }, StringSplitOptions.RemoveEmptyEntries))
+                    {
+                        var eq = part.IndexOf('=');
+                        if (eq <= 0) continue;
+
+                        var key = part.Substring(0, eq).Trim();
+                        var value = part.Substring(eq + 1).Trim();
+                        if (value.Length == 0) continue;
+
+                        if (string.Equals(key, "source", StringComparison.OrdinalIgnoreCase)) DeclaredSource = value;
+                        else if (string.Equals(key, "target", StringComparison.OrdinalIgnoreCase)) DeclaredTarget = value;
+                    }
+                }
+            }
+            catch (Exception ex)
+            {
+                PluginLog.Write("TermIndex: could not read the glossary header", ex);
+            }
         }
 
         private static List<Entry> Parse(string path)

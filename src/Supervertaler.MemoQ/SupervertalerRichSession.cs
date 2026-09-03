@@ -205,6 +205,10 @@ namespace Supervertaler.MemoQ
                 ? TermIndex.Find(SharedSettings.GlossaryPath, bundle.Source.PlainText)
                 : null;
 
+            // After the lookup, because that is what loads the file and reads its
+            // declared languages.
+            context.WarnIfGlossaryFacesTheWrongWay();
+
             // A selected library prompt wins over the typed instructions; the
             // typed ones are the fallback when nothing is selected or the prompt
             // has gone missing.

@@ -50,6 +50,8 @@ namespace Supervertaler.MemoQ.Core
         private const string DocumentContextKey = "usedocumentcontext";
         private const string PromptPathKey = "promptpath";
         private const string ApiKeyKey = "apikey";
+        private const string SourceLangKey = "langsource";
+        private const string TargetLangKey = "langtarget";
         private const string MemoQApiKeyKey = "apikey.memoq";
 
         /// <summary>
@@ -148,6 +150,16 @@ namespace Supervertaler.MemoQ.Core
         public static bool UseDocumentContextOr(bool fromResource) => BoolOr(DocumentContextKey, fromResource);
 
         public static string PromptPath { get => Read(PromptPathKey); set => Write(PromptPathKey, value); }
+
+        /// <summary>
+        /// The language pair of the project memoQ last did real work in. Recorded
+        /// so the prompt editor can stamp an exported glossary with the right
+        /// direction while memoQ is closed. Two keys rather than one, because a
+        /// code may carry a region and "dut-NL-eng-GB" cannot be split back apart.
+        /// </summary>
+        public static string SourceLang { get => Read(SourceLangKey); set => Write(SourceLangKey, value); }
+
+        public static string TargetLang { get => Read(TargetLangKey); set => Write(TargetLangKey, value); }
 
         /// <summary>
         /// An API key typed into either dialog. Empty means "no override",

@@ -821,7 +821,15 @@ namespace Supervertaler.PromptEditor
             try
             {
                 Directory.CreateDirectory(dir);
-                File.WriteAllText(path, PromptGlossaryExtractor.ToGlossaryText(entries, _current.Name), new UTF8Encoding(false));
+                // Stamped with the direction of the project memoQ last worked
+                // in. Without it the file's direction lives only in its filename,
+                // which nothing reads, and a glossary facing the wrong way finds
+                // nothing and says nothing.
+                File.WriteAllText(
+                    path,
+                    PromptGlossaryExtractor.ToGlossaryText(
+                        entries, _current.Name, SharedSettings.SourceLang, SharedSettings.TargetLang),
+                    new UTF8Encoding(false));
             }
             catch (Exception ex)
             {

@@ -74,6 +74,7 @@ namespace Supervertaler.MemoQ
         {
             PluginLog.Write("CreateLookupSession (ISession + ISessionWithMetadata)");
             MemoQBridge.Aim(_context);
+            _context.RecordLanguagePair();
             return new SupervertalerSession(_context);
         }
 

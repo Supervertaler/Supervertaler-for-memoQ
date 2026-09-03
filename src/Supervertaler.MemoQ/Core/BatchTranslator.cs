@@ -219,6 +219,8 @@ namespace Supervertaler.MemoQ.Core
                 ? TermIndex.Find(SharedSettings.GlossaryPath, joined)
                 : null;
 
+            context.WarnIfGlossaryFacesTheWrongWay();
+
             var recalled = general.UseDocumentContext
                 ? DocumentMemory.GetRelevant(context.MemoryKey, chunk[0], SessionRunner.MaxRecalledPairs)
                 : null;
