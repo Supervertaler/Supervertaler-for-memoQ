@@ -82,9 +82,16 @@ namespace Supervertaler.PromptEditor
             MinimumSize = new Size(360, 220);
             ShowInTaskbar = true;
 
-            var bar = new Panel { Dock = DockStyle.Top, Height = 32, Padding = new Padding(8, 6, 8, 0) };
-            _everything.Left = 8; _everything.Top = 7;
-            _onTop.Left = 130; _onTop.Top = 7;
+            var bar = new FlowLayoutPanel
+            {
+                Dock = DockStyle.Top,
+                Height = 32,
+                Padding = new Padding(8, 6, 8, 0),
+                FlowDirection = FlowDirection.LeftToRight,
+                WrapContents = false
+            };
+            _everything.Margin = new Padding(0, 3, 18, 0);
+            _onTop.Margin = new Padding(0, 3, 0, 0);
             bar.Controls.Add(_everything);
             bar.Controls.Add(_onTop);
 
@@ -261,6 +268,12 @@ namespace Supervertaler.PromptEditor
         private string Render(string raw)
         {
             if (string.IsNullOrWhiteSpace(raw)) return null;
+
+            // The log is written with a byte order mark, so its very first line
+            // arrives with U+FEFF in front of the opening bracket and matches
+            // nothing. One line per file, and it is the line that says which port
+            // the bridge came up on.
+            raw = raw.TrimStart('﻿');
 
             var m = Entry.Match(raw);
             if (!m.Success) return _everything.Checked ? raw : null;

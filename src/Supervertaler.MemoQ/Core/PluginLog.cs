@@ -31,7 +31,16 @@ namespace Supervertaler.MemoQ.Core
                         Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
                         "Supervertaler.memoQ");
                     Directory.CreateDirectory(dir);
-                    return Path.Combine(dir, "plugin.log");
+
+                    // A harness gets its own file. It builds engines from bare
+                    // defaults with the key deliberately suppressed, so it
+                    // produces direction warnings and 401s that are correct for a
+                    // test and alarming in a log - and it trims on load, which
+                    // discarded the record of a real 569-segment run minutes
+                    // after it finished. Harmless while nobody but a developer
+                    // read this file; not harmless now the activity window puts
+                    // it in front of the user.
+                    return Path.Combine(dir, SharedSettings.InHarness ? "harness.log" : "plugin.log");
                 }
                 catch { return null; }
             }
