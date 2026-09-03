@@ -35,14 +35,12 @@ namespace Supervertaler.MemoQ
 
         public TranslationResult TranslateCorrectSegment(Segment segm, Segment tmSource, Segment tmTarget)
         {
-            // tmSource/tmTarget are the fuzzy-correction inputs. The director
-            // reports SupportFuzzyForwarding = false, so memoQ passes null here.
-            return TranslateOne(segm);
+            return TranslateOne(segm, tmSource, tmTarget);
         }
 
         public TranslationResult[] TranslateCorrectSegment(Segment[] segs, Segment[] tmSources, Segment[] tmTargets)
         {
-            return TranslateMany(segs);
+            return TranslateMany(segs, tmSources, tmTargets);
         }
 
         // ---- ISessionWithMetadata ---------------------------------------------
@@ -52,7 +50,7 @@ namespace Supervertaler.MemoQ
         {
             _context.NoteMetadata(metadata);
             LogMetadataOnce(metadata);
-            return TranslateOne(segm);
+            return TranslateOne(segm, tmSource, tmTarget);
         }
 
         public TranslationResult[] TranslateCorrectSegment(
@@ -60,7 +58,7 @@ namespace Supervertaler.MemoQ
         {
             _context.NoteMetadata(metadata);
             LogMetadataOnce(metadata);
-            return TranslateMany(segs);
+            return TranslateMany(segs, tmSources, tmTargets);
         }
 
         // ---- shared -----------------------------------------------------------
@@ -72,16 +70,20 @@ namespace Supervertaler.MemoQ
         /// expect. Set Parallel requests' companion BatchSize to 1 to send them
         /// one at a time.
         /// </summary>
-        private TranslationResult[] TranslateMany(Segment[] segs)
+        private TranslationResult[] TranslateMany(Segment[] segs, Segment[] tmSources, Segment[] tmTargets)
         {
             if (segs == null) return new TranslationResult[0];
 
             try
             {
+                // The index is what carries the fuzzy match through: memoQ's TM
+                // arrays are parallel to the segment array, and the batch
+                // translator hands back the row it is working on.
                 return Task.Run(() => BatchTranslator.TranslateAsync(
                         segs, _context,
-                        (segment, ct) => Task.FromResult(TranslateOne(segment)),
-                        CancellationToken.None))
+                        (segment, i, ct) => Task.FromResult(
+                            TranslateOne(segment, At(tmSources, i), At(tmTargets, i))),
+                        CancellationToken.None, tmSources, tmTargets))
                     .GetAwaiter().GetResult();
             }
             catch (Exception ex)
@@ -89,17 +91,45 @@ namespace Supervertaler.MemoQ
                 PluginLog.Write("Batch translation failed entirely; falling back to one at a time", ex);
 
                 var results = new TranslationResult[segs.Length];
-                for (var i = 0; i < segs.Length; i++) results[i] = TranslateOne(segs[i]);
+                for (var i = 0; i < segs.Length; i++)
+                    results[i] = TranslateOne(segs[i], At(tmSources, i), At(tmTargets, i));
                 return results;
             }
         }
 
-        private TranslationResult TranslateOne(Segment source)
+        /// <summary>
+        /// memoQ may pass a shorter array, or none at all, when only some rows
+        /// have a TM hit above the threshold.
+        /// </summary>
+        private static Segment At(Segment[] segments, int index)
+        {
+            return segments != null && index >= 0 && index < segments.Length ? segments[index] : null;
+        }
+
+        private TranslationResult TranslateOne(Segment source, Segment tmSource, Segment tmTarget)
         {
             if (source == null || source.IsEmptyText)
                 return new TranslationResult { Translation = Segment.Empty, Confidence = 0 };
 
             var bundle = new TranslationBundle { Source = source };
+
+            // The best fuzzy TM match, when the user has routed it to us under
+            // "Send best fuzzy TM match to". It is a human-approved rendering of
+            // nearly this segment, so it goes into the prompt as the thing to
+            // adapt rather than as background context.
+            if (tmSource != null && tmTarget != null
+                && !tmSource.IsEmptyText && !tmTarget.IsEmptyText)
+            {
+                bundle.SegmentContext = new System.Collections.Generic.List<SegmentContextItem>
+                {
+                    new SegmentContextItem
+                    {
+                        Kind = PromptBuilder.FuzzyMatchKind,
+                        SourceSegment = tmSource,
+                        TargetSegment = tmTarget
+                    }
+                };
+            }
 
             try
             {
@@ -118,7 +148,11 @@ namespace Supervertaler.MemoQ
             catch (Exception ex)
             {
                 PluginLog.Write("Interactive translation failed", ex);
-                return new TranslationResult { Exception = ex };
+
+                // memoQ shows an MTException's message under the translation grid.
+                // Anything else gets a poorer presentation, and the SDK asks for
+                // this explicitly.
+                return new TranslationResult { Exception = BatchTranslator.AsMemoQError(ex) };
             }
         }
 

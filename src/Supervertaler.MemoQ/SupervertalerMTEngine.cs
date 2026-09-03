@@ -24,15 +24,21 @@ namespace Supervertaler.MemoQ
         {
             _context = new EngineContext(settings, sourceLangCode, targetLangCode);
 
-            // The MCP bridge starts with the first engine and re-aims at each
-            // newer one: memoQ rebuilds engines on settings or project changes,
-            // and the latest is the project the user is actually in.
+            // Starts the listener only. Aiming it at this context happens when a
+            // session is created, because memoQ also builds engines it throws
+            // away — see MemoQBridge.Aim.
             MemoQBridge.EnsureStarted(_context);
         }
 
         public override Image SmallIcon => IconLoader.Small;
 
-        /// <summary>Paired with <c>SupportFuzzyForwarding</c> on the director — see the note there.</summary>
+        /// <summary>
+        /// False. This is MatchPatch, which is a different feature from fuzzy
+        /// forwarding: memoQ would send only the substring that differs between
+        /// the segment and a TM hit, with no segment context at all. Worth trying
+        /// one day with a prompt written for fragments; a prompt written for whole
+        /// segments handles them badly.
+        /// </summary>
         public override bool SupportsFuzzyCorrection => false;
 
         /// <summary>
@@ -58,6 +64,7 @@ namespace Supervertaler.MemoQ
         public override ISession CreateLookupSession()
         {
             PluginLog.Write("CreateLookupSession (ISession + ISessionWithMetadata)");
+            MemoQBridge.Aim(_context);
             return new SupervertalerSession(_context);
         }
 

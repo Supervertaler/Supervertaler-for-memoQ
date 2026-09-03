@@ -37,19 +37,20 @@ namespace Supervertaler.MemoQ
         }
 
         /// <summary>
-        /// Batch store. The contract for the return value is not documented; the
-        /// safe reading is one entry per input, so callers can correlate. Zero is
-        /// returned for units we ignored and 1 for units we kept.
+        /// Batch store. The SDK does document the return value, in prose the
+        /// earlier version of this method had not been read against: "the indices
+        /// regarding the parameter array that were added successfully". So it is
+        /// the indices of the units we kept, not a flag per slot.
         /// </summary>
         public int[] StoreTranslation(TranslationUnit[] tus)
         {
             if (tus == null) return new int[0];
 
-            var results = new int[tus.Length];
+            var stored = new System.Collections.Generic.List<int>(tus.Length);
             for (var i = 0; i < tus.Length; i++)
-                results[i] = Store(tus[i]) ? 1 : 0;
+                if (Store(tus[i])) stored.Add(i);
 
-            return results;
+            return stored.ToArray();
         }
 
         private bool Store(TranslationUnit tu)

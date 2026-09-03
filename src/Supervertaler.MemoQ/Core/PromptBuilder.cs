@@ -55,6 +55,13 @@ namespace Supervertaler.MemoQ.Core
 
             var sb = new StringBuilder();
 
+            // Outside the document-context switch on purpose. That switch governs
+            // what we volunteer about the surrounding document; a forwarded fuzzy
+            // match is a translation memory hit the user deliberately routed to
+            // this engine in the MT settings, and turning off document context
+            // should not silently discard it.
+            AppendFuzzyMatch(sb, bundle);
+
             if (settings.UseDocumentContext)
             {
                 // Two sources of project context, and in practice only the second
@@ -176,6 +183,39 @@ namespace Supervertaler.MemoQ.Core
                 sb.AppendLine("- " + p.Source);
                 sb.AppendLine("  -> " + p.Target);
             }
+            sb.AppendLine();
+        }
+
+        /// <summary>
+        /// The kind we tag memoQ's forwarded fuzzy TM match with. Our own string
+        /// rather than one of <see cref="ContextKinds"/>, and safe to invent:
+        /// memoQ never populates <c>SegmentContext</c> for a third-party plugin,
+        /// because the rich lookup path is reserved for its own AGT plugin. The
+        /// list is therefore ours alone and there is nothing to collide with.
+        /// </summary>
+        public const string FuzzyMatchKind = "SupervertalerFuzzyMatch";
+
+        /// <summary>
+        /// The best fuzzy translation-memory match, when the user has routed it to
+        /// us under memoQ's <em>Send best fuzzy TM match to</em>. It is a rendering
+        /// of nearly this same sentence that a human wrote and approved, so it is
+        /// presented as the thing to adapt rather than as background reading, and
+        /// it comes before everything else for the same reason.
+        /// </summary>
+        private static void AppendFuzzyMatch(StringBuilder sb, TranslationBundle bundle)
+        {
+            var match = SegmentsOfKind(bundle, FuzzyMatchKind)
+                .FirstOrDefault(s => s.SourceSegment != null && s.TargetSegment != null
+                                     && !s.SourceSegment.IsEmptyText && !s.TargetSegment.IsEmptyText);
+
+            if (match == null) return;
+
+            sb.AppendLine("Closest approved translation from the client's translation memory. A human "
+                + "wrote and approved it for a nearly identical source, so follow it: keep its wording "
+                + "and terminology wherever the source agrees, and change only what the segment to "
+                + "translate actually differs in.");
+            sb.AppendLine("- " + TagBridge.ToPlainText(match.SourceSegment));
+            sb.AppendLine("  -> " + TagBridge.ToPlainText(match.TargetSegment));
             sb.AppendLine();
         }
 

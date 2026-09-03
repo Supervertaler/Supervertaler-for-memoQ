@@ -95,11 +95,22 @@ namespace Supervertaler.MemoQ
         public override bool StoringTranslationSupported => true;
 
         /// <summary>
-        /// False: we do not accept a fuzzy TM hit and repair it. If this were
-        /// true, memoQ would pass the TM source and target into
-        /// <c>TranslateCorrectSegment</c> and expect a corrected target back.
+        /// True: hand us the best fuzzy TM match along with the segment.
+        ///
+        /// The earlier comment here read that memoQ would "expect a corrected
+        /// target back", which confused this with MatchPatch. It expects nothing
+        /// different: the TM source and target simply arrive as the second and
+        /// third arguments of <c>TranslateCorrectSegment</c>, and what we do with
+        /// them is our business. We put them in the prompt as the closest
+        /// approved rendering, which for repetitive technical text is the single
+        /// most useful thing a model can be shown.
+        ///
+        /// The user turns it on per project in the MT settings, under
+        /// <em>Send best fuzzy TM match to</em>, and memoQ only forwards a hit
+        /// that reaches the minimum match threshold. Declaring support here just
+        /// puts us in that dropdown.
         /// </summary>
-        public override bool SupportFuzzyForwarding => false;
+        public override bool SupportFuzzyForwarding => true;
 
         /// <summary>
         /// Always false. <see cref="Capabilities.AGT"/> (value: "AGT") is the only

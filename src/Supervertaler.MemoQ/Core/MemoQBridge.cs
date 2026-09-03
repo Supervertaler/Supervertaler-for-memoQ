@@ -55,9 +55,35 @@ namespace Supervertaler.MemoQ.Core
         /// re-aiming at the latest engine is exactly right — memoQ rebuilds the
         /// engine when settings or project change.
         /// </summary>
+        /// <summary>
+        /// Points the bridge at the context that is actually doing work. Called
+        /// when a session is created: memoQ only asks for a session when it has
+        /// real traffic, so a discarded engine can never claim the bridge.
+        /// </summary>
+        public static void Aim(EngineContext context)
+        {
+            if (context == null) return;
+            _context = context;
+
+            lock (_instanceLock)
+            {
+                // Self-heal the handshake while we are here. It can go missing or
+                // stale under us: a test harness that started its own bridge
+                // writes over it with a PID that then exits, leaving memoQ
+                // listening on a port nothing can find.
+                _instance?.WriteHandshakeIfOurs();
+            }
+        }
+
         public static void EnsureStarted(EngineContext context)
         {
-            _context = context;
+            // Only as a fallback. Aiming happens in Aim, from the session, because
+            // memoQ builds throwaway engines: saving the MT settings dialog calls
+            // CreateEngine("eng","ger") purely to read MaxDegreeOfParallelism off
+            // it. Aiming from the constructor pointed the bridge at that phantom
+            // pair every time the dialog was saved, which is what produced staged
+            // translations under eng-ger for a Dutch project.
+            if (_context == null) _context = context;
 
             lock (_instanceLock)
             {

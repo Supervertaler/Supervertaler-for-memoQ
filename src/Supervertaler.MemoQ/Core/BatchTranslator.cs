@@ -40,11 +40,29 @@ namespace Supervertaler.MemoQ.Core
         /// miscounted response — and losing twenty good segments to one bad reply
         /// is not a trade a translator would accept.
         /// </summary>
+        /// <summary>
+        /// Wraps a failure the way the MT SDK asks for: memoQ shows an
+        /// <see cref="MTException"/>'s message under the translation grid, and
+        /// presents anything else less helpfully. Both message slots get the same
+        /// text because this plugin does not go through memoQ's localisation.
+        /// Cancellation is passed through untouched, and an MTException is never
+        /// wrapped twice.
+        /// </summary>
+        internal static Exception AsMemoQError(Exception ex)
+        {
+            if (ex == null || ex is MTException || ex is OperationCanceledException) return ex;
+
+            var message = string.IsNullOrWhiteSpace(ex.Message) ? ex.GetType().Name : ex.Message;
+            return new MTException(message, message, ex);
+        }
+
         public static async Task<TranslationResult[]> TranslateAsync(
             Segment[] segments,
             EngineContext context,
-            Func<Segment, CancellationToken, Task<TranslationResult>> translateOne,
-            CancellationToken cancellationToken)
+            Func<Segment, int, CancellationToken, Task<TranslationResult>> translateOne,
+            CancellationToken cancellationToken,
+            Segment[] tmSources = null,
+            Segment[] tmTargets = null)
         {
             var results = new TranslationResult[segments.Length];
             var batchSize = Math.Max(1, Math.Min(100, context.General.BatchSize));
@@ -104,7 +122,7 @@ namespace Supervertaler.MemoQ.Core
             if (batchSize == 1 || pending.Count == 1)
             {
                 foreach (var i in pending)
-                    results[i] = await translateOne(segments[i], cancellationToken).ConfigureAwait(false);
+                    results[i] = await translateOne(segments[i], i, cancellationToken).ConfigureAwait(false);
                 return results;
             }
 
@@ -117,7 +135,10 @@ namespace Supervertaler.MemoQ.Core
                 try
                 {
                     var translated = await TranslateChunkAsync(
-                        chunk.Select(i => segments[i]).ToList(), context, cancellationToken)
+                        chunk.Select(i => segments[i]).ToList(),
+                        chunk.Select(i => At(tmSources, i)).ToList(),
+                        chunk.Select(i => At(tmTargets, i)).ToList(),
+                        context, cancellationToken)
                         .ConfigureAwait(false);
 
                     for (var k = 0; k < chunk.Count; k++) results[chunk[k]] = translated[k];
@@ -134,11 +155,14 @@ namespace Supervertaler.MemoQ.Core
                     {
                         try
                         {
-                            results[i] = await translateOne(segments[i], cancellationToken).ConfigureAwait(false);
+                            results[i] = await translateOne(segments[i], i, cancellationToken).ConfigureAwait(false);
                         }
                         catch (Exception single)
                         {
-                            results[i] = new TranslationResult { Exception = single };
+                            // MTException is what memoQ expects: it shows the
+                            // message under the translation grid. A raw exception
+                            // gets a less useful presentation.
+                            results[i] = new TranslationResult { Exception = AsMemoQError(single) };
                         }
                     }
                 }
@@ -147,8 +171,23 @@ namespace Supervertaler.MemoQ.Core
             return results;
         }
 
+        private static string TaggedOrNull(List<Segment> segments, int index)
+        {
+            if (segments == null || index < 0 || index >= segments.Count) return null;
+            var segment = segments[index];
+            return segment == null || segment.IsEmptyText ? null : TagBridge.ToTaggedText(segment);
+        }
+
+        /// <summary>memoQ may send a shorter TM array, or none at all.</summary>
+        private static Segment At(Segment[] segments, int index)
+        {
+            return segments != null && index >= 0 && index < segments.Length ? segments[index] : null;
+        }
+
         private static async Task<TranslationResult[]> TranslateChunkAsync(
             List<Segment> chunk,
+            List<Segment> tmSources,
+            List<Segment> tmTargets,
             EngineContext context,
             CancellationToken cancellationToken)
         {
@@ -160,7 +199,13 @@ namespace Supervertaler.MemoQ.Core
                 .Select((s, i) => new BatchSegmentInput
                 {
                     Number = i + 1,
-                    SourceText = TagBridge.ToTaggedText(s)
+                    SourceText = TagBridge.ToTaggedText(s),
+
+                    // The best fuzzy TM match for this row, when memoQ forwarded
+                    // one. Carried per row rather than once per chunk because each
+                    // row has its own match, or none.
+                    FuzzySourceText = TaggedOrNull(tmSources, i),
+                    FuzzyTargetText = TaggedOrNull(tmTargets, i)
                 })
                 .ToList();
 
