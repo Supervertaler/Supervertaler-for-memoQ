@@ -204,8 +204,10 @@ Check ($null -eq $ctx.GetType().GetMethod('KbContextBlock').Invoke($ctx, @())) `
 # ---- 7. a real bank, really loaded ----------------------------------------
 # Against a bank this test creates and removes, so the assertion can name the
 # text it expects without reading anyone's client files.
-$root = GetProp $banks 'Root'
-$temp = Join-Path $root '_sv-harness-bank'
+# Not $root: PowerShell variable names are case-insensitive, and that
+# quietly overwrote $Root, the repo path.
+$banksRoot = GetProp $banks 'Root'
+$temp = Join-Path $banksRoot '_sv-harness-bank'
 $marker = 'HARNESS-MARKER-Acme-house-style'
 
 try {
@@ -255,6 +257,59 @@ try {
 finally {
     if (Test-Path $temp) { Remove-Item $temp -Recurse -Force }
 }
+
+# ---- 9. the dialogs still fit ---------------------------------------------
+# Adding a row to a dialog whose buttons anchor to the bottom edge is how the
+# endpoint hint lost its last three words and the "Keep on top" checkbox lost
+# its box. Neither showed up until someone opened the window, so the check is
+# here: build both dialogs and look for anything hanging off the bottom or
+# sitting on top of something else.
+function LayoutFaults($form) {
+    $faults = @()
+    $controls = @($form.Controls)
+
+    foreach ($c in $controls) {
+        if ($c.Bottom -gt $form.ClientSize.Height) {
+            $faults += "$($c.GetType().Name) '$($c.Text)' ends at $($c.Bottom), past $($form.ClientSize.Height)"
+        }
+    }
+
+    # Overlap between the two things most likely to collide: a wrapped hint and
+    # whatever was placed underneath it.
+    for ($i = 0; $i -lt $controls.Count; $i++) {
+        for ($j = $i + 1; $j -lt $controls.Count; $j++) {
+            $a = $controls[$i]; $b = $controls[$j]
+            if ($a.Bounds.IntersectsWith($b.Bounds)) {
+                $faults += "$($a.GetType().Name) '$($a.Text)' overlaps $($b.GetType().Name) '$($b.Text)'"
+            }
+        }
+    }
+    return $faults
+}
+
+$optionsT = $plugin.GetType('Supervertaler.MemoQ.Settings.OptionsForm')
+$options = [Activator]::CreateInstance($optionsT, [Reflection.BindingFlags]'Instance,Public,NonPublic',
+    $null, @($settings), $null)
+try {
+    $faults = LayoutFaults $options
+    Check ($faults.Count -eq 0 -and $options.Controls.Count -gt 10) `
+        "memoQ's options dialog lays out cleanly: $($options.Controls.Count) controls, $($faults.Count) fault(s)"
+    $faults | ForEach-Object { Write-Host "     $_" }
+}
+finally { $options.Dispose() }
+
+$editorExe = "$Root\src\Supervertaler.PromptEditor\bin\Release\Supervertaler.PromptEditor.exe"
+$editor = [Reflection.Assembly]::LoadFrom($editorExe)
+$settingsFormT = $editor.GetType('Supervertaler.PromptEditor.SettingsForm')
+$settingsForm = [Activator]::CreateInstance($settingsFormT, [Reflection.BindingFlags]'Instance,Public,NonPublic',
+    $null, @(), $null)
+try {
+    $faults = LayoutFaults $settingsForm
+    Check ($faults.Count -eq 0 -and $settingsForm.Controls.Count -gt 10) `
+        "the editor's translation settings lay out cleanly: $($settingsForm.Controls.Count) controls, $($faults.Count) fault(s)"
+    $faults | ForEach-Object { Write-Host "     $_" }
+}
+finally { $settingsForm.Dispose() }
 
 Write-Host ''
 Write-Host "MEMORY BANK TEST COMPLETE - $fails failure(s)"

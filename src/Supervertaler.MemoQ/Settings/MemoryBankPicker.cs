@@ -132,9 +132,15 @@ namespace Supervertaler.MemoQ.Settings
         }
 
         /// <summary>
-        /// A hint label sized to the column, matching the other hints in both
-        /// dialogs. Returned so the caller can advance its own layout by the
-        /// height this actually needed, which varies with the display's scaling.
+        /// A hint label that wraps to the column and then reports how tall it
+        /// became, matching the other hints in both dialogs.
+        ///
+        /// <para>AutoSize with a MaximumSize width rather than a fixed height,
+        /// because a Label with AutoSize off silently crops whatever does not
+        /// fit - which is how the endpoint hint lost "or a gateway." and the
+        /// parallel-requests box ended up half covered. The caller advances its
+        /// own layout by <c>PreferredHeight</c>, so the text has to be its final
+        /// text before this is called.</para>
         /// </summary>
         public static Label Hint(string text, int left, int width, int top)
         {
@@ -143,9 +149,8 @@ namespace Supervertaler.MemoQ.Settings
                 Text = text,
                 Left = left,
                 Top = top,
-                Width = width,
-                AutoSize = false,
-                Height = 34,
+                AutoSize = true,
+                MaximumSize = new Size(width, 0),
                 ForeColor = SystemColors.GrayText
             };
         }

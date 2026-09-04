@@ -246,9 +246,12 @@ namespace Supervertaler.MemoQ.Settings
             Controls.Add(_memoryBank);
             y += 26;
 
-            _memoryBankNote = MemoryBankPicker.Hint(string.Empty, fieldX, fieldW - editW - 6, y);
+            // Its final text now, not in LoadCurrent: the row below is placed
+            // from this label's height, so it has to know what it is going to say.
+            _memoryBankNote = MemoryBankPicker.Hint(
+                MemoryBankPicker.ProjectNote(), fieldX, fieldW - editW - 6, y);
             Controls.Add(_memoryBankNote);
-            y += _memoryBankNote.Height + 4;
+            y += _memoryBankNote.PreferredHeight + 8;
 
             Caption("Instructions", y);
             _systemPrompt.Left = fieldX; _systemPrompt.Top = y; _systemPrompt.Width = fieldW;
@@ -277,6 +280,13 @@ namespace Supervertaler.MemoQ.Settings
             _status.Left = fieldX + 130; _status.Top = y + 6; _status.Width = fieldW - 130; _status.Height = 34;
             _status.ForeColor = SystemColors.GrayText;
             Controls.Add(_status);
+
+            // The dialog is sized to the layout rather than the layout trusted to
+            // fit a height guessed once. The button row below anchors to the
+            // bottom edge, so a fixed height means any row added above it walks
+            // the last control underneath the buttons - silently, since nothing
+            // overlaps until it does.
+            ClientSize = new Size(ClientSize.Width, y + 40 + 12 + 40);
 
             // Confirmed segments are cached on disk so recall survives a restart.
             // That is confidential client text sitting in LocalAppData, so the user
@@ -388,7 +398,6 @@ namespace Supervertaler.MemoQ.Settings
             _bridgeMode.Checked = SharedSettings.BridgeModeOr(g.BridgeMode);
 
             MemoryBankPicker.Fill(_memoryBank, SharedSettings.MemoryBank);
-            _memoryBankNote.Text = MemoryBankPicker.ProjectNote();
         }
 
         private SupervertalerSettings Collect()

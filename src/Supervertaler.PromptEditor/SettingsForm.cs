@@ -167,9 +167,11 @@ namespace Supervertaler.PromptEditor
             _memoryBank.DropDownStyle = ComboBoxStyle.DropDownList;
             Controls.Add(_memoryBank);
             y += 26;
-            _memoryBankNote = MemoryBankPicker.Hint(string.Empty, fieldX, fieldW, y);
-            Controls.Add(_memoryBankNote);
-            y += _memoryBankNote.Height + 8;
+
+            // Through this window's own Hint, which already advances y by what
+            // the text actually needed. Its final text now, for the same reason.
+            _memoryBankNote = Hint(MemoryBankPicker.ProjectNote(), fieldX, fieldW);
+            y += 8;
 
             Caption("API key", y);
             _apiKey.Left = fieldX; _apiKey.Top = y; _apiKey.Width = fieldW;
@@ -317,7 +319,6 @@ namespace Supervertaler.PromptEditor
             _bridgeMode.Checked = SharedSettings.BridgeMode;
 
             MemoryBankPicker.Fill(_memoryBank, SharedSettings.MemoryBank);
-            _memoryBankNote.Text = MemoryBankPicker.ProjectNote();
 
             // Null for the resource: this program cannot read memoQ's settings, and
             // does not need to, because memoQ copies that key into the shared file.
