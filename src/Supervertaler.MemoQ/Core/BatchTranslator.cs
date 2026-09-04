@@ -233,7 +233,8 @@ namespace Supervertaler.MemoQ.Core
 
             var system = PromptBuilder.BuildSystemOnly(
                 general, context.SourceLangCode, context.TargetLangCode,
-                context.LastMetadata, recalled, ownTerms, instructions);
+                context.LastMetadata, recalled, ownTerms, instructions,
+                context.KbContextBlock());
 
             var apiKey = context.ApiKey;
             var cacheKey = TranslationCache.Key(

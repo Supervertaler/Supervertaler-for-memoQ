@@ -44,7 +44,8 @@ namespace Supervertaler.MemoQ.Core
             MTRequestMetadata metadata = null,
             IReadOnlyList<DocumentMemory.Pair> recalled = null,
             IReadOnlyList<TermIndex.Match> ownTerms = null,
-            string instructions = null)
+            string instructions = null,
+            string kbContext = null)
         {
             // `instructions` is the resolved prompt — a library prompt when one is
             // selected, otherwise the settings' own text. The settings fallback
@@ -52,6 +53,23 @@ namespace Supervertaler.MemoQ.Core
             var system = (instructions ?? settings.SystemPrompt ?? SupervertalerGeneralSettings.DefaultSystemPrompt)
                 .Replace("{SOURCE_LANG}", DescribeLanguage(sourceLangCode))
                 .Replace("{TARGET_LANG}", DescribeLanguage(targetLangCode));
+
+            // The memory bank goes in the SYSTEM half, not with the rest of the
+            // context, and the distinction is not cosmetic. Everything appended
+            // below varies per request - this segment's terminology, the pairs
+            // recalled for this chunk - whereas the bank is the same text for
+            // every request in the job. Kept here it is a stable prefix the
+            // provider's prompt cache can recognise; moved down it would be
+            // re-read at full price on every row the translator lands on.
+            //
+            // It follows the instructions rather than preceding them: a prompt
+            // is written for this job and the bank is standing background, so
+            // where the two disagree the later text is the one a model weighs
+            // more heavily, and that is the right way round.
+            if (!string.IsNullOrWhiteSpace(kbContext))
+            {
+                system = system + Environment.NewLine + Environment.NewLine + kbContext.Trim();
+            }
 
             var sb = new StringBuilder();
 
@@ -108,10 +126,12 @@ namespace Supervertaler.MemoQ.Core
             MTRequestMetadata metadata,
             IReadOnlyList<DocumentMemory.Pair> recalled,
             IReadOnlyList<TermIndex.Match> ownTerms,
-            string instructions)
+            string instructions,
+            string kbContext = null)
         {
             var built = Build(new TranslationBundle { Source = SegmentBuilder.CreateFromString(" ") },
-                settings, sourceLangCode, targetLangCode, metadata, recalled, ownTerms, instructions);
+                settings, sourceLangCode, targetLangCode, metadata, recalled, ownTerms, instructions,
+                kbContext);
 
             // Build appends a "Source segment:" trailer; a batch supplies its own
             // segments, so drop it.

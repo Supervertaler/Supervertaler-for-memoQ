@@ -1,4 +1,5 @@
 using System;
+using System.IO;
 using MemoQ.MTInterfaces;
 using Supervertaler.MemoQ.Settings;
 
@@ -30,7 +31,55 @@ namespace Supervertaler.MemoQ.Core
     {
         private readonly object _lock = new object();
         private Guid _currentDocument;
+        private Guid _currentProject;
         private MTRequestMetadata _lastMetadata;
+
+        /// <summary>
+        /// How much of a memory bank travels with an ordinary translation
+        /// request.
+        ///
+        /// <para>Deliberately a quarter of what AutoPrompt gets. AutoPrompt runs
+        /// once and its output - a prompt - is reused for the whole job, so
+        /// context there is bought once. This block is re-sent with every
+        /// request memoQ makes, and memoQ makes one per ten segments during
+        /// Pre-translate and one per row you land on while translating. On the
+        /// 569-segment job this was measured against, that is 57 sends rather
+        /// than one.</para>
+        ///
+        /// <para>What does not fit is dropped by priority, brief first. That is
+        /// the reader's own rule and it is the right one here: the standing
+        /// instructions for a client are worth more per token than a long
+        /// terminology article, most of which will not apply to any one
+        /// batch.</para>
+        /// </summary>
+        internal const int PerRequestTokenBudget = 6000;
+
+        /// <summary>
+        /// How much of a bank AutoPrompt gets: effectively all of it.
+        ///
+        /// <para>Not a round number for its own sake. A bank as this translator
+        /// keeps them - a client folder of a few articles, over a <c>_shared</c>
+        /// overlay of about eighty kilobytes - comes to roughly twenty-five
+        /// thousand tokens, so this is set above what he actually has rather
+        /// than at a figure that would quietly trim it. The whole point of
+        /// drafting a prompt is that it happens once: whatever the bank knows
+        /// about a client belongs in the prompt that will then govern every one
+        /// of the job's requests, and paying for it twice is not the risk here -
+        /// leaving it out is.</para>
+        /// </summary>
+        internal const int AutoPromptTokenBudget = 40000;
+
+        // The bank's formatted block, and what it was built from. Rebuilt when
+        // the bank changes, when the project changes, and when anything in the
+        // bank is written - a translator who fixes a term in Obsidian mid-job
+        // expects the next batch to know about it.
+        private readonly object _kbLock = new object();
+        private global::Supervertaler.Core.MemoryBankReader _kbReader;
+        private string _kbReaderBank;
+        private string _kbBlock;
+        private string _kbBlockKey;
+        private string _warnedMissingBank;
+        private string _reportedBank;
 
         public EngineContext(SupervertalerSettings settings, string sourceLangCode, string targetLangCode)
         {
@@ -231,11 +280,306 @@ namespace Supervertaler.MemoQ.Core
         {
             if (metadata == null) return;
 
+            Guid switchedTo;
             lock (_lock)
             {
                 _lastMetadata = metadata;
                 if (metadata.DocumentID != Guid.Empty) _currentDocument = metadata.DocumentID;
+
+                switchedTo = metadata.ProjectGuid != Guid.Empty && metadata.ProjectGuid != _currentProject
+                    ? metadata.ProjectGuid
+                    : Guid.Empty;
+                if (switchedTo != Guid.Empty) _currentProject = switchedTo;
             }
+
+            // Outside the lock deliberately: this reads a file, writes a setting
+            // and logs, and _lock is held on memoQ's translate threads.
+            if (switchedTo != Guid.Empty) ApplyProjectMemoryBank(switchedTo);
+        }
+
+        /// <summary>
+        /// The memoQ project the engine is working in, or <see cref="Guid.Empty"/>
+        /// when memoQ has not said.
+        /// </summary>
+        public Guid CurrentProject
+        {
+            get { lock (_lock) return _currentProject; }
+        }
+
+        /// <summary>
+        /// Point SuperMemory at the bank this project uses, when memoQ starts
+        /// sending work from a different one.
+        ///
+        /// <para>A project with no bank recorded CLEARS to none rather than
+        /// inheriting the last one used. A bank supplies one client's
+        /// terminology and standing instructions to every request, so carrying
+        /// the previous job's bank into a new one produces confident answers
+        /// written to the wrong rules, with nothing on screen to say so. No bank
+        /// is better than the wrong bank. This is the Trados plugin's rule,
+        /// deliberately unchanged: a translator who has learnt it there must not
+        /// have to learn a different one here.</para>
+        ///
+        /// <para>Either outcome is written to the log, so the activity window
+        /// reports the change rather than it happening underneath you.</para>
+        /// </summary>
+        private void ApplyProjectMemoryBank(Guid project)
+        {
+            try
+            {
+                // What the two settings dialogs record a later choice against.
+                // memoQ opens them from an MT settings resource and tells them
+                // nothing about projects, so this is their only way to know.
+                SharedSettings.MemoryBankProject = project.ToString("D");
+                SharedSettings.MemoryBankProjectName = ProjectNameOrNull() ?? string.Empty;
+
+                var wanted = MemoryBankChoice.ForProject(project) ?? string.Empty;
+                var current = SharedSettings.MemoryBank ?? string.Empty;
+                if (string.Equals(wanted, current, StringComparison.Ordinal)) return;
+
+                SharedSettings.MemoryBank = wanted;
+                DropKbCache();
+
+                var where = ProjectLabel();
+                PluginLog.Write(wanted.Length > 0
+                    ? "SuperMemory: " + where + " uses memory bank " + Quote(wanted)
+                    : "SuperMemory: no memory bank is set for " + where + ", so it contributes "
+                      + "nothing. The previous project's bank is deliberately not carried over - "
+                      + "it would supply another client's terminology without saying so.");
+            }
+            catch (Exception ex)
+            {
+                PluginLog.Write("Could not apply the memory bank for this project", ex);
+            }
+        }
+
+        private static string Quote(string s) => "'" + s + "'";
+
+        /// <summary>
+        /// Something the translator recognises the project by, falling back to a
+        /// bare phrase. The GUID is deliberately not used: it identifies nothing
+        /// to a human reading the activity window.
+        /// </summary>
+        private string ProjectLabel()
+        {
+            var name = ProjectNameOrNull();
+            return string.IsNullOrWhiteSpace(name) ? "this project" : "project " + Quote(name.Trim());
+        }
+
+        // -- the bank's contribution to a prompt --------------------------------
+
+        /// <summary>
+        /// The selected memory bank, formatted for a prompt, or null when no bank
+        /// is selected or it has nothing to say.
+        ///
+        /// <para>No bank selected is the off switch, and the only one. There is
+        /// deliberately no separate "use SuperMemory" checkbox to fall out of
+        /// step with the picker.</para>
+        ///
+        /// <para>Deliberately does not take the segment text as a query, unlike
+        /// the bridge's search. The block is then byte-identical for every
+        /// request in a job, which is what lets the provider's prompt cache
+        /// recognise it - and on the single-segment path, where the system
+        /// prompt carries nothing else that varies, that turns a per-row cost
+        /// into a per-job one.</para>
+        /// </summary>
+        public string KbContextBlock()
+        {
+            var bank = (SharedSettings.MemoryBank ?? string.Empty).Trim();
+            if (bank.Length == 0) return null;
+
+
+            var dir = global::Supervertaler.Core.MemoryBanks.DirFor(bank);
+            if (dir == null)
+            {
+                WarnBankMissingOnce(bank);
+                return null;
+            }
+
+            var key = string.Join("|", bank, SourceLangCode, TargetLangCode,
+                                  NewestWrite(dir).ToString("O"));
+
+            lock (_kbLock)
+            {
+                if (string.Equals(key, _kbBlockKey, StringComparison.Ordinal)) return _kbBlock;
+
+                try
+                {
+                    if (_kbReader == null || !string.Equals(_kbReaderBank, bank, StringComparison.Ordinal))
+                    {
+                        _kbReader = new global::Supervertaler.Core.MemoryBankReader(dir);
+                        _kbReaderBank = bank;
+                    }
+                    _kbReader.RefreshIndex();
+
+                    var ctx = _kbReader.LoadContext(
+                        ProjectNameOrNull(), null, SourceLangCode, TargetLangCode,
+                        tokenBudget: PerRequestTokenBudget);
+
+                    _kbBlock = ctx == null || !ctx.HasContent
+                        ? null
+                        : global::Supervertaler.Core.MemoryBankReader.FormatForPrompt(ctx);
+                    _kbBlockKey = key;
+
+                    if (_kbBlock != null) ReportBankOnce(bank, ctx);
+                    return _kbBlock;
+                }
+                catch (Exception ex)
+                {
+                    // The bank is optional. A job must never fail because a
+                    // markdown file could not be read.
+                    PluginLog.Write("Could not load memory bank " + Quote(bank), ex);
+                    _kbBlock = null;
+                    _kbBlockKey = key;
+                    return null;
+                }
+            }
+        }
+
+        /// <summary>
+        /// The same bank, whole, for AutoPrompt.
+        ///
+        /// <para>Uncached and unshared with <see cref="KbContextBlock"/> on
+        /// purpose: it is a different budget, it runs once per draft rather than
+        /// once per batch, and letting the two share a slot would mean whichever
+        /// ran last decided what every following translation request carried.
+        /// </para>
+        /// </summary>
+        public string KbContextForAutoPrompt()
+        {
+            var bank = (SharedSettings.MemoryBank ?? string.Empty).Trim();
+            if (bank.Length == 0) return null;
+
+            var dir = global::Supervertaler.Core.MemoryBanks.DirFor(bank);
+            if (dir == null)
+            {
+                WarnBankMissingOnce(bank);
+                return null;
+            }
+
+            try
+            {
+                var reader = new global::Supervertaler.Core.MemoryBankReader(dir);
+                reader.RefreshIndex();
+
+                var ctx = reader.LoadContext(
+                    ProjectNameOrNull(), null, SourceLangCode, TargetLangCode,
+                    tokenBudget: AutoPromptTokenBudget);
+
+                return ctx == null || !ctx.HasContent
+                    ? null
+                    : global::Supervertaler.Core.MemoryBankReader.FormatForPrompt(ctx);
+            }
+            catch (Exception ex)
+            {
+                PluginLog.Write("Could not load memory bank " + Quote(bank) + " for AutoPrompt", ex);
+                return null;
+            }
+        }
+
+        /// <summary>
+        /// The newest write anywhere in the bank, and in the <c>_shared</c> bank
+        /// layered under it. A bank is a handful of markdown files, so this is a
+        /// cheap stat rather than a reason to add a timer - and it is what makes
+        /// an edit in Obsidian take effect on the next batch.
+        /// </summary>
+        private static DateTime NewestWrite(string bankDir)
+        {
+            var newest = DateTime.MinValue;
+
+            foreach (var dir in new[] { bankDir, SharedBankDir(bankDir) })
+            {
+                if (dir == null || !Directory.Exists(dir)) continue;
+
+                try
+                {
+                    foreach (var f in Directory.GetFiles(dir, "*.md", SearchOption.AllDirectories))
+                    {
+                        var t = File.GetLastWriteTimeUtc(f);
+                        if (t > newest) newest = t;
+                    }
+                }
+                catch (Exception) { /* an unreadable bank rebuilds each time, which is safe */ }
+            }
+
+            return newest;
+        }
+
+        private static string SharedBankDir(string bankDir)
+        {
+            try
+            {
+                var root = Path.GetDirectoryName(bankDir);
+                if (string.IsNullOrEmpty(root)) return null;
+
+                var shared = Path.Combine(root, global::Supervertaler.Core.MemoryBankReader.SharedBankName);
+                return string.Equals(shared, bankDir, StringComparison.OrdinalIgnoreCase) ? null : shared;
+            }
+            catch (Exception) { return null; }
+        }
+
+        private string ProjectNameOrNull()
+        {
+            try
+            {
+                var doc = CurrentDocument;
+                return doc == Guid.Empty ? null : DocumentNames.Resolve(doc)?.Project;
+            }
+            catch (Exception) { return null; }
+        }
+
+        private void DropKbCache()
+        {
+            lock (_kbLock)
+            {
+                _kbBlock = null;
+                _kbBlockKey = null;
+                _warnedMissingBank = null;
+                _reportedBank = null;
+            }
+        }
+
+        /// <summary>
+        /// Says once that the selected bank is not there. A name goes stale when
+        /// the folder is renamed or deleted outside the plugin, and the symptom -
+        /// prompts quietly losing their client rules - is otherwise invisible.
+        /// </summary>
+        private void WarnBankMissingOnce(string bank)
+        {
+            lock (_kbLock)
+            {
+                if (string.Equals(_warnedMissingBank, bank, StringComparison.Ordinal)) return;
+                _warnedMissingBank = bank;
+            }
+
+            PluginLog.Write("SuperMemory: there is no memory bank called " + Quote(bank) + " under "
+                + global::Supervertaler.Core.MemoryBanks.Root
+                + " - nothing from it is reaching the model. Choose another in Translation settings.");
+        }
+
+        /// <summary>
+        /// Says once per bank what is actually being sent, and what did not fit.
+        /// At this budget trimming is normal rather than exceptional, which is
+        /// exactly why it has to be visible: a rule the translator wrote down and
+        /// cannot see being applied is worse than having no bank at all.
+        /// </summary>
+        private void ReportBankOnce(string bank, global::Supervertaler.Core.KbContext ctx)
+        {
+            lock (_kbLock)
+            {
+                if (string.Equals(_reportedBank, bank, StringComparison.Ordinal)) return;
+                _reportedBank = bank;
+            }
+
+            var trimmed = ctx.TrimmedPaths != null && ctx.TrimmedPaths.Count > 0
+                ? " | not sent, over the " + PerRequestTokenBudget.ToString("N0") + "-token budget: "
+                  + string.Join(", ", ctx.TrimmedPaths)
+                : "";
+
+            // Characters over four is the same rough measure the reader trims by,
+            // so the two numbers are at least consistent with each other.
+            PluginLog.Write("SuperMemory: sending memory bank " + Quote(bank)
+                + " with every request (~" + ((_kbBlock ?? string.Empty).Length / 4).ToString("N0")
+                + " tokens)" + trimmed);
         }
     }
 }

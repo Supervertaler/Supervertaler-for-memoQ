@@ -1,4 +1,4 @@
-<Project Sdk="Microsoft.NET.Sdk">
+﻿<Project Sdk="Microsoft.NET.Sdk">
 
   <PropertyGroup>
     <OutputType>WinExe</OutputType>
@@ -75,6 +75,12 @@
     </Compile>
     <Compile Include="..\Supervertaler.MemoQ\Core\ModelCatalog.cs">
       <Link>Shared\ModelCatalog.cs</Link>
+    </Compile>
+    <Compile Include="..\Supervertaler.MemoQ\Core\MemoryBankChoice.cs">
+      <Link>Shared\MemoryBankChoice.cs</Link>
+    </Compile>
+    <Compile Include="..\Supervertaler.MemoQ\Settings\MemoryBankPicker.cs">
+      <Link>Shared\MemoryBankPicker.cs</Link>
     </Compile>
   </ItemGroup>
 

@@ -915,7 +915,15 @@ namespace Supervertaler.MemoQ.Core
                     TotalTermCount = terms.Count,
                     TmPairs = pairs,
                     UserContextHint = hint,
-                    HostConstraints = MemoQHostConstraints
+                    HostConstraints = MemoQHostConstraints,
+
+                    // The selected memory bank, whole. A drafted prompt is the
+                    // one place a client's standing decisions can be written in
+                    // once and then apply to every request of the job, which is
+                    // both cheaper and more reliable than re-sending the bank
+                    // with each batch - so this is where the bank is worth the
+                    // most, and where it is least worth trimming.
+                    KbContext = _context?.KbContextForAutoPrompt()
                 }
             };
 

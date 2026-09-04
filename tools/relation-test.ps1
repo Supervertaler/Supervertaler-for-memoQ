@@ -49,7 +49,7 @@ try {
     $settings = [Activator]::CreateInstance($settingsType)
 
     $built = $builder.GetMethod('Build', $PublicStatic).Invoke(
-        $null, [object[]]@($bundle, $settings, 'eng', 'dut', $null, $null, $matches, 'Translate.'))
+        $null, [object[]]@($bundle, $settings, 'eng', 'dut', $null, $null, $matches, 'Translate.', $null))
     $user = $built.GetType().GetProperty('User').GetValue($built)
 
     $saysSameTerminology = $user -like '*same terminology filtered to what is in front of you*'
@@ -69,7 +69,7 @@ try {
     $empty = [Activator]::CreateInstance($bundleType)
     $bundleType.GetField('Source').SetValue($empty, (Seg 'Nothing matches here.'))
     $plain = $builder.GetMethod('Build', $PublicStatic).Invoke(
-        $null, [object[]]@($empty, $settings, 'eng', 'dut', $null, $null, $null, 'Translate.'))
+        $null, [object[]]@($empty, $settings, 'eng', 'dut', $null, $null, $null, 'Translate.', $null))
     $plainUser = $plain.GetType().GetProperty('User').GetValue($plain)
     $quiet = -not ($plainUser -like '*Client terminology*') -and -not ($plainUser -like '*Forbidden terms*')
     Write-Host "$(if ($quiet) {'PASS'} else {'FAIL'}) no terminology, no blocks and no precedence talk"

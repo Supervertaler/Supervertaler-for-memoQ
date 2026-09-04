@@ -41,6 +41,8 @@ namespace Supervertaler.MemoQ.Core
 
         private const string GlossaryKey = "glossary";
         private const string MemoryBankKey = "membank";
+        private const string MemoryBankProjectKey = "membank.project";
+        private const string MemoryBankProjectNameKey = "membank.projectname";
         private const string BridgeModeKey = "bridgemode";
         private const string ProviderKey = "provider";
         private const string ModelKey = "model";
@@ -130,6 +132,43 @@ namespace Supervertaler.MemoQ.Core
         {
             get => Read(MemoryBankKey);
             set => Write(MemoryBankKey, value);
+        }
+
+        /// <summary>
+        /// The GUID of the memoQ project the engine last did work in, as
+        /// <c>MTRequestMetadata.ProjectGuid</c> spells it.
+        ///
+        /// <para>Written by the engine and read by the two settings dialogs,
+        /// which is the whole reason it exists: memoQ opens them from the MT
+        /// settings resource, with no project attached, so a bank chosen there
+        /// would have nothing to be recorded against. The engine is the only
+        /// part of the plugin memoQ tells about projects at all.</para>
+        ///
+        /// <para>Stale by nature — it names the last project translated in, not
+        /// the one on screen. That is the right trade for its one job: a user
+        /// opening this dialog has almost always just been translating.</para>
+        /// </summary>
+        public static string MemoryBankProject
+        {
+            get => Read(MemoryBankProjectKey);
+            set => Write(MemoryBankProjectKey, value);
+        }
+
+        /// <summary>
+        /// That project's name, for the two dialogs to show.
+        ///
+        /// <para>A label and never a key - the GUID above is the key. It is
+        /// stored rather than derived because deriving it needs memoQ's folder
+        /// layout and a document id, and the dialogs have neither; the
+        /// alternative is showing the user a GUID, which identifies nothing.
+        /// Blank when memoQ's layout did not yield a name, which the dialogs
+        /// handle by naming no project rather than showing an empty pair of
+        /// quotation marks.</para>
+        /// </summary>
+        public static string MemoryBankProjectName
+        {
+            get => Read(MemoryBankProjectNameKey);
+            set => Write(MemoryBankProjectNameKey, value);
         }
 
         /// <summary>

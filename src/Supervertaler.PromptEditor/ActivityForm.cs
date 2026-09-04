@@ -356,6 +356,13 @@ namespace Supervertaler.PromptEditor
             if (body.StartsWith("DocumentMemory: ", StringComparison.Ordinal))
                 return "Memory     " + body.Substring("DocumentMemory: ".Length);
 
+            // Which memory bank is loaded, and what of it is being sent. This is
+            // the one thing in the window that changes by itself - a project
+            // switch swaps or clears the bank without anyone pressing anything -
+            // so it has to be legible rather than merely present.
+            if (body.StartsWith("SuperMemory: ", StringComparison.Ordinal))
+                return "Bank       " + body.Substring("SuperMemory: ".Length);
+
             return body;
         }
 

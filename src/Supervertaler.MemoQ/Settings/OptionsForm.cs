@@ -36,6 +36,8 @@ namespace Supervertaler.MemoQ.Settings
         private readonly TextBox _systemPrompt = new TextBox();
         private readonly NumericUpDown _maxParallel = new NumericUpDown();
         private readonly NumericUpDown _batchSize = new NumericUpDown();
+        private readonly ComboBox _memoryBank = new ComboBox();
+        private Label _memoryBankNote;
         private readonly CheckBox _useTerminology = new CheckBox();
         private readonly CheckBox _useDocumentContext = new CheckBox();
         private readonly CheckBox _bridgeMode = new CheckBox();
@@ -235,6 +237,19 @@ namespace Supervertaler.MemoQ.Settings
             Controls.Add(editPrompts);
             y += rowH;
 
+            // Under Prompt because the two answer the same question - what does
+            // the model know before it is shown a segment - and are what a
+            // translator changes when moving from one client to another.
+            Caption("Memory bank", y);
+            _memoryBank.Left = fieldX; _memoryBank.Top = y; _memoryBank.Width = fieldW - editW - 6;
+            _memoryBank.DropDownStyle = ComboBoxStyle.DropDownList;
+            Controls.Add(_memoryBank);
+            y += 26;
+
+            _memoryBankNote = MemoryBankPicker.Hint(string.Empty, fieldX, fieldW - editW - 6, y);
+            Controls.Add(_memoryBankNote);
+            y += _memoryBankNote.Height + 4;
+
             Caption("Instructions", y);
             _systemPrompt.Left = fieldX; _systemPrompt.Top = y; _systemPrompt.Width = fieldW;
             _systemPrompt.Height = 170;
@@ -371,6 +386,9 @@ namespace Supervertaler.MemoQ.Settings
             _useTerminology.Checked = SharedSettings.UseTerminologyContextOr(g.UseTerminologyContext);
             _useDocumentContext.Checked = SharedSettings.UseDocumentContextOr(g.UseDocumentContext);
             _bridgeMode.Checked = SharedSettings.BridgeModeOr(g.BridgeMode);
+
+            MemoryBankPicker.Fill(_memoryBank, SharedSettings.MemoryBank);
+            _memoryBankNote.Text = MemoryBankPicker.ProjectNote();
         }
 
         private SupervertalerSettings Collect()
@@ -692,6 +710,7 @@ namespace Supervertaler.MemoQ.Settings
             SharedSettings.Model = _model.Text.Trim();
             SharedSettings.Endpoint = _endpoint.Text.Trim();
             SharedSettings.PromptPath = SelectedPromptPath();
+            MemoryBankPicker.Save(MemoryBankPicker.Chosen(_memoryBank));
             SharedSettings.Parallel = (int)_maxParallel.Value;
             SharedSettings.BatchSize = (int)_batchSize.Value;
             SharedSettings.UseTerminologyContext = _useTerminology.Checked;

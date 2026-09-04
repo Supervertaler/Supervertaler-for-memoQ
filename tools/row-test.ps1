@@ -47,7 +47,7 @@ function UserPromptFor([string]$sourceText, $status) {
         $bundleType.GetField('SegmentContext').SetValue($bundle, $items)
     }
 
-    $built = $build.Invoke($null, [object[]]@($bundle, $settings, 'eng', 'nld', $null, $null, $null, 'Translate.'))
+    $built = $build.Invoke($null, [object[]]@($bundle, $settings, 'eng', 'nld', $null, $null, $null, 'Translate.', $null))
     return $built.GetType().GetProperty('User').GetValue($built)
 }
 

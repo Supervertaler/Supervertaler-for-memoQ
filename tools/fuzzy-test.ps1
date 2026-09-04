@@ -102,7 +102,7 @@ $settingsType = $plugin.GetType('Supervertaler.MemoQ.Settings.SupervertalerGener
 $settings = [Activator]::CreateInstance($settingsType)
 
 $build = $builder.GetMethod('Build', $PublicStatic)
-$args = [object[]]@($bundle, $settings, 'eng', 'nld', $null, $null, $null, 'Translate.')
+$args = [object[]]@($bundle, $settings, 'eng', 'nld', $null, $null, $null, 'Translate.', $null)
 $built = $build.Invoke($null, $args)
 $system = GetM $built 'User'
 
@@ -112,7 +112,7 @@ Write-Host "$(if ($hasMatch -and $hasTarget) {'PASS'} else {'FAIL'}) interactive
 
 # Document context off must not discard it.
 SetM $settingsType $settings 'UseDocumentContext' $false
-$built2 = $build.Invoke($null, [object[]]@($bundle, $settings, 'eng', 'nld', $null, $null, $null, 'Translate.'))
+$built2 = $build.Invoke($null, [object[]]@($bundle, $settings, 'eng', 'nld', $null, $null, $null, 'Translate.', $null))
 $system2 = GetM $built2 'User'
 $stillThere = $system2 -like '*Closest approved translation*'
 Write-Host "$(if ($stillThere) {'PASS'} else {'FAIL'}) survives document context being switched off"
@@ -120,7 +120,7 @@ SetM $settingsType $settings 'UseDocumentContext' $true
 # A bundle with no fuzzy item must produce no header.
 $empty = [Activator]::CreateInstance($bundleType)
 SetM $bundleType $empty 'Source' (Seg 'Plain segment.')
-$built3 = $build.Invoke($null, [object[]]@($empty, $settings, 'eng', 'nld', $null, $null, $null, 'Translate.'))
+$built3 = $build.Invoke($null, [object[]]@($empty, $settings, 'eng', 'nld', $null, $null, $null, 'Translate.', $null))
 $system3 = GetM $built3 'User'
 Write-Host "$(if (-not ($system3 -like '*Closest approved*')) {'PASS'} else {'FAIL'}) no header without a match"
 

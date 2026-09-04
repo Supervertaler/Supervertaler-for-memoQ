@@ -220,7 +220,8 @@ namespace Supervertaler.MemoQ
 
             var prompt = PromptBuilder.Build(
                 bundle, general, context.SourceLangCode, context.TargetLangCode,
-                context.LastMetadata, recalled, ownTerms, instructions);
+                context.LastMetadata, recalled, ownTerms, instructions,
+                context.KbContextBlock());
 
             // memoQ asks for the same segment more than once — twice within two
             // seconds merely for landing on it — so an identical prompt is served
