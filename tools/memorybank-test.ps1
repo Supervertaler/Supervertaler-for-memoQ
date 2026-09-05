@@ -161,8 +161,10 @@ Check ($note -match 'once memoQ has translated') "and says why it will not be re
 # apart: one is paid once per job, the other once per ten segments.
 $perRequest = $engineCt.GetField('PerRequestTokenBudget', $Static).GetValue($null)
 $autoPrompt = $engineCt.GetField('AutoPromptTokenBudget', $Static).GetValue($null)
-Check ($perRequest -eq 6000) "a translation request carries $perRequest tokens of bank"
-Check ($autoPrompt -ge $perRequest * 4) "AutoPrompt carries $autoPrompt, several times more"
+# Not a fixed number: what matters is that a real shared bank arrives whole
+# rather than losing its largest article to the budget.
+Check ($perRequest -ge 21000) "a translation request carries $perRequest tokens - enough for a full shared bank"
+Check ($autoPrompt -ge $perRequest) "AutoPrompt carries at least as much: $autoPrompt"
 
 # ---- 6. the project switch, on a real engine context ----------------------
 # This is the rule the whole feature turns on, so it is exercised against the

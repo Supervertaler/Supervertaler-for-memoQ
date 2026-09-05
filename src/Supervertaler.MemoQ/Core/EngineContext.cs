@@ -38,21 +38,24 @@ namespace Supervertaler.MemoQ.Core
         /// How much of a memory bank travels with an ordinary translation
         /// request.
         ///
-        /// <para>Deliberately a quarter of what AutoPrompt gets. AutoPrompt runs
-        /// once and its output - a prompt - is reused for the whole job, so
-        /// context there is bought once. This block is re-sent with every
-        /// request memoQ makes, and memoQ makes one per ten segments during
-        /// Pre-translate and one per row you land on while translating. On the
-        /// 569-segment job this was measured against, that is 57 sends rather
-        /// than one.</para>
+        /// <para>Started at 6,000 on the reasoning that this is re-sent with
+        /// every request while AutoPrompt buys its context once. The reasoning
+        /// was sound and the number was wrong: measured against a real shared
+        /// bank it carried the brief and the terminology and dropped the style
+        /// guide and the method notes - 76% of the material, including the one
+        /// file nothing else in the pipeline supplies. A budget that silently
+        /// discards the largest and least duplicated article is not a saving,
+        /// it is a quiet loss of the thing the bank exists for.</para>
         ///
-        /// <para>What does not fit is dropped by priority, brief first. That is
-        /// the reader's own rule and it is the right one here: the standing
-        /// instructions for a client are worth more per token than a long
-        /// terminology article, most of which will not apply to any one
-        /// batch.</para>
+        /// <para>24,000 is what the Trados plugin uses for the same injection,
+        /// and it clears a full shared bank - about 21,000 tokens here - with
+        /// room for a client bank to sit on top before trimming starts again.
+        /// The cost is real and worth stating: on a job the size of the
+        /// 569-segment one, 57 batches at 21,000 tokens is roughly 1.2M input
+        /// tokens, about six dollars at Opus 5 rates, and interactive lookups
+        /// add to it. Choosing no bank remains the way to spend none of it.</para>
         /// </summary>
-        internal const int PerRequestTokenBudget = 6000;
+        internal const int PerRequestTokenBudget = 24000;
 
         /// <summary>
         /// How much of a bank AutoPrompt gets: effectively all of it.
