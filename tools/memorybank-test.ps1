@@ -31,6 +31,7 @@ $script:probed = @{}
 
 $plugin = [Reflection.Assembly]::LoadFrom($PluginDll)
 $Static = [Reflection.BindingFlags]'Public,NonPublic,Static'
+$NonPublicInstance = [Reflection.BindingFlags]'NonPublic,Instance'
 
 $choice   = $plugin.GetType('Supervertaler.MemoQ.Core.MemoryBankChoice')
 $picker   = $plugin.GetType('Supervertaler.MemoQ.Settings.MemoryBankPicker')
@@ -310,6 +311,80 @@ try {
     $faults | ForEach-Object { Write-Host "     $_" }
 }
 finally { $settingsForm.Dispose() }
+
+# ---- 10. the chooser -------------------------------------------------------
+# The bank and the prompt share one dialog because both lists grow with the
+# work. What is worth checking is the part a menu would not have needed: that
+# filtering narrows without moving the answer, and that an empty result does
+# not hand back the first row of the unfiltered list.
+$chooserT = $editor.GetType('Supervertaler.PromptEditor.ChooserForm')
+$rowT = $chooserT.GetNestedType('Row', [Reflection.BindingFlags]'NonPublic,Public')
+$chooserHelpers = $editor.GetType('Supervertaler.PromptEditor.PromptChooserForm')
+$bankRowT = $chooserHelpers.GetNestedType('BankRow', [Reflection.BindingFlags]'NonPublic,Public')
+
+function MakeBankRow($name, $articles) {
+    $r = [Activator]::CreateInstance($bankRowT)
+    $bankRowT.GetField('Name').SetValue($r, $name)
+    $bankRowT.GetField('Articles').SetValue($r, [int]$articles)
+    return $r
+}
+
+$listT = [Collections.Generic.List`1].MakeGenericType(@($bankRowT))
+$bankList = [Activator]::CreateInstance($listT)
+foreach ($b in @(@('acme-legal', 4), @('acme-patents', 12), @('other-client', 1))) {
+    $bankList.Add((MakeBankRow $b[0] $b[1]))
+}
+
+# @(...) enumerates a collection, so @($list) is three arguments, not one.
+# The array has to be built by hand whenever an argument is itself a list.
+$argv = New-Object object[] 1
+$argv[0] = $bankList
+$rows = $chooserHelpers.GetMethod('BankRows', $Static).Invoke($null, $argv)
+$displays = @($rows | ForEach-Object { $rowT.GetField('Display').GetValue($_) })
+
+Check ($displays[0] -eq '(none)') 'no bank is the first row, and a real one'
+Check ($displays.Count -eq 4) "every bank passed in is offered: $($displays.Count) rows"
+Check ((@($rows | ForEach-Object { $rowT.GetField('Detail').GetValue($_) })[2]) -match '12 articles') `
+    'a bank says how much it holds'
+Check ((@($rows | ForEach-Object { $rowT.GetField('Detail').GetValue($_) })[3]) -match '^1 article,') `
+    'and says it in the singular when there is one'
+
+# A chooser over those rows. Not shown - the assertions are about its state.
+$ctorArgs = New-Object object[] 5
+$ctorArgs[0] = 't'; $ctorArgs[1] = 'c'; $ctorArgs[2] = 'f'
+$ctorArgs[3] = $rows; $ctorArgs[4] = 'acme-patents'
+$chooser = [Activator]::CreateInstance($chooserT, [Reflection.BindingFlags]'Instance,Public,NonPublic',
+    $null, $ctorArgs, $null)
+try {
+    $filterF = $chooserT.GetField('_filter', $NonPublicInstance)
+    $listF = $chooserT.GetField('_list', $NonPublicInstance)
+    $filter = $filterF.GetValue($chooser)
+    $list = $listF.GetValue($chooser)
+
+    Check ($list.Items.Count -eq 4) 'the chooser opens showing everything'
+    Check ($rowT.GetField('Value').GetValue($list.SelectedItem) -eq 'acme-patents') `
+        'and with the current choice selected'
+
+    # Narrowing must not move the answer onto a different bank.
+    $filter.Text = 'acme'
+    Check ($list.Items.Count -eq 2) "typing narrows the list: $($list.Items.Count) left"
+    Check ($rowT.GetField('Value').GetValue($list.SelectedItem) -eq 'acme-patents') `
+        'and the selection stays on what was already chosen'
+
+    # Narrowing PAST the selection has to land somewhere sensible.
+    $filter.Text = 'other'
+    Check ($rowT.GetField('Value').GetValue($list.SelectedItem) -eq 'other-client') `
+        'filtering away the selection moves it to what is left'
+
+    # An empty result must not silently mean "the first bank".
+    $filter.Text = 'zzzzz-nothing-matches'
+    Check ($list.Items.Count -eq 0) 'a filter that matches nothing shows nothing'
+    $chooserT.GetMethod('Accept', $NonPublicInstance).Invoke($chooser, @())
+    Check ($chooser.DialogResult -eq [Windows.Forms.DialogResult]::Cancel) `
+        'and OK on an empty list cancels rather than choosing the first row'
+    Check ($null -eq $chooser.SelectedValue) 'with nothing returned'
+}
+finally { $chooser.Dispose() }
 
 Write-Host ''
 Write-Host "MEMORY BANK TEST COMPLETE - $fails failure(s)"

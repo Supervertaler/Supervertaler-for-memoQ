@@ -8,6 +8,7 @@ using System.Text;
 using System.Windows.Forms;
 using Supervertaler.Core;
 using Supervertaler.MemoQ.Core;
+using Supervertaler.MemoQ.Settings;
 using Supervertaler.Core.Models;
 
 namespace Supervertaler.PromptEditor
@@ -36,8 +37,9 @@ namespace Supervertaler.PromptEditor
         private ToolStripButton _save;
         private ToolStripDropDownButton _insert;
         private ToolStripStatusLabel _status;
-        private ToolStripButton _glossary;
-        private ToolStripButton _prompt;
+        private ToolStripDropDownButton _glossary;
+        private ToolStripDropDownButton _prompt;
+        private ToolStripDropDownButton _memoryBank;
         private ToolStripStatusLabel _dirtyLabel;
         private SplitContainer _split;
 
@@ -276,11 +278,19 @@ namespace Supervertaler.PromptEditor
             });
 
             // What memoQ will actually use, in the one place you cannot miss it.
-            // These two decide every translation between them, and both used to be
-            // findable only by opening a dialog: the glossary sat in the far
+            // These three decide every translation between them, and each used to
+            // be findable only by opening a dialog: the glossary sat in the far
             // bottom-right corner of the status bar with nothing to say it could
-            // be clicked, and the prompt was visible only inside memoQ's own
-            // options dialog, six clicks deep.
+            // be clicked, the prompt was visible only inside memoQ's own options
+            // dialog six clicks deep, and the memory bank was a field in
+            // Translation settings - filed with provider and model because that is
+            // how it is stored, which was the wrong test. What belongs here is what
+            // changes per JOB, and all three answer the same question: what does
+            // the model know before it is shown a segment.
+            //
+            // Drop-down buttons rather than text buttons: the caption used to carry
+            // its own label ("Prompt: <name>"), which made two words compete with
+            // the value and left nothing to say the thing could be clicked at all.
             var context = new ToolStrip
             {
                 GripStyle = ToolStripGripStyle.Hidden,
@@ -288,30 +298,42 @@ namespace Supervertaler.PromptEditor
                 Padding = new Padding(4, 2, 4, 2)
             };
 
-            _prompt = new ToolStripButton
+            ToolStripDropDownButton Chooser(EventHandler onClick)
             {
-                DisplayStyle = ToolStripItemDisplayStyle.Text,
-                AutoToolTip = false
-            };
-            _prompt.Click += (s, e) => ChoosePrompt();
+                var b = new ToolStripDropDownButton
+                {
+                    DisplayStyle = ToolStripItemDisplayStyle.Text,
+                    AutoToolTip = false,
 
-            _glossary = new ToolStripButton
-            {
-                DisplayStyle = ToolStripItemDisplayStyle.Text,
-                AutoToolTip = false
-            };
-            _glossary.Click += (s, e) => ChooseGlossary();
+                    // The arrow is the affordance; the menu behind it is not. All
+                    // three lists grow with the work - forty prompts, twenty-three
+                    // banks - and a flat menu of either is unreadable long before
+                    // it is wrong, so the click opens a list with a filter box
+                    // over it instead.
+                    ShowDropDownArrow = true
+                };
+                b.Click += onClick;
+                return b;
+            }
+
+            _prompt = Chooser((s, e) => ChoosePrompt());
+            _glossary = Chooser((s, e) => ChooseGlossary());
+            _memoryBank = Chooser((s, e) => ChooseMemoryBank());
+
+            ToolStripLabel Caption(string text) =>
+                new ToolStripLabel(text) { ForeColor = SystemColors.GrayText, Margin = new Padding(8, 0, 0, 0) };
 
             context.Items.AddRange(new ToolStripItem[]
             {
-                new ToolStripLabel("In use by memoQ:") { ForeColor = SystemColors.GrayText },
-                _prompt,
-                new ToolStripSeparator(),
-                _glossary
+                new ToolStripLabel("memoQ is using") { ForeColor = SystemColors.GrayText },
+                Caption("Prompt"), _prompt,
+                Caption("Glossary"), _glossary,
+                Caption("Memory bank"), _memoryBank
             });
 
             RefreshPrompt();
             RefreshGlossary();
+            RefreshMemoryBank();
 
             _tree = new TreeView
             {
@@ -1081,7 +1103,7 @@ namespace Supervertaler.PromptEditor
 
             if (string.IsNullOrWhiteSpace(path))
             {
-                _prompt.Text = "Prompt: the instructions in memoQ's settings";
+                _prompt.Text = "the instructions in memoQ's settings";
                 _prompt.ForeColor = SystemColors.GrayText;
                 _prompt.ToolTipText = "No library prompt is selected, so memoQ uses the Instructions box "
                     + "in its own Supervertaler settings. Click to choose a prompt.";
@@ -1091,7 +1113,7 @@ namespace Supervertaler.PromptEditor
             var name = Path.GetFileNameWithoutExtension(path);
             var prompt = FindPrompt(path);
 
-            _prompt.Text = "Prompt: " + name;
+            _prompt.Text = name;
 
             if (prompt == null)
             {
@@ -1169,16 +1191,90 @@ namespace Supervertaler.PromptEditor
                 return;
             }
 
-            using (var dialog = new PromptChooserForm(prompts, SharedSettings.PromptPath))
-            {
-                if (dialog.ShowDialog(this) != DialogResult.OK) return;
+            var chosen = PromptChooserForm.ChoosePrompt(this, prompts, SharedSettings.PromptPath);
+            if (chosen == null) return;
 
-                SharedSettings.PromptPath = dialog.SelectedPath ?? string.Empty;
-                RefreshPrompt();
-                _status.Text = string.IsNullOrEmpty(dialog.SelectedPath)
-                    ? "memoQ will use the instructions in its own settings."
-                    : "Active prompt: " + dialog.SelectedPath;
+            SharedSettings.PromptPath = chosen;
+            RefreshPrompt();
+            _status.Text = chosen.Length == 0
+                ? "memoQ will use the instructions in its own settings."
+                : "Active prompt: " + chosen;
+        }
+
+        /// <summary>
+        /// Shows which memory bank is active, or says plainly that none is - which
+        /// is a correct and common state rather than something missing.
+        /// </summary>
+        private void RefreshMemoryBank()
+        {
+            var bank = (SharedSettings.MemoryBank ?? string.Empty).Trim();
+
+            if (bank.Length == 0)
+            {
+                _memoryBank.Text = "none";
+                _memoryBank.ForeColor = SystemColors.GrayText;
+                _memoryBank.ToolTipText = "No memory bank, so SuperMemory contributes nothing to "
+                    + "translations. Each project remembers its own choice, and a project with none "
+                    + "recorded uses no bank rather than inheriting the last one. Click to choose.";
+                return;
             }
+
+            var dir = Supervertaler.Core.MemoryBanks.DirFor(bank);
+            _memoryBank.Text = bank + (dir == null ? " (missing)" : "");
+            _memoryBank.ForeColor = dir == null ? Color.Firebrick : SystemColors.ControlText;
+            _memoryBank.ToolTipText = dir == null
+                ? "There is no bank of this name under " + Supervertaler.Core.MemoryBanks.Root
+                  + ",\r\nso nothing from it is reaching the model.\r\n\r\nClick to choose another."
+                : "Sent with every translation request, and in full to AutoPrompt:\r\n" + dir
+                  + "\r\n\r\nClick to choose a different one.";
+        }
+
+        /// <summary>
+        /// Picks the memory bank, and records it against the project memoQ last
+        /// worked in so that leaving the job and coming back restores it.
+        /// </summary>
+        private void ChooseMemoryBank()
+        {
+            List<PromptChooserForm.BankRow> banks;
+            try
+            {
+                banks = Supervertaler.Core.MemoryBanks.List()
+                    .Where(n => !Supervertaler.Core.MemoryBanks.IsSharedName(n))
+                    .Select(n => new PromptChooserForm.BankRow { Name = n, Articles = ArticleCount(n) })
+                    .ToList();
+            }
+            catch (Exception ex)
+            {
+                MessageBox.Show(this, "Could not read the memory banks.\r\n\r\n" + ex.Message,
+                    "Choose a memory bank", MessageBoxButtons.OK, MessageBoxIcon.Error);
+                return;
+            }
+
+            var chosen = PromptChooserForm.ChooseBank(this, banks, SharedSettings.MemoryBank);
+            if (chosen == null) return;
+
+            MemoryBankPicker.Save(chosen);
+            RefreshMemoryBank();
+            _status.Text = chosen.Length == 0
+                ? "No memory bank. " + MemoryBankPicker.ProjectNote()
+                : "Active memory bank: " + chosen + ". " + MemoryBankPicker.ProjectNote();
+        }
+
+        /// <summary>
+        /// How many articles a bank holds, for the chooser's detail line. Best
+        /// effort: a bank that cannot be counted still has to be selectable.
+        /// </summary>
+        private static int ArticleCount(string bank)
+        {
+            try
+            {
+                var dir = Supervertaler.Core.MemoryBanks.DirFor(bank);
+                if (dir == null) return 0;
+
+                return Directory.GetFiles(dir, "*.md", SearchOption.AllDirectories)
+                    .Count(f => !Supervertaler.Core.MemoryBankReader.IsIgnoredSidecar(f));
+            }
+            catch (Exception) { return 0; }
         }
 
         /// <summary>Shows which glossary is active, or says plainly that none is.</summary>
@@ -1212,7 +1308,7 @@ namespace Supervertaler.PromptEditor
 
             if (string.IsNullOrWhiteSpace(path))
             {
-                _glossary.Text = "Glossary: none";
+                _glossary.Text = "none";
                 _glossary.ForeColor = SystemColors.GrayText;
                 _glossary.ToolTipText = "No glossary is active, so the terminology pane, the prompts "
                     + "and the terminology check have nothing to work from. Click to choose one.";
@@ -1220,7 +1316,7 @@ namespace Supervertaler.PromptEditor
             }
 
             var missing = !File.Exists(path);
-            _glossary.Text = "Glossary: " + Path.GetFileName(path) + (missing ? " (missing)" : "");
+            _glossary.Text = Path.GetFileName(path) + (missing ? " (missing)" : "");
             _glossary.ForeColor = missing ? Color.Firebrick : SystemColors.ControlText;
             _glossary.ToolTipText = (missing ? "This file no longer exists:\r\n" : "Active glossary:\r\n") + path
                 + "\r\n\r\nClick to choose a different one.";

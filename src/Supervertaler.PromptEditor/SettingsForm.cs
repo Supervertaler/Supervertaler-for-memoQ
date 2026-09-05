@@ -32,8 +32,6 @@ namespace Supervertaler.PromptEditor
         private readonly CheckBox _useTerminology = new CheckBox();
         private readonly CheckBox _useDocumentContext = new CheckBox();
         private readonly CheckBox _bridgeMode = new CheckBox();
-        private readonly ComboBox _memoryBank = new ComboBox();
-        private Label _memoryBankNote;
         private readonly TextBox _apiKey = new TextBox();
         private Label _apiKeySource;
 
@@ -158,21 +156,12 @@ namespace Supervertaler.PromptEditor
                 + "sends back. Suggestions as you move through segments still use the API key.", fieldX, fieldW);
             y += 14;
 
-            // The same list memoQ's own dialog shows, over the same setting.
-            // Reachable without memoQ open, which is the point of this window:
-            // choosing the bank for tomorrow's job is not a reason to start a
-            // CAT tool.
-            Caption("Memory bank", y);
-            _memoryBank.Left = fieldX; _memoryBank.Top = y; _memoryBank.Width = fieldW;
-            _memoryBank.DropDownStyle = ComboBoxStyle.DropDownList;
-            Controls.Add(_memoryBank);
-            y += 26;
-
-            // Through this window's own Hint, which already advances y by what
-            // the text actually needed. Its final text now, for the same reason.
-            _memoryBankNote = Hint(MemoryBankPicker.ProjectNote(), fieldX, fieldW);
-            y += 8;
-
+            // No memory bank here. It sits on the main window's context bar with
+            // the prompt and the glossary, because those three are what changes
+            // between jobs - what the model knows before it is shown a segment -
+            // whereas this dialog is provider, model and endpoint, which are set
+            // once. It was here first only because it is STORED like the settings
+            // below, which turned out to be the wrong test.
             Caption("API key", y);
             _apiKey.Left = fieldX; _apiKey.Top = y; _apiKey.Width = fieldW;
             _apiKey.UseSystemPasswordChar = true;
@@ -318,8 +307,6 @@ namespace Supervertaler.PromptEditor
             _useDocumentContext.Checked = SharedSettings.UseDocumentContextOr(true);
             _bridgeMode.Checked = SharedSettings.BridgeMode;
 
-            MemoryBankPicker.Fill(_memoryBank, SharedSettings.MemoryBank);
-
             // Null for the resource: this program cannot read memoQ's settings, and
             // does not need to, because memoQ copies that key into the shared file.
             var key = ApiKeys.Resolve(provider, null);
@@ -340,7 +327,6 @@ namespace Supervertaler.PromptEditor
             SharedSettings.UseTerminologyContext = _useTerminology.Checked;
             SharedSettings.UseDocumentContext = _useDocumentContext.Checked;
             SharedSettings.BridgeMode = _bridgeMode.Checked;
-            MemoryBankPicker.Save(MemoryBankPicker.Chosen(_memoryBank));
 
             // Recorded only as an override. Saving the key it was already showing
             // would pin a copy and stop the Trados file being the one place to
