@@ -17,11 +17,13 @@ namespace Supervertaler.MemoQ.Settings
     internal static class MemoryBankPicker
     {
         /// <summary>
-        /// What no bank looks like in the list. Spelled out rather than left as a
-        /// blank row: an empty line in a dropdown reads as a rendering fault, and
-        /// choosing no bank is a real and often correct answer.
+        /// What no CLIENT bank looks like in the list. Spelled out rather than
+        /// left as a blank row - an empty line in a dropdown reads as a rendering
+        /// fault - and not called "none", because the shared bank goes with every
+        /// request either way. Choosing this is a real and often correct answer;
+        /// it just is not the same as sending nothing.
         /// </summary>
-        public const string NoneItem = "(none)";
+        public const string NoneItem = "(no client bank \u2013 shared defaults only)";
 
         /// <summary>
         /// Fills the list and selects <paramref name="selected"/>, or

@@ -117,14 +117,16 @@ namespace Supervertaler.PromptEditor
         {
             var rows = new List<ChooserForm.Row>
             {
-                // First, and a real answer rather than an absence. A project with
-                // no bank is the correct state for most jobs, and it is the only
-                // way to switch SuperMemory off for one.
+                // First, and a real answer rather than an absence. No CLIENT
+                // bank is the correct state for most jobs - but it is not the
+                // same as nothing, because the shared bank still travels, so
+                // the row must not be labelled "(none)".
                 new ChooserForm.Row
                 {
                     Value = "",
-                    Display = "(none)",
-                    Detail = "No memory bank. Nothing from SuperMemory is sent with a translation request."
+                    Display = "(no client bank \u2013 shared defaults only)",
+                    Detail = "The _shared bank still goes with every request. It is what applies to "
+                           + "every job regardless of client."
                 }
             };
 

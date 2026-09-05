@@ -385,17 +385,10 @@ namespace Supervertaler.MemoQ.Core
         public string KbContextBlock()
         {
             var bank = (SharedSettings.MemoryBank ?? string.Empty).Trim();
-            if (bank.Length == 0) return null;
+            var dir = BankDir(bank);
+            if (dir == null) return null;
 
-
-            var dir = global::Supervertaler.Core.MemoryBanks.DirFor(bank);
-            if (dir == null)
-            {
-                WarnBankMissingOnce(bank);
-                return null;
-            }
-
-            var key = string.Join("|", bank, SourceLangCode, TargetLangCode,
+            var key = string.Join("|", dir, SourceLangCode, TargetLangCode,
                                   NewestWrite(dir).ToString("O"));
 
             lock (_kbLock)
@@ -446,15 +439,8 @@ namespace Supervertaler.MemoQ.Core
         /// </summary>
         public string KbContextForAutoPrompt()
         {
-            var bank = (SharedSettings.MemoryBank ?? string.Empty).Trim();
-            if (bank.Length == 0) return null;
-
-            var dir = global::Supervertaler.Core.MemoryBanks.DirFor(bank);
-            if (dir == null)
-            {
-                WarnBankMissingOnce(bank);
-                return null;
-            }
+            var dir = BankDir((SharedSettings.MemoryBank ?? string.Empty).Trim());
+            if (dir == null) return null;
 
             try
             {
@@ -471,9 +457,38 @@ namespace Supervertaler.MemoQ.Core
             }
             catch (Exception ex)
             {
-                PluginLog.Write("Could not load memory bank " + Quote(bank) + " for AutoPrompt", ex);
+                PluginLog.Write("Could not load the memory bank at " + dir + " for AutoPrompt", ex);
                 return null;
             }
+        }
+
+        /// <summary>
+        /// The folder to read, given the chosen bank - and <c>_shared</c> when
+        /// nothing is chosen.
+        ///
+        /// <para>Choosing no bank does not mean sending nothing. <c>_shared</c>
+        /// is where the translator keeps what applies to every job regardless of
+        /// client, and the shared reader loads it alongside whatever bank is
+        /// selected; sending it on its own when none is is the same rule with
+        /// the client half empty. Supervertaler for Trados has always behaved
+        /// this way - its <c>_shared</c> block sits outside the "does the
+        /// selected bank exist" guard - and the two products disagreeing about
+        /// what a memory bank contributes is worse than either answer.</para>
+        ///
+        /// <para>Pointing the reader AT <c>_shared</c> rather than through it is
+        /// deliberate: the reader skips the shared overlay when the bank it was
+        /// given is <c>_shared</c> itself, so the articles arrive once rather
+        /// than twice.</para>
+        /// </summary>
+        private string BankDir(string bank)
+        {
+            if (bank.Length == 0)
+                return global::Supervertaler.Core.MemoryBanks.DirFor(
+                    global::Supervertaler.Core.MemoryBankReader.SharedBankName);
+
+            var dir = global::Supervertaler.Core.MemoryBanks.DirFor(bank);
+            if (dir == null) WarnBankMissingOnce(bank);
+            return dir;
         }
 
         /// <summary>
@@ -566,8 +581,8 @@ namespace Supervertaler.MemoQ.Core
         {
             lock (_kbLock)
             {
-                if (string.Equals(_reportedBank, bank, StringComparison.Ordinal)) return;
-                _reportedBank = bank;
+                if (string.Equals(_reportedBank, bank ?? string.Empty, StringComparison.Ordinal)) return;
+                _reportedBank = bank ?? string.Empty;
             }
 
             var trimmed = ctx.TrimmedPaths != null && ctx.TrimmedPaths.Count > 0
@@ -577,7 +592,10 @@ namespace Supervertaler.MemoQ.Core
 
             // Characters over four is the same rough measure the reader trims by,
             // so the two numbers are at least consistent with each other.
-            PluginLog.Write("SuperMemory: sending memory bank " + Quote(bank)
+            PluginLog.Write("SuperMemory: sending "
+                + (bank.Length == 0
+                    ? "the shared defaults only, with no client bank chosen,"
+                    : "memory bank " + Quote(bank))
                 + " with every request (~" + ((_kbBlock ?? string.Empty).Length / 4).ToString("N0")
                 + " tokens)" + trimmed);
         }

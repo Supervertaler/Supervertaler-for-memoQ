@@ -102,7 +102,9 @@ $combo = New-Object System.Windows.Forms.ComboBox
 Call $picker 'Fill' @([object]$combo, [object]'')
 
 $items = @($combo.Items | ForEach-Object { [string]$_ })
-Check ($items[0] -eq '(none)') 'no bank is an explicit first entry, not a blank row'
+$noneItem = $picker.GetField('NoneItem', $Static).GetValue($null)
+Check ($items[0] -eq $noneItem) 'no client bank is an explicit first entry, not a blank row'
+Check ($noneItem -notmatch '^\(none\)$') "and does not claim nothing is sent: $noneItem"
 Check ($combo.SelectedIndex -eq 0) 'and is what an empty setting selects'
 
 # _shared layers under whichever bank is chosen. Offering it invites someone to
@@ -120,7 +122,7 @@ Check ($unresolvable.Count -eq 0) "every listed bank resolves to a folder ($($un
 $expected = @($onDisk | Where-Object { $_ -ne '_shared' }).Count + 1
 Check ($items.Count -eq $expected) "the list is the banks on disk plus (none): $($items.Count)"
 
-Check ((Call $picker 'Chosen' @([object]$combo)) -eq '') '(none) reads back as no bank'
+Check ((Call $picker 'Chosen' @([object]$combo)) -eq '') 'the first entry reads back as no client bank'
 
 # A recorded bank that has since been renamed or deleted stays visible. Silently
 # resetting it to (none) would make OK on this dialog destroy the only clue.
@@ -230,6 +232,25 @@ try {
     [IO.File]::WriteAllText((Join-Path $temp 'brief.md'), "# Harness`r`n`r`nEDITED-$marker`r`n")
     $edited = $ctx.GetType().GetMethod('KbContextBlock').Invoke($ctx, @())
     Check ($edited -and $edited.Contains("EDITED-$marker")) 'editing the bank takes effect on the next request'
+
+    # ---- 7b. no client bank still sends the shared defaults -----------------
+    # Supervertaler for Trados loads _shared outside its "does the selected bank
+    # exist" guard, so _shared travels whether or not a client bank is chosen.
+    # memoQ returned nothing at all, which made the same folder mean different
+    # things in the two products - the one thing a shared memory bank must not do.
+    $sharedDir = Call $banks 'DirFor' @([object]'_shared')
+    if ($null -ne $sharedDir) {
+        SetProp $shared 'MemoryBank' ''
+        $sharedOnly = $ctx.GetType().GetMethod('KbContextBlock').Invoke($ctx, @())
+        Check ($null -ne $sharedOnly -and $sharedOnly.Length -gt 0) `
+            'with no client bank chosen, the shared defaults are still sent'
+
+        # And a client bank must add to that rather than replace it.
+        SetProp $shared 'MemoryBank' '_sv-harness-bank'
+        $withClient = $ctx.GetType().GetMethod('KbContextBlock').Invoke($ctx, @())
+        Check ($withClient -ne $sharedOnly) 'and choosing one changes what is sent'
+        Check ($withClient.Contains($marker)) 'the client bank being the part that was added'
+    }
 
     # ---- 8. WHERE the block lands ------------------------------------------
     # In the system half, not with the per-request context. That is what makes it
@@ -342,7 +363,7 @@ $argv[0] = $bankList
 $rows = $chooserHelpers.GetMethod('BankRows', $Static).Invoke($null, $argv)
 $displays = @($rows | ForEach-Object { $rowT.GetField('Display').GetValue($_) })
 
-Check ($displays[0] -eq '(none)') 'no bank is the first row, and a real one'
+Check ($displays[0] -match 'shared') "the chooser's first row names what still goes: $($displays[0])"
 Check ($displays.Count -eq 4) "every bank passed in is offered: $($displays.Count) rows"
 Check ((@($rows | ForEach-Object { $rowT.GetField('Detail').GetValue($_) })[2]) -match '12 articles') `
     'a bank says how much it holds'

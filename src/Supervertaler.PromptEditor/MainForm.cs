@@ -1191,12 +1191,15 @@ namespace Supervertaler.PromptEditor
             {
                 _prompt.Text = "the instructions in memoQ's settings";
                 _prompt.ForeColor = SystemColors.GrayText;
-                _prompt.ToolTipText = "No library prompt is selected, so memoQ uses the Instructions box "
-                    + "in its own Supervertaler settings. Click to choose a prompt.";
+                _prompt.ToolTipText = Tip("No library prompt is selected, so memoQ uses the Instructions box "
+                    + "in its own Supervertaler settings. Click to choose a prompt.");
                 return;
             }
 
-            var name = Path.GetFileNameWithoutExtension(path);
+            // The marker belongs to the FILE, not to the prompt: the tree and the
+            // chooser both strip it, and the bar showing "... [memoQ]" beside
+            // them made one prompt look like two things.
+            var name = PromptLibrary.StripAppTag(Path.GetFileNameWithoutExtension(path));
             var prompt = FindPrompt(path);
 
             _prompt.Text = name;
@@ -1204,9 +1207,9 @@ namespace Supervertaler.PromptEditor
             if (prompt == null)
             {
                 _prompt.ForeColor = Color.Firebrick;
-                _prompt.ToolTipText = "memoQ has this prompt selected, but it is not in the library or is "
-                    + "marked for another product. memoQ will fall back to the Instructions box in its "
-                    + "own settings.";
+                _prompt.ToolTipText = Tip("memoQ has this prompt selected, but it is not in the "
+                    + "library or is marked for another product. memoQ will fall back to the "
+                    + "Instructions box in its own settings.");
                 return;
             }
 
@@ -1288,6 +1291,44 @@ namespace Supervertaler.PromptEditor
         }
 
         /// <summary>
+        /// Breaks a tooltip into lines a tooltip window can actually show.
+        ///
+        /// <para>A ToolStrip tooltip does no wrapping of its own: whatever it is
+        /// given becomes one line, however long. A sentence of explanation
+        /// therefore renders as a band stretching the width of the screen,
+        /// drawn over the form underneath it, which is what three of these were
+        /// doing.</para>
+        ///
+        /// <para>Break at spaces so a word is never split, and take the line
+        /// length from what reads comfortably rather than from what fits: a
+        /// tooltip wider than about sixty characters is being read as a
+        /// paragraph, and belongs in the status bar instead.</para>
+        /// </summary>
+        private static string Tip(string text, int width = 58)
+        {
+            if (string.IsNullOrEmpty(text)) return text;
+
+            var lines = new List<string>();
+            foreach (var paragraph in text.Split(new[] { "\r\n" }, StringSplitOptions.None))
+            {
+                var line = new StringBuilder();
+                foreach (var word in paragraph.Split(' '))
+                {
+                    if (line.Length > 0 && line.Length + 1 + word.Length > width)
+                    {
+                        lines.Add(line.ToString());
+                        line.Clear();
+                    }
+                    if (line.Length > 0) line.Append(' ');
+                    line.Append(word);
+                }
+                lines.Add(line.ToString());
+            }
+
+            return string.Join("\r\n", lines);
+        }
+
+        /// <summary>
         /// A toolbar button with an icon, falling back to text alone when the
         /// icon font has no such glyph. An empty label makes it icon-only, in
         /// which case the tooltip is the only name it has and must not be empty.
@@ -1304,7 +1345,7 @@ namespace Supervertaler.PromptEditor
                     ? ToolStripItemDisplayStyle.Text
                     : (iconOnly ? ToolStripItemDisplayStyle.Image : ToolStripItemDisplayStyle.ImageAndText),
                 ForeColor = colour ?? SystemColors.ControlText,
-                ToolTipText = tip,
+                ToolTipText = Tip(tip),
                 AutoToolTip = false
             };
         }
@@ -1327,11 +1368,11 @@ namespace Supervertaler.PromptEditor
 
             if (_mcpMode.Image == null && !_mcpMode.Checked) _mcpMode.Text = "Claude Desktop: off";
 
-            _mcpMode.ToolTipText = _mcpMode.Checked
-                ? "Pre-translate hands the segments to Claude Desktop and inserts what it stages back. "
-                  + "Nothing is charged to your API key. Click to switch back to the API."
-                : "Pre-translate calls the model with your API key. "
-                  + "Click to hand the segments to Claude Desktop instead.";
+            _mcpMode.ToolTipText = Tip(_mcpMode.Checked
+                ? "Pre-translate hands the segments to Claude Desktop and inserts what it stages "
+                  + "back. Nothing is charged to your API key.\r\n\r\nClick to switch back to the API."
+                : "Pre-translate calls the model with your API key.\r\n\r\n"
+                  + "Click to hand the segments to Claude Desktop instead.");
         }
 
         /// <summary>
@@ -1344,22 +1385,30 @@ namespace Supervertaler.PromptEditor
 
             if (bank.Length == 0)
             {
-                _memoryBank.Text = "none";
+                // Not "none": the shared bank travels whether or not a client
+                // bank is chosen, so saying none here would be a plain untruth
+                // about what is going to the model.
+                var shared = Supervertaler.Core.MemoryBanks.DirFor(
+                    Supervertaler.Core.MemoryBankReader.SharedBankName);
+
+                _memoryBank.Text = shared == null ? "none" : "shared defaults";
                 _memoryBank.ForeColor = SystemColors.GrayText;
-                _memoryBank.ToolTipText = "No memory bank, so SuperMemory contributes nothing to "
-                    + "translations. Each project remembers its own choice, and a project with none "
-                    + "recorded uses no bank rather than inheriting the last one. Click to choose.";
+                _memoryBank.ToolTipText = Tip(shared == null
+                    ? "No memory bank, and no shared bank either, so SuperMemory contributes "
+                      + "nothing. Click to choose one."
+                    : "No client bank. The _shared bank still goes with every request:\r\n" + shared
+                      + "\r\n\r\nClick to add a client bank on top of it.");
                 return;
             }
 
             var dir = Supervertaler.Core.MemoryBanks.DirFor(bank);
             _memoryBank.Text = bank + (dir == null ? " (missing)" : "");
             _memoryBank.ForeColor = dir == null ? Color.Firebrick : SystemColors.ControlText;
-            _memoryBank.ToolTipText = dir == null
+            _memoryBank.ToolTipText = Tip(dir == null
                 ? "There is no bank of this name under " + Supervertaler.Core.MemoryBanks.Root
-                  + ",\r\nso nothing from it is reaching the model.\r\n\r\nClick to choose another."
+                  + ", so nothing from it is reaching the model.\r\n\r\nClick to choose another."
                 : "Sent with every translation request, and in full to AutoPrompt:\r\n" + dir
-                  + "\r\n\r\nClick to choose a different one.";
+                  + "\r\n\r\nClick to choose a different one.");
         }
 
         /// <summary>
@@ -1389,7 +1438,7 @@ namespace Supervertaler.PromptEditor
             MemoryBankPicker.Save(chosen);
             RefreshMemoryBank();
             _status.Text = chosen.Length == 0
-                ? "No memory bank. " + MemoryBankPicker.ProjectNote()
+                ? "No client bank; the shared defaults still apply. " + MemoryBankPicker.ProjectNote()
                 : "Active memory bank: " + chosen + ". " + MemoryBankPicker.ProjectNote();
         }
 
@@ -1443,16 +1492,16 @@ namespace Supervertaler.PromptEditor
             {
                 _glossary.Text = "none";
                 _glossary.ForeColor = SystemColors.GrayText;
-                _glossary.ToolTipText = "No glossary is active, so the terminology pane, the prompts "
-                    + "and the terminology check have nothing to work from. Click to choose one.";
+                _glossary.ToolTipText = Tip("No glossary is active, so the terminology pane, the "
+                    + "prompts and the terminology check have nothing to work from. Click to choose one.");
                 return;
             }
 
             var missing = !File.Exists(path);
             _glossary.Text = Path.GetFileName(path) + (missing ? " (missing)" : "");
             _glossary.ForeColor = missing ? Color.Firebrick : SystemColors.ControlText;
-            _glossary.ToolTipText = (missing ? "This file no longer exists:\r\n" : "Active glossary:\r\n") + path
-                + "\r\n\r\nClick to choose a different one.";
+            _glossary.ToolTipText = Tip((missing ? "This file no longer exists:\r\n" : "Active glossary:\r\n")
+                + path + "\r\n\r\nClick to choose a different one.");
         }
 
         /// <summary>
