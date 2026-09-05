@@ -368,6 +368,56 @@ namespace Supervertaler.MemoQ.Core
             return string.IsNullOrWhiteSpace(name) ? "this project" : "project " + Quote(name.Trim());
         }
 
+        private string _glossaryRuleSaidFor;
+
+        /// <summary>
+        /// Whether the project glossary's matches for this request go to the
+        /// model.
+        ///
+        /// <para>Not when the selected prompt was drafted by AutoPrompt. Such a
+        /// prompt already ends in a locked-terms table chosen for this document,
+        /// so sending the glossary alongside it supplies the same job's
+        /// terminology twice from two sources that were never written to agree -
+        /// and where they disagree, nothing tells the model which to follow.
+        /// One authority at translation time is the point.</para>
+        ///
+        /// <para>The glossary itself is untouched: it still drives the
+        /// terminology pane, the QA check and AutoPrompt's own reading. This
+        /// governs one thing only - whether its matches are pasted into a
+        /// translation request.</para>
+        ///
+        /// <para>Note what this also stops: forbidden terms reach the model
+        /// through the same list. A drafted prompt is expected to carry its own,
+        /// since AutoPrompt writes "never X" notes into the table it produces -
+        /// but a term forbidden in the glossary AFTER the prompt was drafted
+        /// will not be enforced until the prompt is drafted again.</para>
+        /// </summary>
+        public bool SendGlossaryToModel()
+        {
+            var general = General;
+            if (!general.UseTerminologyContext) return false;
+
+            var path = general.PromptPath;
+            if (!PromptResolver.IsDrafted(path)) return true;
+
+            SayGlossaryRuleOnce(path);
+            return false;
+        }
+
+        private void SayGlossaryRuleOnce(string path)
+        {
+            lock (_kbLock)
+            {
+                if (string.Equals(_glossaryRuleSaidFor, path, StringComparison.Ordinal)) return;
+                _glossaryRuleSaidFor = path;
+            }
+
+            PluginLog.Write("Terminology: the selected prompt was drafted by AutoPrompt and carries its "
+                + "own locked terms, so the glossary is not being sent to the model as well. It still "
+                + "drives the terminology pane and the QA check. Draft the prompt again to take in "
+                + "glossary changes made since.");
+        }
+
         // -- the bank's contribution to a prompt --------------------------------
 
         /// <summary>

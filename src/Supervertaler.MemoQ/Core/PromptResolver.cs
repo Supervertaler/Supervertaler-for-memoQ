@@ -161,6 +161,21 @@ namespace Supervertaler.MemoQ.Core
         /// the caller can compare it with the project's without this class having
         /// to know about engines.
         /// </summary>
+        /// <summary>
+        /// True when the selected prompt was written by AutoPrompt rather than by
+        /// a person. False for no selection, an unknown path, or a hand-written
+        /// prompt - all of which mean "assume nothing about what it contains".
+        /// </summary>
+        public static bool IsDrafted(string promptRelativePath)
+        {
+            if (string.IsNullOrWhiteSpace(promptRelativePath)) return false;
+
+            var prompt = Available().FirstOrDefault(p =>
+                string.Equals(p.RelativePath, promptRelativePath, StringComparison.OrdinalIgnoreCase));
+
+            return prompt != null && prompt.IsDrafted;
+        }
+
         public static bool TryGetLanguages(string promptRelativePath, out string source, out string target)
         {
             source = null;

@@ -101,11 +101,19 @@ namespace Supervertaler.PromptEditor
                 var only = ProductNote(p.App);
                 if (only != null) display += "      " + only;
 
+                // Worth its own line rather than a mark on the display: a
+                // drafted prompt behaves differently at translation time, and
+                // the difference is invisible in the prompt's own text.
+                var detail = p.IsDrafted
+                    ? "Drafted by AutoPrompt, so the glossary is not sent to the model as well. "
+                      + (p.Description ?? "")
+                    : p.Description;
+
                 rows.Add(new ChooserForm.Row
                 {
                     Value = p.RelativePath,
                     Display = display,
-                    Detail = p.Description,
+                    Detail = detail,
                     Search = p.RelativePath
                 });
             }

@@ -201,7 +201,7 @@ namespace Supervertaler.MemoQ
 
             // Our own glossary, via the TB plugin's index. memoQ will not hand an
             // MT plugin its terminology, so we are the terminology source.
-            var ownTerms = general.UseTerminologyContext
+            var ownTerms = context.SendGlossaryToModel()
                 ? TermIndex.Find(SharedSettings.GlossaryPath, bundle.Source.PlainText)
                 : null;
 
