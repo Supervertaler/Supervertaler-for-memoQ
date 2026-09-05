@@ -632,6 +632,32 @@ namespace Supervertaler.MemoQ.Core
             }));
         }
 
+        /// <summary>
+        /// The product to mark a chat-saved prompt for.
+        ///
+        /// <para>memoQ unless the caller says otherwise, because a prompt drafted
+        /// over this bridge was written by a model looking at a memoQ project,
+        /// against memoQ's own way of delivering segments. Marking it "both"
+        /// would offer Trados a prompt describing a runtime it does not
+        /// have.</para>
+        ///
+        /// <para>An unrecognised value is treated as no answer rather than
+        /// rejected: the prompt is worth saving either way, and the wrong
+        /// consequence of guessing here is a prompt that shows up in one list
+        /// too many, not a lost one.</para>
+        /// </summary>
+        private static string AppFor(string requested)
+        {
+            switch ((requested ?? "").Trim().ToLowerInvariant())
+            {
+                case "both": return "both";
+                case "trados": return "trados";
+                case "workbench": return "workbench";
+                case "memoq": return "memoq";
+                default: return "memoq";
+            }
+        }
+
         private void HandlePromptSave(HttpListenerContext ctx)
         {
             var req = Read<SavePromptRequest>(ctx);
@@ -665,6 +691,22 @@ namespace Supervertaler.MemoQ.Core
             prompt.Content = req.Content;
             if (!string.IsNullOrWhiteSpace(req.Description)) prompt.Description = req.Description.Trim();
 
+            // Recorded by the bridge rather than asked for, and not overridable:
+            // everything arriving here was written by a model, and a caller must
+            // not be able to describe its own output as hand-written. It is the
+            // same fact AutoPrompt records about its drafts, by the route that
+            // produced it - which is what the translator sees when they wonder
+            // where a prompt came from, and what makes the runtime hold back the
+            // glossary from a prompt that carries its own locked terms.
+            prompt.DraftedBy = "chat";
+
+            // Which product it is for. Only on a NEW prompt, unlike DraftedBy:
+            // the app field is a restriction rather than a description - a prompt
+            // marked for one product vanishes from the other's list - so
+            // re-saving must not quietly take a prompt away from a product that
+            // has been using it.
+            if (existing == null) prompt.App = AppFor(req.App);
+
             // Stamped with the project's languages rather than asked for, because
             // the bridge knows them and the caller would have to be told. Only on
             // a new prompt: re-saving an existing one must not silently relabel a
@@ -682,6 +724,12 @@ namespace Supervertaler.MemoQ.Core
             {
                 Ok = true,
                 Message = "Saved to the shared prompt library as \"" + prompt.Name + "\" (" + prompt.RelativePath + "). "
+                        + "Recorded as drafted by the chat"
+                        + (string.Equals(prompt.App, "both", StringComparison.OrdinalIgnoreCase)
+                            ? " and available to both products. "
+                            : " and marked for " + prompt.App + " only, so it does not appear in the other product's list. ")
+                        + "Because it is a drafted prompt, the runtime sends its own locked terms rather than "
+                        + "the translator's glossary as well - forbidden terms still go. "
                         + "The user selects it in memoQ under Resources > Settings > MT > Supervertaler > Prompt."
             }));
         }
@@ -2144,6 +2192,13 @@ namespace Supervertaler.MemoQ.Core
             [DataMember(Name = "category")] public string Category { get; set; }
             [DataMember(Name = "description")] public string Description { get; set; }
             [DataMember(Name = "content")] public string Content { get; set; }
+
+            /// <summary>
+            /// Which product may run this prompt: "both", "memoq" or "trados".
+            /// Optional; a prompt saved through this bridge that does not say
+            /// defaults to memoQ, because that is what it was written against.
+            /// </summary>
+            [DataMember(Name = "app")] public string App { get; set; }
         }
 
         private const string HelpCard = @"# Supervertaler for memoQ – what you can ask
