@@ -215,9 +215,8 @@ namespace Supervertaler.MemoQ.Core
             // union of every segment's matches; recalled pairs are keyed on the
             // chunk's text so the examples suit what is actually being translated.
             var joined = string.Join(" ", chunk.Select(s => s.PlainText));
-            var ownTerms = context.SendGlossaryToModel()
-                ? TermIndex.Find(SharedSettings.GlossaryPath, joined)
-                : null;
+            var ownTerms = context.GlossaryForModel(
+                TermIndex.Find(SharedSettings.GlossaryPath, joined));
 
             context.WarnIfGlossaryFacesTheWrongWay();
             context.WarnIfPromptFacesTheWrongWay();

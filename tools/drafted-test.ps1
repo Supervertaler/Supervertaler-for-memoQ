@@ -106,6 +106,65 @@ try {
     Check (-not $isDrafted.Invoke($null, @([object]''))) 'no prompt selected is not drafted'
     Check (-not $isDrafted.Invoke($null, @([object]'Translate\does-not-exist.md'))) `
         'and neither is a path that resolves to nothing'
+    # ---- 3. what actually reaches the model --------------------------------
+    # Three states, and the middle one is why this exists: a drafted prompt
+    # suppresses the glossary's PREFERRED renderings, which can contradict its
+    # own locked terms, while its FORBIDDEN terms still go - those are
+    # constraints rather than advice, and there are few of them.
+    $indexT  = $plugin.GetType('Supervertaler.MemoQ.Core.TermIndex')
+    $entryT  = $indexT.GetNestedType('Entry', [Reflection.BindingFlags]'NonPublic,Public')
+    $matchT  = $indexT.GetNestedType('Match', [Reflection.BindingFlags]'NonPublic,Public')
+
+    function MakeMatch($source, $target, $forbidden) {
+        $e = [Activator]::CreateInstance($entryT)
+        $entryT.GetProperty('Source').SetValue($e, $source)
+        $entryT.GetProperty('Target').SetValue($e, $target)
+        $entryT.GetProperty('Forbidden').SetValue($e, [bool]$forbidden)
+        $m = [Activator]::CreateInstance($matchT)
+        $matchT.GetProperty('Entry').SetValue($m, $e)
+        return $m
+    }
+
+    $listT = [Collections.Generic.List`1].MakeGenericType(@($matchT))
+    $matches = [Activator]::CreateInstance($listT)
+    $matches.Add((MakeMatch 'device' 'inrichting' $false))
+    $matches.Add((MakeMatch 'apparatus' 'apparaat' $true))
+
+    $generalT  = $plugin.GetType('Supervertaler.MemoQ.Settings.SupervertalerGeneralSettings')
+    $secureT   = $plugin.GetType('Supervertaler.MemoQ.Settings.SupervertalerSecureSettings')
+    $settingsT = $plugin.GetType('Supervertaler.MemoQ.Settings.SupervertalerSettings')
+    $engineCtT = $plugin.GetType('Supervertaler.MemoQ.Core.EngineContext')
+    $sharedT   = $plugin.GetType('Supervertaler.MemoQ.Core.SharedSettings')
+
+    $settings = $settingsT.GetMethod('Create').Invoke($null,
+        @([Activator]::CreateInstance($generalT), [Activator]::CreateInstance($secureT)))
+    $ctx = [Activator]::CreateInstance($engineCtT, [Reflection.BindingFlags]'Instance,Public,NonPublic',
+        $null, @($settings, 'eng', 'nld'), $null)
+
+    $forModel = $engineCtT.GetMethod('GlossaryForModel')
+    function Ask() {
+        $argv = New-Object object[] 1
+        $argv[0] = $matches
+        return $forModel.Invoke($ctx, $argv)
+    }
+
+    $sharedT.GetProperty('UseTerminologyContext', $Static).SetValue($null, $true)
+
+    # A hand-written prompt claims nothing about terminology, so all of it goes.
+    $sharedT.GetProperty('PromptPath', $Static).SetValue($null, $handPath)
+    $all = Ask
+    Check ($null -ne $all -and $all.Count -eq 2) "a hand-written prompt gets the whole glossary: $($all.Count)"
+
+    # A drafted prompt carries its own locked terms, so only the constraints go.
+    $sharedT.GetProperty('PromptPath', $Static).SetValue($null, $draftedPath)
+    $some = Ask
+    Check ($null -ne $some -and $some.Count -eq 1) "a drafted prompt gets only the forbidden ones: $($some.Count)"
+    Check ($entryT.GetProperty('Forbidden').GetValue($matchT.GetProperty('Entry').GetValue($some[0]))) `
+        'and the one that goes is the forbidden one'
+
+    # The setting names forbidden terms explicitly, so off means off.
+    $sharedT.GetProperty('UseTerminologyContext', $Static).SetValue($null, $false)
+    Check ($null -eq (Ask)) 'switching terminology context off stops even those'
 }
 finally {
     if (Test-Path $folderPath) { Remove-Item $folderPath -Recurse -Force }

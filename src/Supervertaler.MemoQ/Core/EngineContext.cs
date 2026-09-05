@@ -1,5 +1,7 @@
 using System;
+using System.Collections.Generic;
 using System.IO;
+using System.Linq;
 using MemoQ.MTInterfaces;
 using Supervertaler.MemoQ.Settings;
 
@@ -386,22 +388,31 @@ namespace Supervertaler.MemoQ.Core
         /// governs one thing only - whether its matches are pasted into a
         /// translation request.</para>
         ///
-        /// <para>Note what this also stops: forbidden terms reach the model
-        /// through the same list. A drafted prompt is expected to carry its own,
-        /// since AutoPrompt writes "never X" notes into the table it produces -
-        /// but a term forbidden in the glossary AFTER the prompt was drafted
-        /// will not be enforced until the prompt is drafted again.</para>
+        /// <para>Forbidden terms are the exception and go through either way.
+        /// They are a different kind of statement from the rest: a preferred
+        /// rendering is advice, and two sources of advice can contradict each
+        /// other confusingly, whereas "never use this word" is a constraint that
+        /// cannot be contradicted into ambiguity - at worst it disagrees with
+        /// the prompt loudly, which is a thing the translator wants to find out.
+        /// They are also few. The alternative was that a term forbidden after a
+        /// prompt was drafted stayed unenforced until the prompt was drafted
+        /// again, which is a trap.</para>
         /// </summary>
-        public bool SendGlossaryToModel()
+        public IReadOnlyList<TermIndex.Match> GlossaryForModel(IReadOnlyList<TermIndex.Match> matched)
         {
             var general = General;
-            if (!general.UseTerminologyContext) return false;
+
+            // The setting names forbidden terms explicitly - "termbase hits AND
+            // forbidden terms" - so off means off, including those.
+            if (!general.UseTerminologyContext || matched == null) return null;
 
             var path = general.PromptPath;
-            if (!PromptResolver.IsDrafted(path)) return true;
+            if (!PromptResolver.IsDrafted(path)) return matched;
 
             SayGlossaryRuleOnce(path);
-            return false;
+
+            var forbidden = matched.Where(m => m?.Entry != null && m.Entry.Forbidden).ToList();
+            return forbidden.Count == 0 ? null : forbidden;
         }
 
         private void SayGlossaryRuleOnce(string path)
@@ -412,10 +423,11 @@ namespace Supervertaler.MemoQ.Core
                 _glossaryRuleSaidFor = path;
             }
 
-            PluginLog.Write("Terminology: the selected prompt was drafted by AutoPrompt and carries its "
-                + "own locked terms, so the glossary is not being sent to the model as well. It still "
+            PluginLog.Write("Terminology: the selected prompt was drafted by AutoPrompt and carries "
+                + "its own locked terms, so the glossary's preferred renderings are not being sent to "
+                + "the model as well - only its forbidden terms, which always go. The glossary still "
                 + "drives the terminology pane and the QA check. Draft the prompt again to take in "
-                + "glossary changes made since.");
+                + "changes made to it since.");
         }
 
         // -- the bank's contribution to a prompt --------------------------------
