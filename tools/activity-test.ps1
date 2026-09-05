@@ -30,6 +30,7 @@ $real = @(
     '[2026-09-03 23:49:00.662] [24] TermIndex: loaded 162 term(s) (5 forbidden, 151 bucket(s)) from BRANTS.txt [dut-NL to eng-GB]',
     '[2026-09-03 23:51:22.456] [65] batch: 10 segment(s) sent, 10 returned | terms: 5 | recall: 0',
     '[2026-09-03 23:51:42.895] [65] batch: 10 segment(s) sent, 10 returned | terms: 21 | recall: 1',
+    '[2026-09-05 18:20:01.100] [65] batch: 10 segment(s) sent, 10 returned | terms: 21 | recall: 1 | tokens: in 1,240 (cached 24,110) out 883',
     '[2026-09-03 23:51:22.473] [21] CreateLookupSession (ISession + ISessionWithMetadata)',
     '[2026-09-03 23:51:22.479] [21]   metadata: project=set, document=set, client=set, domain=set',
     '[2026-09-03 23:21:04.579] [1] HasCapability("AGT") -> false',
@@ -40,6 +41,14 @@ $real = @(
     '[2026-09-03 23:59:59.999] [9] some future log line nobody has written yet'
 )
 
+# Fixture lines are found by content, not by position: adding a case should not
+# renumber every assertion after it, which is exactly what happened once.
+function Line([string]$needle) {
+    $hit = @($real | Where-Object { $_ -like "*$needle*" })
+    if ($hit.Count -ne 1) { throw "fixture lookup '$needle' matched $($hit.Count) lines" }
+    return $hit[0]
+}
+
 # ---- the two patterns must match the real format --------------------------
 $entry = $form.GetField('Entry', $NonPublic).GetValue($null)
 $batch = $form.GetField('Batch', $NonPublic).GetValue($null)
@@ -48,9 +57,9 @@ $matched = @($real | Where-Object { $entry.IsMatch($_) }).Count
 Check ($matched -eq $real.Count) "every real line parses as a log entry: $matched of $($real.Count)"
 
 $batchLines = @($real | Where-Object { $batch.IsMatch(($entry.Match($_).Groups['body'].Value)) })
-Check ($batchLines.Count -eq 2) "batch lines recognised: $($batchLines.Count)"
+Check ($batchLines.Count -eq 3) "batch lines recognised: $($batchLines.Count)"
 
-$m = $batch.Match($entry.Match($real[3]).Groups['body'].Value)
+$m = $batch.Match($entry.Match((Line 'terms: 5 | recall: 0')).Groups['body'].Value)
 Check ($m.Groups['sent'].Value -eq '10' -and $m.Groups['back'].Value -eq '10') 'sent and returned counts are read'
 Check ($m.Groups['terms'].Value -eq '5') 'glossary hits are read'
 Check ($m.Groups['recall'].Value -eq '0') 'recall count is read'
@@ -74,20 +83,20 @@ Check ($hidden.Count -eq 3) "only the per-request diagnostics are hidden by defa
 
 # The unknown line is the one that matters: a reworded or brand-new log message
 # must still reach the window.
-$unknownBody = $entry.Match($real[12]).Groups['body'].Value
+$unknownBody = $entry.Match((Line 'nobody has written yet')).Groups['body'].Value
 Check (-not $isDiag.Invoke($null, [object[]]@($unknownBody))) 'an unrecognised line is not hidden'
 
-Check ($isProb.Invoke($null, [object[]]@($entry.Match($real[11]).Groups['body'].Value))) 'a tag parse failure counts as a problem'
-Check (-not $isProb.Invoke($null, [object[]]@($entry.Match($real[3]).Groups['body'].Value))) 'an ordinary batch does not'
+Check ($isProb.Invoke($null, [object[]]@($entry.Match((Line 'XML parse failed')).Groups['body'].Value))) 'a tag parse failure counts as a problem'
+Check (-not $isProb.Invoke($null, [object[]]@($entry.Match((Line 'terms: 5 | recall: 0')).Groups['body'].Value))) 'an ordinary batch does not'
 
 # ---- the readable form ----------------------------------------------------
 $friendly = $form.GetMethod('Friendly', $NonPublic)
 $clock = $form.GetMethod('Clock', $NonPublic)
 
-$eng = $friendly.Invoke($null, [object[]]@($entry.Match($real[0]).Groups['body'].Value))
+$eng = $friendly.Invoke($null, [object[]]@($entry.Match((Line '] CreateEngine: dut-NL')).Groups['body'].Value))
 Check ($eng -like '*dut-NL*eng-GB*claude-opus-5*') "engine line stays informative: $eng"
 
-$gloss = $friendly.Invoke($null, [object[]]@($entry.Match($real[2]).Groups['body'].Value))
+$gloss = $friendly.Invoke($null, [object[]]@($entry.Match((Line 'TermIndex: loaded')).Groups['body'].Value))
 Check ($gloss -like 'Glossary*162 term*') "glossary line stays informative: $gloss"
 
 $passthru = $friendly.Invoke($null, [object[]]@($unknownBody))

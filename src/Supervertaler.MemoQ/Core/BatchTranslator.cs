@@ -249,6 +249,8 @@ namespace Supervertaler.MemoQ.Core
                 general.Provider, general.Model, general.Endpoint, system, userPrompt);
 
             string raw;
+            global::Supervertaler.Core.ApiUsage usage = null;
+
             if (TranslationCache.TryGet(cacheKey, out var cached))
             {
                 raw = cached;
@@ -272,12 +274,27 @@ namespace Supervertaler.MemoQ.Core
                             cancellationToken: cancellationToken,
                             enablePromptCaching: true)
                         .ConfigureAwait(false);
+
+                    // Read before the client is disposed. This is the only way
+                    // the translator can tell whether the caching above is
+                    // actually working: cached should be near zero on the first
+                    // batch of a run and carry the system prompt on every batch
+                    // after it. A saving nobody can see is a saving nobody can
+                    // check - and this one is the difference between about seven
+                    // dollars and about seventy cents on a long job.
+                    usage = client.LastUsage;
                 }
 
                 TranslationCache.Set(cacheKey, raw);
             }
 
             var parsed = TranslationPrompt.ParseBatchResponse(raw, chunk.Count);
+
+            var tokens = usage == null ? "" :
+                $" | tokens: in {usage.RegularInputTokens:N0}"
+                + (usage.CacheReadTokens > 0 ? $" (cached {usage.CacheReadTokens:N0})" : "")
+                + (usage.CacheWriteTokens > 0 ? $" (cache write {usage.CacheWriteTokens:N0})" : "")
+                + $" out {usage.OutputTokens:N0}";
 
             PluginLog.Write($"batch: {chunk.Count} segment(s) sent, {parsed.Count} returned | "
                 + $"terms: {ownTerms?.Count ?? 0} | recall: {recalled?.Count ?? 0}");
