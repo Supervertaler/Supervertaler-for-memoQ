@@ -409,5 +409,36 @@ try {
 }
 finally { $chooser.Dispose() }
 
+# ---- 11. the glossary can be cleared ---------------------------------------
+# The operation that did not exist: a file dialog can only pick a file, so a
+# glossary could be swapped but never switched off. A value with no way to
+# clear it reads as stuck rather than chosen.
+$glossRowT = $chooserHelpers.GetNestedType('GlossaryRow', [Reflection.BindingFlags]'NonPublic,Public')
+$glossListT = [Collections.Generic.List`1].MakeGenericType(@($glossRowT))
+$glossList = [Activator]::CreateInstance($glossListT)
+
+foreach ($g in @(@('a.txt', 40), @('b.txt', 7))) {
+    $r = [Activator]::CreateInstance($glossRowT)
+    $glossRowT.GetField('Path').SetValue($r, 'D:\g\' + $g[0])
+    $glossRowT.GetField('Name').SetValue($r, $g[0])
+    $glossRowT.GetField('Terms').SetValue($r, [int]$g[1])
+    $glossList.Add($r)
+}
+
+$gArgs = New-Object object[] 1
+$gArgs[0] = $glossList
+$gRows = $chooserHelpers.GetMethod('GlossaryRows', $Static).Invoke($null, $gArgs)
+$gDisplays = @($gRows | ForEach-Object { $rowT.GetField('Display').GetValue($_) })
+$gValues = @($gRows | ForEach-Object { $rowT.GetField('Value').GetValue($_) })
+
+Check ($gDisplays[0] -eq '(none)') 'no glossary is offered, and first'
+Check ($gValues[0] -eq '') 'and clears the setting when chosen'
+Check ($gDisplays[-1] -like 'Browse*') 'browsing is last, as an escape hatch rather than a choice'
+
+$browse = $chooserHelpers.GetField('BrowseValue', $Static).GetValue($null)
+Check ($gValues[-1] -eq $browse) 'and is told apart from a path by value'
+Check ($browse -notmatch '^[A-Za-z]:') "the browse marker cannot be mistaken for a path: $browse"
+Check ($gRows.Count -eq 4) "every glossary passed in is offered: $($gRows.Count) rows with none and browse"
+
 Write-Host ''
 Write-Host "MEMORY BANK TEST COMPLETE - $fails failure(s)"

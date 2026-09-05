@@ -37,6 +37,7 @@ namespace Supervertaler.PromptEditor
         private ToolStripButton _save;
         private ToolStripDropDownButton _insert;
         private ToolStripStatusLabel _status;
+        private ToolStripLabel _project;
         private ToolStripButton _mcpMode;
         private int _iconSize = 16;
 
@@ -274,6 +275,11 @@ namespace Supervertaler.PromptEditor
             {
                 if (_mcpMode != null && _mcpMode.Checked != SharedSettings.BridgeMode)
                     _mcpMode.Checked = SharedSettings.BridgeMode;
+
+                // memoQ can switch projects while this window sits behind it, and
+                // the whole point of showing the name is that it is right.
+                RefreshProject();
+                RefreshMemoryBank();
             };
 
             var helpMenu = new ToolStripMenuItem("&Help");
@@ -409,9 +415,18 @@ namespace Supervertaler.PromptEditor
                 TextAlign = ContentAlignment.MiddleLeft
             };
 
+            // Which project these apply to. It used to say "memoQ is using",
+            // which was true and useless: the one thing a translator needs to
+            // check before changing any of the three is that memoQ is where they
+            // think it is. Recording a memory bank against the wrong project
+            // because the MT engine was not selected in the new one is a real
+            // half-hour, and nothing on screen said so.
+            _project = new ToolStripLabel { ForeColor = SystemColors.GrayText };
+            RefreshProject();
+
             context.Items.AddRange(new ToolStripItem[]
             {
-                new ToolStripLabel("memoQ is using") { ForeColor = SystemColors.GrayText },
+                _project,
                 Caption("Prompt", Glyphs.Prompt), _prompt,
                 Caption("Glossary", Glyphs.Glossary), _glossary,
                 Caption("Memory bank", Glyphs.Bank), _memoryBank
@@ -1381,6 +1396,40 @@ namespace Supervertaler.PromptEditor
         }
 
         /// <summary>
+        /// The memoQ project the plugin is working in, or a plain statement that
+        /// it has not been told yet.
+        ///
+        /// <para>"Not told yet" is the state worth showing loudly: everything on
+        /// this bar is recorded against a project, so choosing a memory bank
+        /// before memoQ has sent a single request files it against whatever
+        /// project came before - silently, and the usual cause is the MT engine
+        /// not being selected in a newly created project.</para>
+        /// </summary>
+        private void RefreshProject()
+        {
+            if (_project == null) return;
+
+            var name = (SharedSettings.MemoryBankProjectName ?? string.Empty).Trim();
+
+            if (name.Length == 0)
+            {
+                _project.Text = "no project yet";
+                _project.ForeColor = Color.Firebrick;
+                _project.ToolTipText = Tip("memoQ has not sent a translation request yet, so the "
+                    + "plugin does not know which project is open. Select Supervertaler as the MT "
+                    + "engine in the project and click into a segment. Until then a memory bank "
+                    + "chosen here is recorded against whichever project came before.");
+                return;
+            }
+
+            // Long names are common - a project named after two case references
+            // runs to forty characters - and this is a label, not the content.
+            _project.Text = name.Length <= 44 ? name : name.Substring(0, 42).TrimEnd() + "\u2026";
+            _project.ForeColor = SystemColors.GrayText;
+            _project.ToolTipText = Tip("The memoQ project these apply to:\r\n" + name);
+        }
+
+        /// <summary>
         /// Shows which memory bank is active, or says plainly that none is - which
         /// is a correct and common state rather than something missing.
         /// </summary>
@@ -1442,6 +1491,7 @@ namespace Supervertaler.PromptEditor
 
             MemoryBankPicker.Save(chosen);
             RefreshMemoryBank();
+            RefreshProject();
             _status.Text = chosen.Length == 0
                 ? "No client bank; the shared defaults still apply. " + MemoryBankPicker.ProjectNote()
                 : "Active memory bank: " + chosen + ". " + MemoryBankPicker.ProjectNote();
@@ -1520,22 +1570,101 @@ namespace Supervertaler.PromptEditor
             var current = SharedSettings.GlossaryPath;
             var currentDir = string.IsNullOrWhiteSpace(current) ? null : Path.GetDirectoryName(current);
 
-            using (var dialog = new OpenFileDialog
-            {
-                Title = "Choose the active glossary",
-                Filter = "Glossary files (*.txt;*.tsv)|*.txt;*.tsv|All files (*.*)|*.*",
-                CheckFileExists = true,
-                InitialDirectory = Directory.Exists(currentDir ?? "") ? currentDir
-                    : (Directory.Exists(glossaries) ? glossaries : SupervertalerPaths.Root),
-                FileName = string.IsNullOrWhiteSpace(current) ? "" : Path.GetFileName(current)
-            })
-            {
-                if (dialog.ShowDialog(this) != DialogResult.OK) return;
+            var chosen = PromptChooserForm.ChooseGlossary(this, GlossaryFiles(glossaries, current), current);
+            if (chosen == null) return;
 
-                SharedSettings.GlossaryPath = dialog.FileName;
-                RefreshGlossary();
-                _status.Text = "Active glossary: " + dialog.FileName;
+            if (string.Equals(chosen, PromptChooserForm.BrowseValue, StringComparison.Ordinal))
+            {
+                using (var dialog = new OpenFileDialog
+                {
+                    Title = "Choose the active glossary",
+                    Filter = "Glossary files (*.txt;*.tsv)|*.txt;*.tsv|All files (*.*)|*.*",
+                    CheckFileExists = true,
+                    InitialDirectory = Directory.Exists(currentDir ?? "") ? currentDir
+                        : (Directory.Exists(glossaries) ? glossaries : SupervertalerPaths.Root),
+                    FileName = string.IsNullOrWhiteSpace(current) ? "" : Path.GetFileName(current)
+                })
+                {
+                    if (dialog.ShowDialog(this) != DialogResult.OK) return;
+                    chosen = dialog.FileName;
+                }
             }
+
+            SharedSettings.GlossaryPath = chosen;
+            RefreshGlossary();
+            _status.Text = chosen.Length == 0
+                ? "No glossary. The terminology pane, the QA check and the prompts have nothing to work from."
+                : "Active glossary: " + chosen;
+        }
+
+        /// <summary>
+        /// The glossaries on offer: everything in the glossaries folder, plus the
+        /// active one when it lives somewhere else - which is the case that must
+        /// not vanish from the list, since a value you cannot re-select is one
+        /// you cannot get back after looking at something else.
+        /// </summary>
+        private static List<PromptChooserForm.GlossaryRow> GlossaryFiles(string folder, string current)
+        {
+            var rows = new List<PromptChooserForm.GlossaryRow>();
+
+            try
+            {
+                if (Directory.Exists(folder))
+                {
+                    foreach (var path in Directory.GetFiles(folder, "*.*")
+                                                  .Where(IsGlossaryFile)
+                                                  .OrderBy(p => p, StringComparer.OrdinalIgnoreCase))
+                    {
+                        rows.Add(new PromptChooserForm.GlossaryRow
+                        {
+                            Path = path,
+                            Name = Path.GetFileName(path),
+                            Terms = CountTerms(path)
+                        });
+                    }
+                }
+            }
+            catch (Exception) { /* an unreadable folder still leaves (none) and Browse */ }
+
+            if (!string.IsNullOrWhiteSpace(current)
+                && !rows.Any(r => string.Equals(r.Path, current, StringComparison.OrdinalIgnoreCase)))
+            {
+                rows.Add(new PromptChooserForm.GlossaryRow
+                {
+                    Path = current,
+                    Name = Path.GetFileName(current),
+                    Terms = CountTerms(current),
+                    Elsewhere = true
+                });
+            }
+
+            return rows;
+        }
+
+        private static bool IsGlossaryFile(string path)
+        {
+            var ext = (Path.GetExtension(path) ?? "").ToLowerInvariant();
+            return ext == ".txt" || ext == ".tsv";
+        }
+
+        /// <summary>
+        /// Roughly how many terms a glossary holds, for the chooser's detail
+        /// line. Best effort and capped: this runs over every file in the folder
+        /// each time the chooser opens, and a glossary that has grown into
+        /// something else should not stall it.
+        /// </summary>
+        private static int CountTerms(string path)
+        {
+            try
+            {
+                var info = new FileInfo(path);
+                if (!info.Exists || info.Length > 4 * 1024 * 1024) return 0;
+
+                return File.ReadLines(path)
+                           .Count(l => !string.IsNullOrWhiteSpace(l)
+                                       && !l.StartsWith("#", StringComparison.Ordinal));
+            }
+            catch (Exception) { return 0; }
         }
 
         private void NewFolder()
