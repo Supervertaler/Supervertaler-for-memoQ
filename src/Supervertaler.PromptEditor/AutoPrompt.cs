@@ -10,6 +10,7 @@ using System.Runtime.Serialization;
 using System.Runtime.Serialization.Json;
 using System.Text;
 using System.Text.RegularExpressions;
+using Supervertaler.MemoQ.Core;
 using System.Threading.Tasks;
 using System.Windows.Forms;
 using Supervertaler.Core;
@@ -278,6 +279,12 @@ namespace Supervertaler.PromptEditor
         private readonly TextBox _hint = new TextBox { Multiline = true, ScrollBars = ScrollBars.Vertical, AcceptsReturn = true };
         private readonly CheckBox _terms = new CheckBox { Text = "Include glossary hits from the document", Checked = true, AutoSize = true };
         private readonly CheckBox _confirmed = new CheckBox { Text = "Include segments already confirmed in memoQ", Checked = true, AutoSize = true };
+
+        // Whether each option has anything to offer at all, as opposed to being
+        // switched off because a draft is running. Without the distinction the
+        // busy-state restore would re-enable a checkbox that can do nothing.
+        private bool _termsPossible = true;
+        private bool _confirmedPossible = true;
         private readonly Button _preview = new Button { Text = "Preview context…", Width = 130, Height = 28, Enabled = false };
         private readonly Button _generate = new Button { Text = "Generate", Width = 110, Height = 28, Enabled = false };
         private readonly Button _cancel = new Button { Text = "Cancel", Width = 90, Height = 28, DialogResult = DialogResult.Cancel };
@@ -331,6 +338,8 @@ namespace Supervertaler.PromptEditor
 
             _terms.Left = 14; _terms.Top = y; Controls.Add(_terms); y += 24;
             _confirmed.Left = 14; _confirmed.Top = y; Controls.Add(_confirmed); y += 34;
+
+            ShowWhatTheGlossaryCanOffer();
 
             _status.Left = 14; _status.Top = y + 36; Controls.Add(_status);
             _cancel.Left = 586 - 90; _cancel.Top = y; Controls.Add(_cancel);
@@ -402,11 +411,49 @@ namespace Supervertaler.PromptEditor
             }
         }
 
+        /// <summary>
+        /// Greys out the glossary option when there is no glossary to draw on.
+        ///
+        /// <para>An enabled checkbox is a claim that ticking it changes
+        /// something. With no active glossary it changes nothing, and the tick
+        /// left over from last time reads as "the glossary went in" - which is
+        /// exactly the wrong thing to believe about a prompt you are about to
+        /// rely on. The reason goes in the caption rather than a tooltip: a
+        /// disabled control with no explanation is its own small mystery.</para>
+        /// </summary>
+        private void ShowWhatTheGlossaryCanOffer()
+        {
+            var path = SharedSettings.GlossaryPath;
+            var have = !string.IsNullOrWhiteSpace(path) && File.Exists(path);
+
+            _termsPossible = have;
+            _terms.Enabled = have;
+            if (!have) _terms.Checked = false;
+
+            _terms.Text = have
+                ? "Include glossary hits from the document"
+                : "Include glossary hits from the document \u2013 no glossary is active";
+        }
+
+        private void ShowWhatTheDocumentCanOffer(int confirmedPairs)
+        {
+            _confirmedPossible = confirmedPairs > 0;
+            _confirmed.Enabled = _confirmedPossible;
+            if (!_confirmedPossible) _confirmed.Checked = false;
+
+            _confirmed.Text = _confirmedPossible
+                ? "Include segments already confirmed in memoQ"
+                : "Include segments already confirmed in memoQ \u2013 none confirmed yet";
+        }
+
         private async Task OnDocumentChangedAsync()
         {
             var i = _document.SelectedIndex;
             if (i < 0 || i >= _documents.Length) { _documentInfo.Text = ""; return; }
             var d = _documents[i];
+
+            // Per document, so switching documents in the dropdown re-answers it.
+            ShowWhatTheDocumentCanOffer(d.ConfirmedPairs);
 
             // Provisional. The real figure arrives with the classification
             // below, because the plugin prefers the live document when the preview
@@ -533,7 +580,9 @@ namespace Supervertaler.PromptEditor
                 MessageBox.Show(this, ex.Message, "AutoPrompt", MessageBoxButtons.OK, MessageBoxIcon.Warning);
                 _generate.Enabled = true; _preview.Enabled = true; _cancel.Enabled = true;
                 _document.Enabled = true; _domain.Enabled = true; _hint.Enabled = true;
-                _terms.Enabled = true; _confirmed.Enabled = true;
+
+                // Back to what each can actually offer, not blindly to enabled.
+                _terms.Enabled = _termsPossible; _confirmed.Enabled = _confirmedPossible;
             }
         }
     }

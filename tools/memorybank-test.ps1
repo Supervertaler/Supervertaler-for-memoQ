@@ -254,6 +254,29 @@ try {
         Check ($withClient.Contains($marker)) 'the client bank being the part that was added'
     }
 
+    # ---- 7c. a file in _shared that is not one of the three named ones ------
+    # Only brief/terminology/style were read from the shared overlay, so any
+    # other file there reached no prompt in either product and said nothing
+    # about it. A selected bank has always loaded its extras; the overlay did
+    # not, which is the same reasoning applied to only half the case.
+    if ($null -ne $sharedDir) {
+        $extra = Join-Path $sharedDir 'zz-harness-extra.md'
+        $extraMarker = 'HARNESS-SHARED-EXTRA-MARKER'
+        try {
+            [IO.File]::WriteAllText($extra, "# Harness`r`n`r`n$extraMarker`r`n")
+
+            SetProp $shared 'MemoryBank' '_sv-harness-bank'
+            $withExtra = $ctx.GetType().GetMethod('KbContextForAutoPrompt').Invoke($ctx, @())
+            Check ($withExtra -and $withExtra.Contains($extraMarker)) `
+                'a file in _shared that is not brief, terminology or style still reaches the prompt'
+            Check ($withExtra -and $withExtra.Contains($marker)) `
+                'and the client bank is still there alongside it'
+        }
+        finally {
+            if (Test-Path $extra) { Remove-Item $extra -Force }
+        }
+    }
+
     # ---- 8. WHERE the block lands ------------------------------------------
     # In the system half, not with the per-request context. That is what makes it
     # a stable prefix the provider's prompt cache can recognise; moved in with
