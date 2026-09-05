@@ -53,6 +53,11 @@
     <Reference Include="System.Net.Http" />
     <!-- For reading the Trados key store, which is JSON. -->
     <Reference Include="System.Runtime.Serialization" />
+    <!-- For the font's own character map, which is how a missing icon
+         glyph is told from a present one. Part of the .NET Framework, not
+         a package: nothing is redistributed. -->
+    <Reference Include="PresentationCore" />
+    <Reference Include="WindowsBase" />
   </ItemGroup>
 
   <ItemGroup>

@@ -37,6 +37,16 @@ namespace Supervertaler.PromptEditor
         private ToolStripButton _save;
         private ToolStripDropDownButton _insert;
         private ToolStripStatusLabel _status;
+        private ToolStripButton _mcpMode;
+        private int _iconSize = 16;
+
+        /// <summary>
+        /// The one colour on the toolbar. AutoPrompt is the only button there
+        /// that spends money and takes a minute; everything else is monochrome so
+        /// that this reads as different rather than as decoration.
+        /// </summary>
+        private static readonly Color AccentColour = Color.FromArgb(0x0B, 0x5C, 0xAD);
+
         private ToolStripDropDownButton _glossary;
         private ToolStripDropDownButton _prompt;
         private ToolStripDropDownButton _memoryBank;
@@ -157,7 +167,13 @@ namespace Supervertaler.PromptEditor
 
             AppIcon.Apply(this);
 
+            // Flat chrome instead of the Office 2003 gradients WinForms defaults
+            // to. Set on the manager rather than per strip so that drop-downs,
+            // which are created by the framework rather than by us, match.
+            ToolStripManager.Renderer = new FlatStrips();
+
             _editorFont = new Font("Consolas", 10.5f);
+            _iconSize = Glyphs.SizeFor(DeviceDpi);
 
             // A menu bar rather than one strip of eleven buttons. The strip had
             // come to hold file operations, editing helpers, memoQ integration and
@@ -205,6 +221,7 @@ namespace Supervertaler.PromptEditor
             memoqMenu.DropDownItems.Add(new ToolStripMenuItem("&Export this prompt's terms as a glossary…", null, (s, e) => ExportGlossary()));
             memoqMenu.DropDownItems.Add(new ToolStripMenuItem("&Choose the active glossary…", null, (s, e) => ChooseGlossary()));
             memoqMenu.DropDownItems.Add(new ToolStripMenuItem("Choose the active &prompt…", null, (s, e) => ChoosePrompt()));
+            memoqMenu.DropDownItems.Add(new ToolStripMenuItem("Choose the active memory &bank…", null, (s, e) => ChooseMemoryBank()));
             memoqMenu.DropDownItems.Add(new ToolStripSeparator());
             memoqMenu.DropDownItems.Add(new ToolStripMenuItem("&Activity…", null, (s, e) => ShowActivity())
             {
@@ -229,6 +246,13 @@ namespace Supervertaler.PromptEditor
                 _status.Text = bridgeMode.Checked
                     ? "Pre-translate will hand segments to Claude Desktop."
                     : "Pre-translate will call the model directly.";
+
+                // The same setting now has two controls. Neither owns it - the
+                // file does - so each follows the other rather than trying to be
+                // the source of truth. The guards above and in the toolbar's
+                // handler are what stops the two bouncing.
+                if (_mcpMode != null && _mcpMode.Checked != bridgeMode.Checked)
+                    _mcpMode.Checked = bridgeMode.Checked;
             };
 
             var settingsMenu = new ToolStripMenuItem("&Settings");
@@ -243,38 +267,93 @@ namespace Supervertaler.PromptEditor
             // than trust what this menu was last showing.
             settingsMenu.DropDownOpening += (s, e) => bridgeMode.Checked = SharedSettings.BridgeMode;
 
+            // memoQ's own dialog writes this file too, so the toolbar has to be
+            // re-read when the window comes back to the front rather than trusted
+            // to still be showing what it showed an hour ago.
+            Activated += (s, e) =>
+            {
+                if (_mcpMode != null && _mcpMode.Checked != SharedSettings.BridgeMode)
+                    _mcpMode.Checked = SharedSettings.BridgeMode;
+            };
+
             var helpMenu = new ToolStripMenuItem("&Help");
             helpMenu.DropDownItems.Add(new ToolStripMenuItem("&Documentation", null, (s, e) => OpenDocumentation()));
 
             menu.Items.AddRange(new ToolStripItem[] { fileMenu, memoqMenu, settingsMenu, helpMenu });
 
-            // Only what is used while actually writing a prompt.
-            var toolbar = new ToolStrip { GripStyle = ToolStripGripStyle.Hidden };
+            // Two groups. On the left, what is used while writing a prompt; on
+            // the right, the three things that were reachable only through a menu
+            // and that you want to SEE rather than go and look up - most of all
+            // the MCP toggle, which decides whether Pre-translate spends API
+            // credit or the chat subscription, and whose state was invisible.
+            var toolbar = new ToolStrip
+            {
+                GripStyle = ToolStripGripStyle.Hidden,
+                ImageScalingSize = new Size(_iconSize, _iconSize),
+                Padding = new Padding(4, 2, 4, 2)
+            };
 
-            var newPromptButton = new ToolStripButton("New prompt") { DisplayStyle = ToolStripItemDisplayStyle.Text };
+            var newPromptButton = Button("New", Glyphs.NewPrompt, "Start a new prompt (Ctrl+N)");
             newPromptButton.Click += (s, e) => NewPrompt();
 
-            _save = new ToolStripButton("Save") { DisplayStyle = ToolStripItemDisplayStyle.Text, Enabled = false };
+            _save = Button("Save", Glyphs.Save, "Save this prompt (Ctrl+S)");
+            _save.Enabled = false;
             _save.Click += (s, e) => Save();
 
-            _insert = new ToolStripDropDownButton("Insert placeholder")
+            _insert = new ToolStripDropDownButton("Placeholder")
             {
-                DisplayStyle = ToolStripItemDisplayStyle.Text
+                DisplayStyle = ToolStripItemDisplayStyle.ImageAndText,
+                Image = Glyphs.Render(Glyphs.Placeholder, SystemColors.ControlText, _iconSize),
+                ToolTipText = "Insert a placeholder memoQ can fill",
+                AutoToolTip = false
             };
             BuildInsertMenu();
 
-            var draft = new ToolStripButton("AutoPrompt…")
+            // The one button on the strip that spends money and takes a minute,
+            // so the one that is allowed a colour. Everything else is monochrome
+            // and stays out of the way.
+            var draft = Button("AutoPrompt…", Glyphs.AutoPrompt,
+                "AutoPrompt: have the AI write a prompt tailored to the document open in memoQ",
+                AccentColour);
+
+            // Right-aligned items are laid out from the right edge inwards, so
+            // this list reads right to left on screen: settings, activity, MCP.
+            var settingsButton = Button("", Glyphs.Settings, "Translation settings");
+            settingsButton.Alignment = ToolStripItemAlignment.Right;
+            settingsButton.Click += (s, e) => ShowSettings();
+
+            var activityButton = Button("Activity", Glyphs.Activity,
+                "What the plugin is doing, live (Ctrl+L). memoQ's own progress dialog says only \"Processing\".");
+            activityButton.Alignment = ToolStripItemAlignment.Right;
+            activityButton.Click += (s, e) => ShowActivity();
+
+            // A checked button rather than a menu tick, because this is a MODE:
+            // it decides whether Pre-translate calls the model with your API key
+            // or hands the segments to the chat. Which of those is happening was
+            // previously knowable only by opening a menu and looking.
+            _mcpMode = Button("", Glyphs.Mcp, "");
+            _mcpMode.Alignment = ToolStripItemAlignment.Right;
+            _mcpMode.CheckOnClick = true;
+            _mcpMode.Checked = SharedSettings.BridgeMode;
+            _mcpMode.CheckedChanged += (s, e) =>
             {
-                DisplayStyle = ToolStripItemDisplayStyle.Text,
-                ToolTipText = "AutoPrompt: have the AI write a prompt tailored to the document open in memoQ"
+                if (SharedSettings.BridgeMode != _mcpMode.Checked)
+                {
+                    SharedSettings.BridgeMode = _mcpMode.Checked;
+                    _status.Text = _mcpMode.Checked
+                        ? "Pre-translate will hand segments to Claude Desktop."
+                        : "Pre-translate will call the model directly.";
+                }
+                RefreshMcpMode();
             };
-            draft.Click += (s, e) => DraftForProject();
+            RefreshMcpMode();
 
             toolbar.Items.AddRange(new ToolStripItem[]
             {
                 newPromptButton, _save, new ToolStripSeparator(),
                 _insert, new ToolStripSeparator(),
-                draft
+                draft,
+                settingsButton, activityButton, _mcpMode
             });
 
             // What memoQ will actually use, in the one place you cannot miss it.
@@ -294,7 +373,7 @@ namespace Supervertaler.PromptEditor
             var context = new ToolStrip
             {
                 GripStyle = ToolStripGripStyle.Hidden,
-                Renderer = new ToolStripProfessionalRenderer(),
+                ImageScalingSize = new Size(_iconSize, _iconSize),
                 Padding = new Padding(4, 2, 4, 2)
             };
 
@@ -320,15 +399,22 @@ namespace Supervertaler.PromptEditor
             _glossary = Chooser((s, e) => ChooseGlossary());
             _memoryBank = Chooser((s, e) => ChooseMemoryBank());
 
-            ToolStripLabel Caption(string text) =>
-                new ToolStripLabel(text) { ForeColor = SystemColors.GrayText, Margin = new Padding(8, 0, 0, 0) };
+            ToolStripLabel Caption(string text, string glyph) => new ToolStripLabel(text)
+            {
+                ForeColor = SystemColors.GrayText,
+                Margin = new Padding(10, 0, 0, 0),
+                Image = Glyphs.Render(glyph, SystemColors.GrayText, _iconSize),
+                DisplayStyle = ToolStripItemDisplayStyle.ImageAndText,
+                ImageAlign = ContentAlignment.MiddleLeft,
+                TextAlign = ContentAlignment.MiddleLeft
+            };
 
             context.Items.AddRange(new ToolStripItem[]
             {
                 new ToolStripLabel("memoQ is using") { ForeColor = SystemColors.GrayText },
-                Caption("Prompt"), _prompt,
-                Caption("Glossary"), _glossary,
-                Caption("Memory bank"), _memoryBank
+                Caption("Prompt", Glyphs.Prompt), _prompt,
+                Caption("Glossary", Glyphs.Glossary), _glossary,
+                Caption("Memory bank", Glyphs.Bank), _memoryBank
             });
 
             RefreshPrompt();
@@ -1199,6 +1285,53 @@ namespace Supervertaler.PromptEditor
             _status.Text = chosen.Length == 0
                 ? "memoQ will use the instructions in its own settings."
                 : "Active prompt: " + chosen;
+        }
+
+        /// <summary>
+        /// A toolbar button with an icon, falling back to text alone when the
+        /// icon font has no such glyph. An empty label makes it icon-only, in
+        /// which case the tooltip is the only name it has and must not be empty.
+        /// </summary>
+        private ToolStripButton Button(string text, string glyph, string tip, Color? colour = null)
+        {
+            var image = Glyphs.Render(glyph, colour ?? SystemColors.ControlText, _iconSize);
+            var iconOnly = string.IsNullOrEmpty(text) && image != null;
+
+            return new ToolStripButton(text)
+            {
+                Image = image,
+                DisplayStyle = image == null
+                    ? ToolStripItemDisplayStyle.Text
+                    : (iconOnly ? ToolStripItemDisplayStyle.Image : ToolStripItemDisplayStyle.ImageAndText),
+                ForeColor = colour ?? SystemColors.ControlText,
+                ToolTipText = tip,
+                AutoToolTip = false
+            };
+        }
+
+        /// <summary>
+        /// The MCP toggle's caption and tooltip, which say which mode is ON
+        /// rather than what pressing it would do. A toggle that reads as an
+        /// instruction is ambiguous in exactly the situation it exists for:
+        /// glancing at it to find out where Pre-translate is about to send the
+        /// job.
+        /// </summary>
+        private void RefreshMcpMode()
+        {
+            if (_mcpMode == null) return;
+
+            _mcpMode.Text = _mcpMode.Checked ? "Claude Desktop" : "";
+            _mcpMode.DisplayStyle = _mcpMode.Checked && _mcpMode.Image != null
+                ? ToolStripItemDisplayStyle.ImageAndText
+                : (_mcpMode.Image != null ? ToolStripItemDisplayStyle.Image : ToolStripItemDisplayStyle.Text);
+
+            if (_mcpMode.Image == null && !_mcpMode.Checked) _mcpMode.Text = "Claude Desktop: off";
+
+            _mcpMode.ToolTipText = _mcpMode.Checked
+                ? "Pre-translate hands the segments to Claude Desktop and inserts what it stages back. "
+                  + "Nothing is charged to your API key. Click to switch back to the API."
+                : "Pre-translate calls the model with your API key. "
+                  + "Click to hand the segments to Claude Desktop instead.";
         }
 
         /// <summary>
