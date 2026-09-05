@@ -299,12 +299,11 @@ namespace Supervertaler.PromptEditor
                 Padding = new Padding(4, 2, 4, 2)
             };
 
-            var newPromptButton = Button("New", Glyphs.NewPrompt, "Start a new prompt (Ctrl+N)");
-            newPromptButton.Click += (s, e) => NewPrompt();
+            var newPromptButton = Button("New", Glyphs.NewPrompt, "Start a new prompt (Ctrl+N)",
+                (s, e) => NewPrompt());
 
-            _save = Button("Save", Glyphs.Save, "Save this prompt (Ctrl+S)");
+            _save = Button("Save", Glyphs.Save, "Save this prompt (Ctrl+S)", (s, e) => Save());
             _save.Enabled = false;
-            _save.Click += (s, e) => Save();
 
             _insert = new ToolStripDropDownButton("Placeholder")
             {
@@ -320,24 +319,26 @@ namespace Supervertaler.PromptEditor
             // and stays out of the way.
             var draft = Button("AutoPrompt…", Glyphs.AutoPrompt,
                 "AutoPrompt: have the AI write a prompt tailored to the document open in memoQ",
-                AccentColour);
+                (s, e) => DraftForProject(), AccentColour);
 
             // Right-aligned items are laid out from the right edge inwards, so
             // this list reads right to left on screen: settings, activity, MCP.
-            var settingsButton = Button("", Glyphs.Settings, "Translation settings");
+            var settingsButton = Button("", Glyphs.Settings, "Translation settings",
+                (s, e) => ShowSettings());
             settingsButton.Alignment = ToolStripItemAlignment.Right;
-            settingsButton.Click += (s, e) => ShowSettings();
 
             var activityButton = Button("Activity", Glyphs.Activity,
-                "What the plugin is doing, live (Ctrl+L). memoQ's own progress dialog says only \"Processing\".");
+                "What the plugin is doing, live (Ctrl+L). memoQ's own progress dialog says only \"Processing\".",
+                (s, e) => ShowActivity());
             activityButton.Alignment = ToolStripItemAlignment.Right;
-            activityButton.Click += (s, e) => ShowActivity();
 
             // A checked button rather than a menu tick, because this is a MODE:
             // it decides whether Pre-translate calls the model with your API key
             // or hands the segments to the chat. Which of those is happening was
             // previously knowable only by opening a menu and looking.
-            _mcpMode = Button("", Glyphs.Mcp, "");
+            // Null on purpose: CheckOnClick flips the state and CheckedChanged
+            // below does the work, so a Click handler would run alongside it.
+            _mcpMode = Button("", Glyphs.Mcp, "", null);
             _mcpMode.Alignment = ToolStripItemAlignment.Right;
             _mcpMode.CheckOnClick = true;
             _mcpMode.Checked = SharedSettings.BridgeMode;
@@ -1352,13 +1353,23 @@ namespace Supervertaler.PromptEditor
         /// A toolbar button with an icon, falling back to text alone when the
         /// icon font has no such glyph. An empty label makes it icon-only, in
         /// which case the tooltip is the only name it has and must not be empty.
+        ///
+        /// <para><paramref name="onClick"/> has no default, deliberately. The
+        /// AutoPrompt button shipped inert for an afternoon because a rewrite of
+        /// this toolbar dropped its Click subscription: the button rendered,
+        /// looked right, and did nothing, and only the menu route worked. A
+        /// missing handler is invisible to everything except a person pressing
+        /// it, so the way not to lose one again is to make the compiler ask.
+        /// Pass null - visibly, and with a reason - for a button that acts
+        /// through some other event.</para>
         /// </summary>
-        private ToolStripButton Button(string text, string glyph, string tip, Color? colour = null)
+        private ToolStripButton Button(string text, string glyph, string tip,
+                                       EventHandler onClick, Color? colour = null)
         {
             var image = Glyphs.Render(glyph, colour ?? SystemColors.ControlText, _iconSize);
             var iconOnly = string.IsNullOrEmpty(text) && image != null;
 
-            return new ToolStripButton(text)
+            var button = new ToolStripButton(text)
             {
                 Image = image,
                 DisplayStyle = image == null
@@ -1368,6 +1379,9 @@ namespace Supervertaler.PromptEditor
                 ToolTipText = Tip(tip),
                 AutoToolTip = false
             };
+
+            if (onClick != null) button.Click += onClick;
+            return button;
         }
 
         /// <summary>
