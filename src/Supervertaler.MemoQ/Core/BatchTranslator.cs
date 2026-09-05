@@ -297,7 +297,7 @@ namespace Supervertaler.MemoQ.Core
                 + $" out {usage.OutputTokens:N0}";
 
             PluginLog.Write($"batch: {chunk.Count} segment(s) sent, {parsed.Count} returned | "
-                + $"terms: {ownTerms?.Count ?? 0} | recall: {recalled?.Count ?? 0}");
+                + $"terms: {ownTerms?.Count ?? 0} | recall: {recalled?.Count ?? 0}" + tokens);
 
             // A short reply is the failure worth catching: silently leaving the
             // tail untranslated would look like the model declining to translate

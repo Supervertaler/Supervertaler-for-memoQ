@@ -49,15 +49,17 @@ namespace Supervertaler.MemoQ.Core
         /// discards the largest and least duplicated article is not a saving,
         /// it is a quiet loss of the thing the bank exists for.</para>
         ///
-        /// <para>24,000 is what the Trados plugin uses for the same injection,
-        /// and it clears a full shared bank - about 21,000 tokens here - with
-        /// room for a client bank to sit on top before trimming starts again.
+        /// <para>24,000 matched the Trados plugin and was still not enough:
+        /// measured on a real job it carried 18,756 tokens and dropped
+        /// _shared/method.md, because the client bank had grown and the two
+        /// together came to about 24,500. 32,000 clears that with room for the
+        /// banks to keep growing, which they do - every job adds rows.
         /// The cost is real and worth stating: on a job the size of the
         /// 569-segment one, 57 batches at 21,000 tokens is roughly 1.2M input
         /// tokens, about six dollars at Opus 5 rates, and interactive lookups
         /// add to it. Choosing no bank remains the way to spend none of it.</para>
         /// </summary>
-        internal const int PerRequestTokenBudget = 24000;
+        internal const int PerRequestTokenBudget = 32000;
 
         /// <summary>
         /// How much of a bank AutoPrompt gets: effectively all of it.
