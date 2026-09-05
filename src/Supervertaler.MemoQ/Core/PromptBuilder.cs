@@ -112,14 +112,24 @@ namespace Supervertaler.MemoQ.Core
         }
 
         /// <summary>
-        /// The system half of a request, without a source segment.
+        /// A batch request, split by what changes.
         ///
-        /// A batch puts every segment in the user message, so the context —
-        /// project metadata, recalled pairs, terminology — belongs in the system
-        /// prompt where it applies to all of them at once. Same sections, same
-        /// order, so a prompt reads the same either way.
+        /// <para><see cref="BuiltPrompt.System"/> is the instructions and the
+        /// memory bank: the same text for every request in a job. <see
+        /// cref="BuiltPrompt.User"/> is everything that varies with the batch —
+        /// project metadata, the pairs recalled for these segments, the
+        /// terminology matched in them — which the caller puts in front of the
+        /// segments themselves.</para>
+        ///
+        /// <para>Both halves used to be returned joined, as the system prompt.
+        /// That is what made prompt caching impossible: the marker covers the
+        /// whole system block, so a single varying line in it means every batch
+        /// pays the full input rate for the instructions and the bank as well.
+        /// The model sees the same text in the same order either way — system,
+        /// then context, then segments — so this is a change of envelope rather
+        /// than of prompt.</para>
         /// </summary>
-        public static string BuildSystemOnly(
+        public static BuiltPrompt BuildForBatch(
             SupervertalerGeneralSettings settings,
             string sourceLangCode,
             string targetLangCode,
@@ -139,9 +149,7 @@ namespace Supervertaler.MemoQ.Core
             var cut = user.LastIndexOf("Source segment:", StringComparison.Ordinal);
             if (cut >= 0) user = user.Substring(0, cut).TrimEnd();
 
-            return string.IsNullOrWhiteSpace(user)
-                ? built.System
-                : built.System + Environment.NewLine + Environment.NewLine + user;
+            return new BuiltPrompt { System = built.System, User = user };
         }
 
         // ---- context sections -------------------------------------------------

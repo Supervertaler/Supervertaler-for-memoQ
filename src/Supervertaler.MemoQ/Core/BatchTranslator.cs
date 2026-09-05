@@ -209,7 +209,7 @@ namespace Supervertaler.MemoQ.Core
                 })
                 .ToList();
 
-            var userPrompt = TranslationPrompt.BuildBatchUserPrompt(inputs);
+            var segmentsPrompt = TranslationPrompt.BuildBatchUserPrompt(inputs);
 
             // Context is gathered once for the whole chunk. Terminology is the
             // union of every segment's matches; recalled pairs are keyed on the
@@ -231,10 +231,19 @@ namespace Supervertaler.MemoQ.Core
                 PromptBuilder.DescribeLanguage(context.SourceLangCode),
                 PromptBuilder.DescribeLanguage(context.TargetLangCode));
 
-            var system = PromptBuilder.BuildSystemOnly(
+            var built = PromptBuilder.BuildForBatch(
                 general, context.SourceLangCode, context.TargetLangCode,
                 context.LastMetadata, recalled, ownTerms, instructions,
                 context.KbContextBlock());
+
+            // The context this batch produced goes in front of its own segments,
+            // leaving the system prompt identical from one batch to the next -
+            // which is the whole point, because the cache marker below covers the
+            // system block as a unit.
+            var system = built.System;
+            var userPrompt = string.IsNullOrWhiteSpace(built.User)
+                ? segmentsPrompt
+                : built.User + Environment.NewLine + Environment.NewLine + segmentsPrompt;
 
             var apiKey = context.ApiKey;
             var cacheKey = TranslationCache.Key(
@@ -254,7 +263,15 @@ namespace Supervertaler.MemoQ.Core
                            apiKey,
                            string.IsNullOrWhiteSpace(general.Endpoint) ? null : general.Endpoint.Trim()))
                 {
-                    raw = await client.SendPromptAsync(userPrompt, system, cancellationToken: cancellationToken)
+                    // Pre-translate sends one batch after another with the same
+                    // instructions and the same bank, so every batch after the
+                    // first is a cache read at a tenth of the input rate. Asking
+                    // for it was the other half of the fix: the marker was never
+                    // requested here, so even a stable system prompt paid full
+                    // price every time.
+                    raw = await client.SendPromptAsync(userPrompt, system,
+                            cancellationToken: cancellationToken,
+                            enablePromptCaching: true)
                         .ConfigureAwait(false);
                 }
 
