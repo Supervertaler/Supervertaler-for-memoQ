@@ -37,7 +37,7 @@ namespace Supervertaler.PromptEditor
         private ToolStripButton _save;
         private ToolStripDropDownButton _insert;
         private ToolStripStatusLabel _status;
-        private ToolStripLabel _project;
+        private JobPanel.Field _project;
         private ToolStripButton _mcpMode;
         private int _iconSize = 16;
 
@@ -48,9 +48,11 @@ namespace Supervertaler.PromptEditor
         /// </summary>
         private static readonly Color AccentColour = Color.FromArgb(0x0B, 0x5C, 0xAD);
 
-        private ToolStripDropDownButton _glossary;
-        private ToolStripDropDownButton _prompt;
-        private ToolStripDropDownButton _memoryBank;
+        private JobPanel _job;
+        private JobPanel.Field _glossary;
+        private JobPanel.Field _prompt;
+        private JobPanel.Field _memoryBank;
+        private JobPanel.Field _model;
         private ToolStripStatusLabel _dirtyLabel;
         private SplitContainer _split;
 
@@ -374,65 +376,21 @@ namespace Supervertaler.PromptEditor
             // changes per JOB, and all three answer the same question: what does
             // the model know before it is shown a segment.
             //
-            // Drop-down buttons rather than text buttons: the caption used to carry
-            // its own label ("Prompt: <name>"), which made two words compete with
-            // the value and left nothing to say the thing could be clicked at all.
-            var context = new ToolStrip
-            {
-                GripStyle = ToolStripGripStyle.Hidden,
-                ImageScalingSize = new Size(_iconSize, _iconSize),
-                Padding = new Padding(4, 2, 4, 2)
-            };
+            // A panel above the library rather than a bar across the window. The
+            // bar put four names end to end on one line - and because AutoPrompt
+            // names the prompt after the project, Export glossary names itself
+            // after the prompt, and banks are named after projects, those four
+            // names were usually the same words four times over. The labels that
+            // said which was which were the greyed-out part.
+            _job = new JobPanel(ChooseModel, ChoosePrompt, ChooseGlossary, ChooseMemoryBank);
+            _prompt = _job.Prompt;
+            _glossary = _job.Glossary;
+            _memoryBank = _job.Bank;
+            _model = _job.Model;
+            _project = _job.Project;
 
-            ToolStripDropDownButton Chooser(EventHandler onClick)
-            {
-                var b = new ToolStripDropDownButton
-                {
-                    DisplayStyle = ToolStripItemDisplayStyle.Text,
-                    AutoToolTip = false,
-
-                    // The arrow is the affordance; the menu behind it is not. All
-                    // three lists grow with the work - forty prompts, twenty-three
-                    // banks - and a flat menu of either is unreadable long before
-                    // it is wrong, so the click opens a list with a filter box
-                    // over it instead.
-                    ShowDropDownArrow = true
-                };
-                b.Click += onClick;
-                return b;
-            }
-
-            _prompt = Chooser((s, e) => ChoosePrompt());
-            _glossary = Chooser((s, e) => ChooseGlossary());
-            _memoryBank = Chooser((s, e) => ChooseMemoryBank());
-
-            ToolStripLabel Caption(string text, string glyph) => new ToolStripLabel(text)
-            {
-                ForeColor = SystemColors.GrayText,
-                Margin = new Padding(10, 0, 0, 0),
-                Image = Glyphs.Render(glyph, SystemColors.GrayText, _iconSize),
-                DisplayStyle = ToolStripItemDisplayStyle.ImageAndText,
-                ImageAlign = ContentAlignment.MiddleLeft,
-                TextAlign = ContentAlignment.MiddleLeft
-            };
-
-            // Which project these apply to. It used to say "memoQ is using",
-            // which was true and useless: the one thing a translator needs to
-            // check before changing any of the three is that memoQ is where they
-            // think it is. Recording a memory bank against the wrong project
-            // because the MT engine was not selected in the new one is a real
-            // half-hour, and nothing on screen said so.
-            _project = new ToolStripLabel { ForeColor = SystemColors.GrayText };
             RefreshProject();
-
-            context.Items.AddRange(new ToolStripItem[]
-            {
-                _project,
-                Caption("Prompt", Glyphs.Prompt), _prompt,
-                Caption("Glossary", Glyphs.Glossary), _glossary,
-                Caption("Memory bank", Glyphs.Bank), _memoryBank
-            });
-
+            RefreshModel();
             RefreshPrompt();
             RefreshGlossary();
             RefreshMemoryBank();
@@ -447,9 +405,85 @@ namespace Supervertaler.PromptEditor
             _tree.BeforeSelect += TreeBeforeSelect;
             _tree.AfterSelect += TreeAfterSelect;
 
+            // The tree is what you could choose and the panel above it is what is
+            // chosen, so the shortest path between them belongs on the tree (#1).
             var treeMenu = new ContextMenuStrip();
-            treeMenu.Items.Add("Move to folder…", null, (s, e) => MoveSelected());
-            treeMenu.Items.Add("Delete", null, (s, e) => DeleteSelected());
+            var setActive = new ToolStripMenuItem("Set as active prompt", null, (s, e) => SetSelectedActive());
+            var moveTo = new ToolStripMenuItem("Move to folder…", null, (s, e) => MoveSelected());
+            var delete = new ToolStripMenuItem("Delete", null, (s, e) => DeleteSelected());
+
+            treeMenu.Items.Add(setActive);
+            treeMenu.Items.Add(new ToolStripSeparator());
+            treeMenu.Items.Add(moveTo);
+            treeMenu.Items.Add(delete);
+
+            // Offered only for prompts memoQ can actually run. A Proofreading or
+            // QuickLauncher prompt set as the active translation prompt would be
+            // accepted here and then silently ignored by the plugin, which is a
+            // worse answer than not offering it.
+            treeMenu.Opening += (s, e) =>
+            {
+                var tag = _tree.SelectedNode?.Tag;
+
+                // One command, named for whatever was right-clicked. Three
+                // separate entries greyed out two at a time would be a menu that
+                // is mostly unusable whatever you click.
+                switch (tag)
+                {
+                    case PromptTemplate prompt:
+                        setActive.Visible = true;
+                        setActive.Enabled = Runnable(prompt) && !IsActivePrompt(prompt);
+                        setActive.Text = IsActivePrompt(prompt) ? "Already the active prompt" : "Set as active prompt";
+                        break;
+
+                    case BankNode bank:
+                        setActive.Visible = true;
+                        setActive.Enabled = bank.Dir != null && !IsActiveBank(bank.Name)
+                                            && !Supervertaler.Core.MemoryBanks.IsSharedName(bank.Name);
+                        setActive.Text = Supervertaler.Core.MemoryBanks.IsSharedName(bank.Name)
+                            ? "Always sent, whatever is chosen"
+                            : IsActiveBank(bank.Name) ? "Already the active memory bank" : "Set as active memory bank";
+                        break;
+
+                    case BankArticleNode article:
+                        // The article is not a thing that can be active; its bank is.
+                        setActive.Visible = true;
+                        setActive.Enabled = !IsActiveBank(article.Bank)
+                                            && !Supervertaler.Core.MemoryBanks.IsSharedName(article.Bank);
+                        setActive.Text = IsActiveBank(article.Bank)
+                            ? "Already the active memory bank"
+                            : "Set " + article.Bank + " as the active memory bank";
+                        break;
+
+                    case GlossaryNode glossary:
+                        setActive.Visible = true;
+                        setActive.Enabled = !IsActiveGlossary(glossary.Path);
+                        setActive.Text = IsActiveGlossary(glossary.Path)
+                            ? "Already the active glossary"
+                            : "Set as active glossary";
+                        break;
+
+                    default:
+                        setActive.Visible = false;
+                        break;
+                }
+
+                // Moving and deleting are prompt-library operations. On a bank or a
+                // glossary they would either do nothing or do something surprising.
+                var isPrompt = tag is PromptTemplate;
+                foreach (var item in new[] { moveTo, delete }) item.Visible = isPrompt;
+            };
+
+            // A right-click selects the row before the menu opens; without this
+            // the menu acts on whatever was selected before, which is the wrong
+            // prompt and looks like the right one.
+            _tree.MouseDown += (s, e) =>
+            {
+                if (e.Button != MouseButtons.Right) return;
+                var hit = _tree.GetNodeAt(e.X, e.Y);
+                if (hit != null) _tree.SelectedNode = hit;
+            };
+
             _tree.ContextMenuStrip = treeMenu;
 
             // -- right-hand pane
@@ -535,6 +569,7 @@ namespace Supervertaler.PromptEditor
                 FixedPanel = FixedPanel.Panel1
             };
             _split.Panel1.Controls.Add(_tree);
+            _split.Panel1.Controls.Add(_job);
             _split.Panel2.Controls.Add(right);
 
             var strip = new StatusStrip();
@@ -549,7 +584,6 @@ namespace Supervertaler.PromptEditor
             // Added before the toolbar so it sits below it: docked children are
             // laid out from the back of the collection forwards, so the last Top
             // control added claims the top of the window.
-            Controls.Add(context);
             Controls.Add(toolbar);
 
             // Added after the toolbar on purpose: docked children are laid out
@@ -708,6 +742,13 @@ namespace Supervertaler.PromptEditor
                     _tree.Nodes.Add(BuildLeaf(p));
 
                 _tree.ExpandAll();
+
+                // Added after the expand, and left collapsed. Twenty-three banks
+                // with their articles opened out would bury the prompt library
+                // that the window is mostly for.
+                _tree.Nodes.Add(BuildBanks());
+                _tree.Nodes.Add(BuildGlossaries());
+
                 if (_tree.Nodes.Count > 0) _tree.Nodes[0].EnsureVisible();
             }
             finally
@@ -715,6 +756,129 @@ namespace Supervertaler.PromptEditor
                 _tree.EndUpdate();
             }
         }
+
+        /// <summary>
+        /// Every memory bank, with its articles under it. The shared bank is
+        /// included and named as what it is: it travels with every request whether
+        /// or not a client bank is chosen, so leaving it out of a list of what
+        /// reaches the model would be a plain untruth.
+        /// </summary>
+        private TreeNode BuildBanks()
+        {
+            var section = new TreeNode("Memory banks") { Tag = new SectionNode { Name = "Memory banks" } };
+
+            try
+            {
+                var names = Supervertaler.Core.MemoryBanks.List()
+                    .OrderBy(n => Supervertaler.Core.MemoryBanks.IsSharedName(n) ? 0 : 1)
+                    .ThenBy(n => n, StringComparer.OrdinalIgnoreCase);
+
+                foreach (var name in names)
+                {
+                    var dir = Supervertaler.Core.MemoryBanks.DirFor(name);
+                    var articles = ArticleFiles(dir);
+
+                    var isShared = Supervertaler.Core.MemoryBanks.IsSharedName(name);
+                    var label = name + (isShared ? "   \u00b7 always sent" : "");
+
+                    var node = new TreeNode(Marked(label, IsActiveBank(name)))
+                    {
+                        Tag = new BankNode { Name = name, Dir = dir, Articles = articles.Count },
+                        NodeFont = IsActiveBank(name) ? ActiveFont : null,
+                        ForeColor = dir == null ? Color.Firebrick : SystemColors.WindowText,
+                        ToolTipText = dir == null
+                            ? "There is no folder of this name under " + Supervertaler.Core.MemoryBanks.Root
+                            : dir
+                    };
+
+                    foreach (var path in articles)
+                        node.Nodes.Add(new TreeNode(Path.GetFileNameWithoutExtension(path))
+                        {
+                            Tag = new BankArticleNode { Bank = name, Path = path, Title = Path.GetFileNameWithoutExtension(path) },
+                            ToolTipText = path
+                        });
+
+                    section.Nodes.Add(node);
+                }
+            }
+            catch (Exception ex)
+            {
+                section.Nodes.Add(new TreeNode("(could not be read: " + ex.Message + ")") { ForeColor = Color.Firebrick });
+            }
+
+            return section;
+        }
+
+        private static List<string> ArticleFiles(string dir)
+        {
+            if (string.IsNullOrWhiteSpace(dir) || !Directory.Exists(dir)) return new List<string>();
+
+            try
+            {
+                return Directory.GetFiles(dir, "*.md", SearchOption.TopDirectoryOnly)
+                    .OrderBy(p => Path.GetFileName(p), StringComparer.OrdinalIgnoreCase)
+                    .ToList();
+            }
+            catch
+            {
+                return new List<string>();
+            }
+        }
+
+        /// <summary>
+        /// The glossaries, from the folder Export glossary writes to - plus the
+        /// active one when it lives somewhere else, since a list of glossaries that
+        /// omits the one in use would be worse than no list.
+        /// </summary>
+        private TreeNode BuildGlossaries()
+        {
+            var section = new TreeNode("Glossaries") { Tag = new SectionNode { Name = "Glossaries" } };
+
+            try
+            {
+                var dir = Path.Combine(SupervertalerPaths.Root, "memoq", "glossaries");
+                var current = SharedSettings.GlossaryPath;
+
+                foreach (var g in GlossaryFiles(dir, current))
+                {
+                    var active = !string.IsNullOrWhiteSpace(current)
+                        && string.Equals(g.Path, current, StringComparison.OrdinalIgnoreCase);
+
+                    section.Nodes.Add(new TreeNode(Marked(g.Name, active))
+                    {
+                        Tag = new GlossaryNode { Path = g.Path, Name = g.Name },
+                        NodeFont = active ? ActiveFont : null,
+                        ToolTipText = g.Path
+                    });
+                }
+            }
+            catch (Exception ex)
+            {
+                section.Nodes.Add(new TreeNode("(could not be read: " + ex.Message + ")") { ForeColor = Color.Firebrick });
+            }
+
+            return section;
+        }
+
+        private static bool IsActiveBank(string name)
+        {
+            var active = SharedSettings.MemoryBank;
+            return !string.IsNullOrWhiteSpace(active)
+                && string.Equals(active, name, StringComparison.OrdinalIgnoreCase);
+        }
+
+        /// <summary>
+        /// The active item’s label. The mark leads rather than trails: the tree is
+        /// a narrow column and these names are long, so a suffix sits past the right
+        /// edge where nobody sees it - which is exactly what the first version did.
+        ///
+        /// <para>Bold as well as the bullet, and no background colour. Colour would
+        /// collide with the selection bar - blue on blue when the active item is
+        /// also the selected one - and the tree already spends grey on "not for this
+        /// product". Bold survives greyscale and a screenshot; the bullet survives
+        /// any column width.</para>
+        /// </summary>
+        private static string Marked(string label, bool active) => active ? "\u25cf  " + label : label;
 
         private TreeNode BuildNode(PromptFolderNode folder)
         {
@@ -740,6 +904,16 @@ namespace Supervertaler.PromptEditor
         /// </summary>
         private const string ThisApp = "memoq";
 
+        /// <summary>
+        /// Bold, for the active prompt’s node. Built once and never disposed: a
+        /// TreeNode keeps a reference to whatever font it is given, so disposing it
+        /// on the next rebuild would draw the tree with a dead handle.
+        /// </summary>
+        private static Font _activeFont;
+
+        private static Font ActiveFont =>
+            _activeFont ?? (_activeFont = new Font(SystemFonts.DefaultFont, FontStyle.Bold));
+
         private static TreeNode BuildLeaf(PromptTemplate p)
         {
             var label = p.Name;
@@ -761,9 +935,10 @@ namespace Supervertaler.PromptEditor
             // Dimmed rather than coloured: this is one binary fact, and dimming
             // already carries "does not apply here" without asking anyone to learn
             // a colour code or to be able to tell two colours apart.
-            return new TreeNode(label)
+            return new TreeNode(Marked(label, IsActivePrompt(p)))
             {
                 Tag = p,
+                NodeFont = IsActivePrompt(p) ? ActiveFont : null,
                 ForeColor = p.IsReadOnly || !forThisApp ? SystemColors.GrayText : SystemColors.WindowText,
                 ToolTipText = forThisApp ? null
                     : "This prompt is marked for " + Describe(app) + ". memoQ will not offer it, "
@@ -1419,6 +1594,195 @@ namespace Supervertaler.PromptEditor
         /// project came before - silently, and the usual cause is the MT engine
         /// not being selected in a newly created project.</para>
         /// </summary>
+        /// <summary>
+        /// The model memoQ will use. Read from the same shared settings the plugin
+        /// reads, so this is what will actually run rather than what this program
+        /// would have chosen.
+        /// </summary>
+        /// <summary>
+        /// Whether memoQ would run this prompt if it were selected - the same three
+        /// tests the plugin’s PromptResolver applies, repeated here because that
+        /// class belongs to the plugin and pulling it in would drag the plugin’s
+        /// logging with it. A prompt failing any of them is offered by neither.
+        /// </summary>
+        private static bool Runnable(PromptTemplate prompt)
+        {
+            if (prompt == null || string.IsNullOrWhiteSpace(prompt.RelativePath)) return false;
+            if (prompt.IsQuickLauncher || !ForThisApp(prompt)) return false;
+
+            var category = prompt.Category;
+            if (string.IsNullOrWhiteSpace(category))
+            {
+                var rel = prompt.RelativePath ?? string.Empty;
+                var slash = rel.IndexOfAny(new[] { '/', '\\' });
+                category = slash > 0 ? rel.Substring(0, slash) : rel;
+            }
+
+            return category.Equals("Translate", StringComparison.OrdinalIgnoreCase)
+                || category.StartsWith("Translate/", StringComparison.OrdinalIgnoreCase)
+                || category.StartsWith("Translate\\", StringComparison.OrdinalIgnoreCase);
+        }
+
+        private static bool IsActivePrompt(PromptTemplate prompt)
+        {
+            var active = SharedSettings.PromptPath;
+            return !string.IsNullOrWhiteSpace(active)
+                && prompt != null
+                && string.Equals(active, prompt.RelativePath, StringComparison.OrdinalIgnoreCase);
+        }
+
+        /// <summary>
+        /// Makes the selected prompt the one memoQ uses (#1). The same setting the
+        /// panel’s Prompt row writes, so the two cannot disagree.
+        /// </summary>
+        private static bool IsActiveGlossary(string path)
+        {
+            var active = SharedSettings.GlossaryPath;
+            return !string.IsNullOrWhiteSpace(active)
+                && !string.IsNullOrWhiteSpace(path)
+                && string.Equals(active, path, StringComparison.OrdinalIgnoreCase);
+        }
+
+        /// <summary>
+        /// Makes whichever kind of thing was right-clicked the active one. All
+        /// three write the same settings the panel above the tree writes, so the
+        /// two views cannot disagree.
+        /// </summary>
+        private void SetSelectedActive()
+        {
+            switch (_tree.SelectedNode?.Tag)
+            {
+                case BankNode bank:
+                    ActivateBank(bank.Name);
+                    return;
+
+                case BankArticleNode article:
+                    ActivateBank(article.Bank);
+                    return;
+
+                case GlossaryNode glossary:
+                    SharedSettings.GlossaryPath = glossary.Path;
+                    RefreshGlossary();
+                    LoadTree();
+                    _status.Text = "Active glossary: " + glossary.Name + ".";
+                    return;
+            }
+
+            var prompt = _tree.SelectedNode?.Tag as PromptTemplate;
+            if (prompt == null) return;
+
+            if (!Runnable(prompt))
+            {
+                MessageBox.Show(this,
+                    "memoQ only runs prompts from the Translate folder that are marked for memoQ, "
+                    + "so this one cannot be the active translation prompt.",
+                    "Set as active prompt", MessageBoxButtons.OK, MessageBoxIcon.Information);
+                return;
+            }
+
+            SharedSettings.PromptPath = prompt.RelativePath;
+            RefreshPrompt();
+            MarkActiveNode();
+            _status.Text = "Active prompt: " + prompt.Name + ". memoQ uses it on the next segment.";
+        }
+
+        /// <summary>
+        /// Moves the bold mark to whichever node is active now, without rebuilding
+        /// the tree - a rebuild collapses every folder and loses the selection,
+        /// which is a lot to spend on one word changing.
+        /// </summary>
+        private void MarkActiveNode()
+        {
+            _tree.BeginUpdate();
+            try
+            {
+                foreach (var node in AllNodes(_tree.Nodes))
+                {
+                    if (!(node.Tag is PromptTemplate p)) continue;
+
+                    var active = IsActivePrompt(p);
+                    var marked = node.NodeFont != null;
+                    if (active == marked) continue;
+
+                    node.NodeFont = active ? ActiveFont : null;
+                    node.Text = active
+                        ? Marked(node.Text, true)
+                        : node.Text.Replace("●  ", "");
+                }
+            }
+            finally { _tree.EndUpdate(); }
+        }
+
+        /// <summary>
+        /// Records the bank against the project memoQ last worked in, exactly as
+        /// the panel’s Bank row does - so a bank chosen here is remembered for the
+        /// job in the same way.
+        /// </summary>
+        private void ActivateBank(string name)
+        {
+            MemoryBankPicker.Save(name);
+            RefreshMemoryBank();
+            RefreshProject();
+            LoadTree();
+            _status.Text = "Active memory bank: " + name + ". " + MemoryBankPicker.ProjectNote();
+        }
+
+        private void RefreshModel()
+        {
+            var provider = SharedSettings.ProviderOr(LlmProviders.Anthropic);
+            var id = (SharedSettings.ModelOr("") ?? "").Trim();
+
+            if (id.Length == 0)
+            {
+                _model.Text = "not set";
+                _model.ForeColor = Color.Firebrick;
+                _model.ToolTipText = Tip("No model is configured, so memoQ cannot translate. "
+                    + "Click to choose one.");
+                return;
+            }
+
+            var known = ModelCatalog.Entries(provider, showAll: true)
+                .FirstOrDefault(e => string.Equals(e.Id, id, StringComparison.OrdinalIgnoreCase));
+
+            _model.Text = known == null || string.IsNullOrWhiteSpace(known.DisplayName) ? id : known.DisplayName;
+            _model.ForeColor = SystemColors.ControlText;
+
+            // A model in neither list is normal - a gateway, or one released after
+            // this build - so it is stated rather than flagged.
+            _model.ToolTipText = Tip(provider + " \u00b7 " + id
+                + (known?.Description is string verdict && verdict.Length > 0 ? "\r\n\r\n" + verdict : "")
+                + (known == null ? "\r\n\r\nNot in " + provider + "\u2019s list, which is normal for a gateway "
+                                   + "or a model released after this build." : "")
+                + "\r\n\r\nClick to choose a different one.");
+        }
+
+        /// <summary>
+        /// Picks the model. The same short list the two settings dialogs show,
+        /// because a recommendation that differs between windows is not one.
+        /// </summary>
+        private void ChooseModel()
+        {
+            var provider = SharedSettings.ProviderOr(LlmProviders.Anthropic);
+            var current = (SharedSettings.ModelOr("") ?? "").Trim();
+
+            var rows = ModelCatalog.Entries(provider, SharedSettings.ShowAllModels)
+                .Select(e => new PromptChooserForm.ModelRow { Id = e.Id, Name = e.DisplayName, Verdict = e.Description })
+                .ToList();
+
+            // Whatever is configured stays on the list even when neither the short
+            // list nor the last fetch carries it, so choosing something else and
+            // changing your mind does not lose it.
+            if (current.Length > 0 && !rows.Any(r => string.Equals(r.Id, current, StringComparison.OrdinalIgnoreCase)))
+                rows.Insert(0, new PromptChooserForm.ModelRow { Id = current, Name = current, Verdict = "in use, not on " + provider + "\u2019s list" });
+
+            var chosen = PromptChooserForm.ChooseModel(this, rows, current);
+            if (chosen == null || chosen.Length == 0) return;
+
+            SharedSettings.Model = chosen;
+            RefreshModel();
+            _status.Text = "Model: " + chosen + ". memoQ uses it on the next segment.";
+        }
+
         private void RefreshProject()
         {
             if (_project == null) return;
@@ -1436,10 +1800,11 @@ namespace Supervertaler.PromptEditor
                 return;
             }
 
-            // Long names are common - a project named after two case references
-            // runs to forty characters - and this is a label, not the content.
-            _project.Text = name.Length <= 44 ? name : name.Substring(0, 42).TrimEnd() + "\u2026";
-            _project.ForeColor = SystemColors.GrayText;
+            // Shown whole and wrapped: it is the panel's heading, every row below
+            // is shortened against it, and a client name cut in half is worse
+            // than two lines.
+            _project.Text = name;
+            _project.ForeColor = SystemColors.ControlText;
             _project.ToolTipText = Tip("The memoQ project these apply to:\r\n" + name);
         }
 

@@ -200,6 +200,55 @@ namespace Supervertaler.PromptEditor
             return rows;
         }
 
+        /// <summary>
+        /// Picks the model, from the same short list the settings dialogs offer -
+        /// so what is recommended is recommended in one place, not two.
+        /// </summary>
+        public static string ChooseModel(IWin32Window owner, IReadOnlyList<ModelRow> models, string current)
+        {
+            using (var dialog = new ChooserForm(
+                "Choose the model",
+                "The short list is the few models worth recommending, with a verdict each. "
+                + "Tick Show all models in the settings to add everything the provider lists.",
+                "Type to filter by name or id",
+                ModelRows(models), current))
+            {
+                return dialog.ShowDialog(owner) == DialogResult.OK ? dialog.SelectedValue : null;
+            }
+        }
+
+        internal sealed class ModelRow
+        {
+            public string Id;
+            public string Name;
+            public string Verdict;
+        }
+
+        internal static IReadOnlyList<ChooserForm.Row> ModelRows(IReadOnlyList<ModelRow> models)
+        {
+            var rows = new List<ChooserForm.Row>();
+
+            foreach (var m in models ?? new List<ModelRow>())
+            {
+                if (m == null || string.IsNullOrWhiteSpace(m.Id)) continue;
+
+                var name = string.IsNullOrWhiteSpace(m.Name) ? m.Id : m.Name;
+
+                rows.Add(new ChooserForm.Row
+                {
+                    Value = m.Id,
+                    Display = name,
+
+                    // The verdict is what makes a short list worth having, and the
+                    // id is what a filter is most likely to be typed against.
+                    Detail = string.IsNullOrWhiteSpace(m.Verdict) ? m.Id : m.Verdict,
+                    Search = name + " " + m.Id + " " + (m.Verdict ?? "")
+                });
+            }
+
+            return rows;
+        }
+
         internal static IReadOnlyList<ChooserForm.Row> BankRows(IReadOnlyList<BankRow> banks)
         {
             var rows = new List<ChooserForm.Row>

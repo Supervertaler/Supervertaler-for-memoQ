@@ -195,6 +195,19 @@ $settingsT = $plugin.GetType('Supervertaler.MemoQ.Settings.SupervertalerSettings
 $settings = $settingsT.GetMethod('Create').Invoke($null,
     @([Activator]::CreateInstance($generalT), [Activator]::CreateInstance($secureT)))
 
+# Both dialogs restore the stored tick, so it is set here rather than assumed -
+# asserting the default would fail for any user who had turned it on.
+# run-harness.ps1 puts shared.txt back afterwards.
+#
+# Through the plugin's OWN copy of SharedSettings for the plugin's dialog, and
+# the editor's for the editor's. The editor exe compiles that source in rather
+# than referencing the DLL, so there are two static caches over one file; a
+# write through one is not seen by the other until its few-second freshness
+# interval lapses. That is the intended design - the two are separate processes
+# in real use - but it makes the assembly a test writes through matter.
+$sharedPlugin = $plugin.GetType('Supervertaler.MemoQ.Core.SharedSettings')
+$sharedPlugin.GetProperty('ShowAllModels', $Static).SetValue($null, $false)
+
 $optionsT = $plugin.GetType('Supervertaler.MemoQ.Settings.OptionsForm')
 $options = [Activator]::CreateInstance($optionsT, $Ctor, $null, @($settings), $null)
 try {
@@ -220,6 +233,13 @@ try {
     $box = ModelBox $settingsForm '_model'
     Check ($box.Items.Count -ge 3) "the editor's dialog is filled the same way: $($box.Items.Count) models"
     Check (-not (ModelBox $settingsForm '_showAllModels').Checked) "and opens on the short list too"
+
+    # And it is genuinely restored rather than always off.
+    $sharedEditor = $editor.GetType('Supervertaler.MemoQ.Core.SharedSettings')
+    $sharedEditor.GetProperty('ShowAllModels', $Static).SetValue($null, $true)
+    $reopened = [Activator]::CreateInstance($settingsFormT, $Ctor, $null, @(), $null)
+    try { Check ((ModelBox $reopened '_showAllModels').Checked) "a stored tick comes back on reopening" }
+    finally { $reopened.Dispose() }
 }
 finally { $settingsForm.Dispose() }
 

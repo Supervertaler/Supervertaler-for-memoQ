@@ -87,6 +87,15 @@ if tasklist.exe //FI "IMAGENAME eq memoQ.exe" 2>/dev/null | grep -qi "memoQ.exe"
     exit 1
 fi
 
+# The prompt editor locks its own exe the same way. It was left out of this
+# check for a long time, and the cost was not a failed build: the DLLs deployed,
+# the editor did not, and the run still said OK - so an evening's UI work was
+# reviewed against the previous binary.
+if tasklist.exe //FI "IMAGENAME eq Supervertaler.PromptEditor.exe" 2>/dev/null | grep -qi "Supervertaler.PromptEdi"; then
+    echo "ERROR: the prompt editor is running. Close it before building - it locks its own exe." >&2
+    exit 1
+fi
+
 # --- build ------------------------------------------------------------------
 echo
 # Two Git Bash quirks in one line:
@@ -175,9 +184,27 @@ DEPLOY_LOG=""
 [[ -f "$STAGE/deploy.log" ]] && DEPLOY_LOG="$(cat "$STAGE/deploy.log")"
 [[ -n "$DEPLOY_LOG" ]] && echo "$DEPLOY_LOG"
 
-# Substring, not anchored: deploy.ps1 writes plain UTF-8, but a leading byte from
-# any future logging change must not turn a successful deploy into a failure.
-if [[ "$DEPLOY_LOG" == *"OK  "* ]]; then
+# What actually landed, checked against what was staged - the log is a report,
+# not evidence. The old test asked only whether the log contained "OK" anywhere,
+# so a run that copied the two DLLs and then failed on a locked editor matched
+# on the DLLs' own OK lines and declared success.
+DEPLOY_OK=1
+MISSING=""
+for f in Supervertaler.MemoQ.dll Supervertaler.MemoQ.Terms.dll Supervertaler.PromptEditor.exe; do
+    staged="$STAGE/$f"
+    landed="$ADDINS/$f"
+    [[ -f "$staged" ]] || continue
+    if [[ ! -f "$landed" ]] || [[ "$(stat -c%s "$staged")" != "$(stat -c%s "$landed")" ]]; then
+        DEPLOY_OK=0
+        MISSING="$MISSING $f"
+    fi
+done
+
+# A FAIL in the log is conclusive even when the sizes happen to agree - a copy
+# that threw after writing a same-sized file is still a copy that threw.
+[[ "$DEPLOY_LOG" == *"FAIL"* ]] && DEPLOY_OK=0
+
+if [[ "$DEPLOY_OK" == "1" ]]; then
     # The preview tool. A separate process memoQ launches itself, so it does
     # NOT go into Addins: it carries its own Newtonsoft.Json and System.Web.Http,
     # and memoQ probes Addins for its own assemblies — a copy of either there
@@ -211,7 +238,14 @@ if [[ "$DEPLOY_LOG" == *"OK  "* ]]; then
     echo
     echo "Log: %LocalAppData%\Supervertaler.memoQ\plugin.log"
 else
-    echo "Deploy failed. Copy by hand from an elevated prompt:" >&2
+    echo >&2
+    if [[ -n "$MISSING" ]]; then
+        echo "ERROR: these did not reach $(cygpath -w "$ADDINS"):$MISSING" >&2
+        echo "       The build is fine; what is deployed is the PREVIOUS one." >&2
+    else
+        echo "ERROR: deploy failed." >&2
+    fi
+    echo "Copy by hand from an elevated prompt:" >&2
     echo "  copy \"$(cygpath -w "$OUTPUT")\" \"$(cygpath -w "$ADDINS")\"" >&2
     exit 1
 fi

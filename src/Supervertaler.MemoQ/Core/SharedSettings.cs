@@ -215,6 +215,7 @@ namespace Supervertaler.MemoQ.Core
         /// </summary>
         public static bool ShowAllModels { get => BoolOr(ShowAllModelsKey, false); set => Write(ShowAllModelsKey, value ? "1" : "0"); }
 
+
         public static string PromptPath { get => Read(PromptPathKey); set => Write(PromptPathKey, value); }
 
         /// <summary>

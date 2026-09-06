@@ -24,6 +24,22 @@ function Say($message) {
     }
 }
 
+# Copies one file and then checks it arrived. Copy-Item raising nothing is not
+# proof: the caller reads this log to decide whether what it built is what is on
+# disk, and "OK" has to mean the bytes match.
+function Deploy($source, $target) {
+    Copy-Item -LiteralPath $source -Destination $target -Force
+
+    $from = Get-Item -LiteralPath $source
+    $to   = Get-Item -LiteralPath $target
+    if ($to.Length -ne $from.Length) {
+        throw "$target is $($to.Length) bytes, expected $($from.Length) - the copy did not take"
+    }
+
+    Say "OK  $target"
+    Say "    $($to.Length) bytes, written $($to.LastWriteTime)"
+}
+
 try {
     # Newest installed memoQ wins, so a machine with 12 and 13 side by side gets 13.
     if (-not $MemoQPath) {
@@ -42,6 +58,13 @@ try {
         throw 'memoQ is running — it locks the add-in DLL. Close it and retry.'
     }
 
+    # Before the first copy, not when its turn comes: a run that deploys the
+    # DLLs and then dies on the editor leaves the two halves at different
+    # versions, which is harder to notice than either failing outright.
+    if (Get-Process -Name 'Supervertaler.PromptEditor' -ErrorAction SilentlyContinue) {
+        throw 'The prompt editor is running - it locks its own exe. Close it and retry.'
+    }
+
     # Deploy every DLL staged beside this script, not just $PluginDll: the plugin
     # ships as two assemblies (MT engine and terminology provider) because memoQ
     # loads one module per DLL.
@@ -50,11 +73,7 @@ try {
     if (-not $dlls) { throw "No Supervertaler DLLs found in $stage" }
 
     foreach ($dll in $dlls) {
-        $target = Join-Path $addins $dll.Name
-        Copy-Item -LiteralPath $dll.FullName -Destination $target -Force
-        $info = Get-Item -LiteralPath $target
-        Say "OK  $target"
-        Say "    $($info.Length) bytes, written $($info.LastWriteTime)"
+        Deploy $dll.FullName (Join-Path $addins $dll.Name)
     }
 
     # The prompt editor, if it was staged. memoQ never loads this one — it is a
@@ -63,11 +82,7 @@ try {
     # deploy that skipped it still leaves a working add-in.
     $editor = Join-Path $stage 'Supervertaler.PromptEditor.exe'
     if (Test-Path -LiteralPath $editor) {
-        $target = Join-Path $addins 'Supervertaler.PromptEditor.exe'
-        Copy-Item -LiteralPath $editor -Destination $target -Force
-        $info = Get-Item -LiteralPath $target
-        Say "OK  $target"
-        Say "    $($info.Length) bytes, written $($info.LastWriteTime)"
+        Deploy $editor (Join-Path $addins 'Supervertaler.PromptEditor.exe')
     }
     else {
         Say "--  prompt editor not staged; skipped"
