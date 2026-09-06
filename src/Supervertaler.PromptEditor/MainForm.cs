@@ -636,7 +636,17 @@ namespace Supervertaler.PromptEditor
                 SaveWindowGeometry();
             };
 
-            Shown += (s, e) => ApplyWindowGeometry();
+            Shown += (s, e) =>
+            {
+                ApplyWindowGeometry();
+
+                // Again here, and this is the call that does the work: the tree is
+                // built in the constructor, before the window has a handle, and
+                // ScrollTreeHome cannot send a message to a control that has none.
+                // The splitter also moves in ApplyWindowGeometry, which changes the
+                // tree's width and with it what "scrolled right" means.
+                ScrollTreeHome();
+            };
 
             SetEditingEnabled(false);
             _status.Text = SupervertalerPaths.PromptLibraryDir;
@@ -774,6 +784,7 @@ namespace Supervertaler.PromptEditor
                 _tree.Nodes.Add(BuildGlossaries());
 
                 if (_tree.Nodes.Count > 0) _tree.Nodes[0].EnsureVisible();
+                ScrollTreeHome();
             }
             finally
             {
@@ -787,6 +798,33 @@ namespace Supervertaler.PromptEditor
         /// or not a client bank is chosen, so leaving it out of a list of what
         /// reaches the model would be a plain untruth.
         /// </summary>
+        private const int WM_HSCROLL = 0x0114;
+        private const int SB_LEFT = 6;
+
+        [System.Runtime.InteropServices.DllImport("user32.dll", CharSet = System.Runtime.InteropServices.CharSet.Auto)]
+        private static extern IntPtr SendMessage(IntPtr hWnd, int msg, IntPtr wParam, IntPtr lParam);
+
+        /// <summary>
+        /// Puts the tree back against its left edge.
+        ///
+        /// <para>ExpandAll leaves the view scrolled right - far enough that the
+        /// root nodes’ own expander boxes sit off the left edge, so "Memory banks"
+        /// and "Glossaries" looked like leaves rather than sections and the window
+        /// had to be scrolled by hand on every start.</para>
+        ///
+        /// <para>EnsureVisible does not undo it: it scrolls only far enough to show
+        /// the node it is given, and the first node is already visible. A TreeView
+        /// exposes no horizontal scroll position, so this is the message the
+        /// scrollbar itself would send.</para>
+        /// </summary>
+        private void ScrollTreeHome()
+        {
+            if (_tree == null || !_tree.IsHandleCreated) return;
+
+            try { SendMessage(_tree.Handle, WM_HSCROLL, (IntPtr)SB_LEFT, IntPtr.Zero); }
+            catch { /* cosmetic: a tree one notch to the right is not worth an error */ }
+        }
+
         private TreeNode BuildBanks()
         {
             var section = new TreeNode("Memory banks") { Tag = new SectionNode { Name = "Memory banks" } };
