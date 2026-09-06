@@ -336,7 +336,11 @@ namespace Supervertaler.PromptEditor
 
             // Right-aligned items are laid out from the right edge inwards, so
             // this list reads right to left on screen: settings, activity, MCP.
-            var settingsButton = Button("", Glyphs.Settings, "Translation settings",
+            // Labelled, all three. They were icon-only to keep the corner quiet,
+            // and the result was two buttons nobody could identify - including the
+            // person who asked for them to be put there. An icon earns silence
+            // only when everyone already knows it; a gear and a plug do not.
+            var settingsButton = Button("Settings", Glyphs.Settings, "Translation settings",
                 (s, e) => ShowSettings());
             settingsButton.Alignment = ToolStripItemAlignment.Right;
 
@@ -1251,9 +1255,16 @@ namespace Supervertaler.PromptEditor
         /// </summary>
         private bool Save()
         {
-            if (_current == null || !_dirty) return true;
+            if (!_dirty) return true;
 
-            if (_current.IsReadOnly)
+            // Three things can be open, and only one of them is a prompt. This
+            // guard was "_current == null" alone, so an article or a glossary
+            // returned here as if there were nothing to save - and the branches
+            // below, which do the saving, were unreachable. Ctrl+S appeared to do
+            // nothing at all.
+            if (_current == null && _articlePath == null && _glossaryDoc == null) return true;
+
+            if (_current != null && _current.IsReadOnly)
             {
                 MessageBox.Show(this, "This prompt is read-only.", "Supervertaler",
                     MessageBoxButtons.OK, MessageBoxIcon.Information);
@@ -1737,12 +1748,14 @@ namespace Supervertaler.PromptEditor
         {
             if (_mcpMode == null) return;
 
-            _mcpMode.Text = _mcpMode.Checked ? "Claude Desktop" : "";
-            _mcpMode.DisplayStyle = _mcpMode.Checked && _mcpMode.Image != null
+            // The caption says which mode is ON, not what pressing it would do -
+            // this is a switch, and the useful fact is the current state. It used
+            // to go blank when off, which left an unlabelled icon in the corner
+            // for the mode that is on almost all the time.
+            _mcpMode.Text = _mcpMode.Checked ? "Claude Desktop" : "Claude Desktop: off";
+            _mcpMode.DisplayStyle = _mcpMode.Image != null
                 ? ToolStripItemDisplayStyle.ImageAndText
-                : (_mcpMode.Image != null ? ToolStripItemDisplayStyle.Image : ToolStripItemDisplayStyle.Text);
-
-            if (_mcpMode.Image == null && !_mcpMode.Checked) _mcpMode.Text = "Claude Desktop: off";
+                : ToolStripItemDisplayStyle.Text;
 
             _mcpMode.ToolTipText = Tip(_mcpMode.Checked
                 ? "Pre-translate hands the segments to Claude Desktop and inserts what it stages "
@@ -2468,7 +2481,14 @@ namespace Supervertaler.PromptEditor
 
         private void UpdateDirtyUi()
         {
-            _save.Enabled = _dirty && _current != null && !_current.IsReadOnly;
+            // Same three things. With only the prompt case here the Save button
+            // stayed grey while an edited article sat unsaved beside it, which
+            // reads as "there is nothing to save" rather than as a bug.
+            var editable = (_current != null && !_current.IsReadOnly)
+                           || _articlePath != null
+                           || _glossaryDoc != null;
+
+            _save.Enabled = _dirty && editable;
             _dirtyLabel.Text = _dirty ? "Unsaved changes" : "";
         }
 
