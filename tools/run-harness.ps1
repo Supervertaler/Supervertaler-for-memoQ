@@ -22,6 +22,14 @@ $protected = @(
     'memory-bank-projects.txt'      # which bank each project uses
 ) | ForEach-Object { Join-Path $dir $_ }
 
+# The fetched model lists, one file per provider. Named by enumeration rather
+# than by hand: the set grows with the providers, and a harness that fetches
+# would otherwise leave a real list replaced by a test one.
+$modelDir = Join-Path $dir 'models'
+if (Test-Path $modelDir) {
+    $protected += (Get-ChildItem -Path $modelDir -Filter *.txt -File | ForEach-Object { $_.FullName })
+}
+
 $before = @{}
 foreach ($path in $protected) {
     $before[$path] = if (Test-Path $path) { [IO.File]::ReadAllBytes($path) } else { $null }
@@ -40,6 +48,14 @@ finally {
         $bytes = $before[$path]
         if ($null -ne $bytes) { [IO.File]::WriteAllBytes($path, $bytes) }
         elseif (Test-Path $path) { Remove-Item $path -Force }
+    }
+
+    # A model list the harness created for a provider that had none is not in
+    # the snapshot at all, so it has to be swept rather than restored.
+    if (Test-Path $modelDir) {
+        Get-ChildItem -Path $modelDir -Filter *.txt -File |
+            Where-Object { -not $before.ContainsKey($_.FullName) } |
+            Remove-Item -Force
     }
 
     Write-Host "[shared settings restored]"

@@ -2,29 +2,31 @@ using System;
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
-using System.Net.Http;
-using System.Runtime.Serialization.Json;
 using System.Text;
 using System.Threading;
 using System.Threading.Tasks;
-using System.Xml;
-using System.Xml.Linq;
+using Supervertaler.Core;
 using Supervertaler.MemoQ.Settings;
 
 namespace Supervertaler.MemoQ.Core
 {
     /// <summary>
-    /// The models a provider will actually accept, fetched from the provider
-    /// rather than kept in a list here.
+    /// What the model dropdown offers: a short list by default, the provider's
+    /// whole inventory on request.
     ///
-    /// A hand-curated list is a treadmill: it goes stale between releases, and
-    /// keeping it current was one of the chores that made the previous
-    /// Supervertaler generation tiring to maintain. Anthropic, OpenAI and their
-    /// kind all expose a models endpoint, so the dropdown can populate itself and
-    /// a model released tomorrow appears without a release from us.
+    /// The short list is <see cref="LlmModels"/> in core - three to five models
+    /// per provider, each with a one-line verdict, re-judged at release time and
+    /// shared with Supervertaler for Trados so the judgement is made once. It is
+    /// the default because the people using this are in a hurry: a dropdown of
+    /// forty ids, half of them dated snapshots, is a list nobody can choose from.
     ///
-    /// The field it fills stays editable. A gateway, a local model or anything the
-    /// endpoint does not list must still be typeable.
+    /// The inventory is the provider's own /models list, fetched on demand and
+    /// cached to disk so it survives a restart. It is shown only when the user
+    /// ticks "Show all models", and it exists for the case the short list cannot
+    /// serve: a model released after this build.
+    ///
+    /// Nothing here is the last word. The dropdown stays typeable, because a
+    /// gateway or a local model appears in neither list.
     /// </summary>
     internal static class ModelCatalog
     {
@@ -33,25 +35,128 @@ namespace Supervertaler.MemoQ.Core
             public string Id;
             public string DisplayName;
 
-            /// <summary>What the dropdown shows: the human name, falling back to the id.</summary>
-            public override string ToString() =>
-                string.IsNullOrWhiteSpace(DisplayName) || string.Equals(DisplayName, Id, StringComparison.OrdinalIgnoreCase)
-                    ? Id
-                    : DisplayName + "   (" + Id + ")";
+            /// <summary>
+            /// The one-line verdict. Empty for a fetched model: the short list is
+            /// where a verdict comes from, and forty blank ones say nothing.
+            /// </summary>
+            public string Description;
+
+            /// <summary>
+            /// What the dropdown shows: the name and its verdict, or just the name
+            /// when there is none, or the id when there is not even that.
+            /// </summary>
+            public override string ToString()
+            {
+                var name = string.IsNullOrWhiteSpace(DisplayName) ? Id : DisplayName;
+                return string.IsNullOrWhiteSpace(Description) ? name : name + "  –  " + Description;
+            }
         }
 
         /// <summary>
-        /// A short list per provider for when there is no key, no network, or the
-        /// endpoint refuses. Deliberately tiny: it is a fallback, not a catalogue,
-        /// and the moment it pretends to be a catalogue it starts going stale.
+        /// memoQ names its three providers for the user; core names all nine for
+        /// the wire. One translation, in one place.
         /// </summary>
-        private static readonly Dictionary<string, string[]> Fallback =
-            new Dictionary<string, string[]>(StringComparer.OrdinalIgnoreCase)
+        internal static string CoreKey(string provider)
+        {
+            if (string.Equals(provider, LlmProviders.Anthropic, StringComparison.OrdinalIgnoreCase)) return LlmModels.ProviderClaude;
+            if (string.Equals(provider, LlmProviders.OpenAI, StringComparison.OrdinalIgnoreCase)) return LlmModels.ProviderOpenAi;
+            if (string.Equals(provider, LlmProviders.Google, StringComparison.OrdinalIgnoreCase)) return LlmModels.ProviderGemini;
+            return null;
+        }
+
+        /// <summary>True when this provider publishes a list we know how to read.</summary>
+        public static bool CanFetch(string provider)
+        {
+            var key = CoreKey(provider);
+            return key != null && LlmModelCatalog.CanFetch(key);
+        }
+
+        /// <summary>The short list: what to show when "Show all models" is off.</summary>
+        public static List<Entry> Curated(string provider)
+        {
+            var key = CoreKey(provider);
+            if (key == null) return new List<Entry>();
+
+            return (LlmModels.GetModelsForProvider(key) ?? new LlmModelInfo[0])
+                .Select(m => new Entry { Id = m.Id, DisplayName = m.DisplayName, Description = m.Description })
+                .ToList();
+        }
+
+        /// <summary>
+        /// What the dropdown shows. Off: the short list. On: the short list
+        /// followed by everything the last fetch added - the order matters, since
+        /// the recommended few must still be the first thing read.
+        ///
+        /// Never blocks and never goes to the network, so a dialog can call it
+        /// while it is being built.
+        /// </summary>
+        public static List<Entry> Entries(string provider, bool showAll)
+        {
+            var entries = Curated(provider);
+            if (!showAll) return entries;
+
+            var known = new HashSet<string>(entries.Select(e => e.Id), StringComparer.OrdinalIgnoreCase);
+            var extras = Fetched(provider)
+                .Where(e => !string.IsNullOrWhiteSpace(e.Id) && known.Add(e.Id))
+                .ToList();
+
+            if (extras.Count == 0) return entries;
+
+            // Several ids can share one display name - Google returns three models
+            // called "Nano Banana Pro". Two identical rows in a dropdown is a coin
+            // toss, so those get their id appended and the rest stay readable.
+            var ambiguous = new HashSet<string>(
+                entries.Concat(extras)
+                    .GroupBy(e => e.DisplayName ?? string.Empty, StringComparer.OrdinalIgnoreCase)
+                    .Where(g => g.Count() > 1)
+                    .Select(g => g.Key),
+                StringComparer.OrdinalIgnoreCase);
+
+            foreach (var e in extras)
             {
-                { LlmProviders.Anthropic, new[] { "claude-opus-5", "claude-sonnet-5" } },
-                { LlmProviders.OpenAI, new[] { "gpt-5.4" } },
-                { LlmProviders.Google, new[] { "gemini-3.5-pro" } }
-            };
+                if (!ambiguous.Contains(e.DisplayName ?? string.Empty)) continue;
+                if (string.Equals(e.DisplayName, e.Id, StringComparison.OrdinalIgnoreCase)) continue;
+                e.DisplayName = e.DisplayName + " (" + e.Id + ")";
+            }
+
+            entries.AddRange(extras);
+            return entries;
+        }
+
+        /// <summary>How many fetched models this provider has beyond the short list.</summary>
+        public static int ExtraCount(string provider)
+        {
+            var known = new HashSet<string>(Curated(provider).Select(e => e.Id), StringComparer.OrdinalIgnoreCase);
+            return Fetched(provider).Count(e => !string.IsNullOrWhiteSpace(e.Id) && !known.Contains(e.Id));
+        }
+
+        /// <summary>
+        /// Asks the provider for its list and caches the answer. Returns null when
+        /// there is nothing to ask with or nobody to ask - no key, or a provider
+        /// with no list endpoint - so a caller can treat null as "keep what you
+        /// have". Throws on a failed request, with a message fit for a status line.
+        /// </summary>
+        public static async Task<List<Entry>> FetchAsync(
+            string provider, string apiKey, string endpoint, CancellationToken ct)
+        {
+            var key = CoreKey(provider);
+            if (key == null || !LlmModelCatalog.CanFetch(key)) return null;
+            if (string.IsNullOrWhiteSpace(apiKey)) return null;
+
+            var fetched = await LlmModelCatalog
+                .FetchAsync(key, apiKey, endpoint, ct)
+                .ConfigureAwait(false);
+
+            var entries = (fetched ?? new List<LlmModelCatalog.FetchedModel>())
+                .Where(m => m != null && !string.IsNullOrWhiteSpace(m.Id))
+                .Select(m => new Entry { Id = m.Id, DisplayName = m.DisplayName })
+                .ToList();
+
+            Store(provider, entries);
+            return entries;
+        }
+
+        // -- the fetched-list cache ---------------------------------------
 
         private static string CacheFile(string provider)
         {
@@ -64,84 +169,55 @@ namespace Supervertaler.MemoQ.Core
             return Path.Combine(dir, safe.ToLowerInvariant() + ".txt");
         }
 
-        private static readonly TimeSpan CacheFor = TimeSpan.FromHours(24);
-
         /// <summary>
-        /// What to show immediately: yesterday's answer if we have one, otherwise
-        /// the fallback. Never blocks and never goes to the network, so a dialog
-        /// can call it while it is being built.
+        /// The last fetch for this provider, or an empty list. A corrupt or
+        /// half-written file degrades to a shorter list rather than an exception
+        /// inside a form's constructor.
         /// </summary>
-        public static List<Entry> Cached(string provider)
+        public static List<Entry> Fetched(string provider)
         {
             try
             {
                 var path = CacheFile(provider);
-                if (File.Exists(path))
-                {
-                    var entries = Parse(File.ReadAllLines(path, Encoding.UTF8));
-                    if (entries.Count > 0) return entries;
-                }
+                if (File.Exists(path)) return Parse(File.ReadAllLines(path, Encoding.UTF8));
             }
             catch (Exception ex)
             {
                 SharedSettings.ReportError("ModelCatalog: could not read the cache", ex);
             }
 
-            return Fallback.TryGetValue(provider ?? string.Empty, out var ids)
-                ? ids.Select(id => new Entry { Id = id }).ToList()
-                : new List<Entry>();
+            return new List<Entry>();
         }
 
-        private static bool IsFresh(string provider)
+        /// <summary>The date of the last fetch for this provider, or null.</summary>
+        public static string FetchedOn(string provider)
         {
             try
             {
                 var path = CacheFile(provider);
-                return File.Exists(path) && DateTime.UtcNow - File.GetLastWriteTimeUtc(path) < CacheFor;
+                if (File.Exists(path)) return File.GetLastWriteTime(path).ToString("yyyy-MM-dd");
             }
             catch
             {
-                return false;
+                // A date on a status line is not worth an error.
             }
+
+            return null;
         }
 
-        /// <summary>
-        /// Asks the provider, and writes the answer to the cache. Returns null when
-        /// there is nothing new to show — no key, a fresh cache, an unsupported
-        /// provider, or a failure. Callers treat null as "keep what you have".
-        /// </summary>
-        public static async Task<List<Entry>> RefreshAsync(
-            string provider, string apiKey, string endpoint, bool force, CancellationToken ct)
+        private static void Store(string provider, IEnumerable<Entry> entries)
         {
-            if (string.IsNullOrWhiteSpace(apiKey)) return null;
-            if (!force && IsFresh(provider)) return null;
-
             try
             {
-                List<Entry> entries;
-
-                if (string.Equals(provider, LlmProviders.Anthropic, StringComparison.OrdinalIgnoreCase))
-                    entries = await FetchAnthropicAsync(apiKey, endpoint, ct).ConfigureAwait(false);
-                else if (string.Equals(provider, LlmProviders.OpenAI, StringComparison.OrdinalIgnoreCase))
-                    entries = await FetchOpenAiAsync(apiKey, endpoint, ct).ConfigureAwait(false);
-                else
-                    return null;   // Google's list endpoint differs; typing still works.
-
-                if (entries == null || entries.Count == 0) return null;
-
                 File.WriteAllLines(CacheFile(provider),
                     entries.Select(e => e.Id + "\t" + (e.DisplayName ?? string.Empty)),
                     new UTF8Encoding(false));
-
-                return entries;
             }
             catch (Exception ex)
             {
-                // Never surfaced as an error: the field is typeable and the cache or
-                // the fallback is already on screen. A provider being unreachable
-                // must not stop anyone editing their settings.
-                SharedSettings.ReportError("ModelCatalog: could not list models for " + provider, ex);
-                return null;
+                // The list is already on screen; failing to remember it for next
+                // time is not worth interrupting anyone over.
+                SharedSettings.ReportError("ModelCatalog: could not write the cache", ex);
             }
         }
 
@@ -161,116 +237,6 @@ namespace Supervertaler.MemoQ.Core
                 });
             }
             return entries;
-        }
-
-        // ── providers ────────────────────────────────────────────────────
-
-        private static readonly HttpClient Http = new HttpClient { Timeout = TimeSpan.FromSeconds(20) };
-
-        /// <summary>
-        /// GET /v1/models. Paginates with <c>after_id</c> and carries a
-        /// <c>display_name</c> per model, which is what makes a readable dropdown
-        /// possible without naming anything ourselves.
-        /// </summary>
-        private static async Task<List<Entry>> FetchAnthropicAsync(string apiKey, string endpoint, CancellationToken ct)
-        {
-            var root = string.IsNullOrWhiteSpace(endpoint)
-                ? "https://api.anthropic.com"
-                : endpoint.TrimEnd('/');
-
-            var entries = new List<Entry>();
-            string after = null;
-
-            // Bounded: a runaway cursor must not loop forever inside a dialog.
-            for (var page = 0; page < 10; page++)
-            {
-                var url = root + "/v1/models?limit=100" + (after == null ? "" : "&after_id=" + Uri.EscapeDataString(after));
-
-                using (var request = new HttpRequestMessage(HttpMethod.Get, url))
-                {
-                    request.Headers.Add("x-api-key", apiKey);
-                    request.Headers.Add("anthropic-version", "2023-06-01");
-
-                    using (var response = await Http.SendAsync(request, ct).ConfigureAwait(false))
-                    {
-                        if (!response.IsSuccessStatusCode) break;
-
-                        var body = await response.Content.ReadAsStringAsync().ConfigureAwait(false);
-                        var doc = ToXml(body);
-                        if (doc == null) break;
-
-                        var items = doc.Elements("data").Elements("item").ToList();
-                        foreach (var item in items)
-                        {
-                            var id = (string)item.Element("id");
-                            if (string.IsNullOrWhiteSpace(id)) continue;
-
-                            entries.Add(new Entry { Id = id, DisplayName = (string)item.Element("display_name") });
-                        }
-
-                        var more = (string)doc.Element("has_more");
-                        after = (string)doc.Element("last_id");
-
-                        if (!string.Equals(more, "true", StringComparison.OrdinalIgnoreCase)
-                            || string.IsNullOrWhiteSpace(after)) break;
-                    }
-                }
-            }
-
-            return entries;
-        }
-
-        /// <summary>
-        /// GET /v1/models, which returns everything the account can reach —
-        /// embeddings, audio, image models included. Filtered to what could
-        /// plausibly translate text, because an unfiltered list is the "millions of
-        /// names" problem the dropdown exists to avoid.
-        /// </summary>
-        private static async Task<List<Entry>> FetchOpenAiAsync(string apiKey, string endpoint, CancellationToken ct)
-        {
-            var root = string.IsNullOrWhiteSpace(endpoint)
-                ? "https://api.openai.com"
-                : endpoint.TrimEnd('/');
-
-            using (var request = new HttpRequestMessage(HttpMethod.Get, root + "/v1/models"))
-            {
-                request.Headers.Add("Authorization", "Bearer " + apiKey);
-
-                using (var response = await Http.SendAsync(request, ct).ConfigureAwait(false))
-                {
-                    if (!response.IsSuccessStatusCode) return null;
-
-                    var doc = ToXml(await response.Content.ReadAsStringAsync().ConfigureAwait(false));
-                    if (doc == null) return null;
-
-                    var skip = new[] { "embedding", "whisper", "tts", "dall-e", "moderation", "audio", "image", "realtime", "transcribe" };
-
-                    return doc.Elements("data").Elements("item")
-                        .Select(i => (string)i.Element("id"))
-                        .Where(id => !string.IsNullOrWhiteSpace(id))
-                        .Where(id => !skip.Any(s => id.IndexOf(s, StringComparison.OrdinalIgnoreCase) >= 0))
-                        .OrderByDescending(id => id, StringComparer.OrdinalIgnoreCase)
-                        .Select(id => new Entry { Id = id })
-                        .ToList();
-                }
-            }
-        }
-
-        /// <summary>
-        /// JSON through the framework's own reader rather than a contract class:
-        /// the shapes belong to other people and a contract that walks members in
-        /// declaration order returns nothing when a real response does not match.
-        /// That already cost an afternoon once, reading the Trados key store.
-        /// </summary>
-        private static XElement ToXml(string json)
-        {
-            if (string.IsNullOrWhiteSpace(json)) return null;
-
-            using (var reader = JsonReaderWriterFactory.CreateJsonReader(
-                new UTF8Encoding(false).GetBytes(json), XmlDictionaryReaderQuotas.Max))
-            {
-                return XDocument.Load(reader).Root;
-            }
         }
     }
 }

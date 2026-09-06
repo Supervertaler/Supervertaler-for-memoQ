@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Collections.Generic;
 using System.Globalization;
 using System.IO;
@@ -51,6 +51,7 @@ namespace Supervertaler.MemoQ.Core
         private const string BatchSizeKey = "batchsize";
         private const string TerminologyContextKey = "useterminology";
         private const string DocumentContextKey = "usedocumentcontext";
+        private const string ShowAllModelsKey = "showallmodels";
         private const string PromptPathKey = "promptpath";
         private const string ApiKeyKey = "apikey";
         private const string SourceLangKey = "langsource";
@@ -205,6 +206,14 @@ namespace Supervertaler.MemoQ.Core
 
         public static bool UseDocumentContext { get => BoolOr(DocumentContextKey, true); set => Write(DocumentContextKey, value ? "1" : "0"); }
         public static bool UseDocumentContextOr(bool fromResource) => BoolOr(DocumentContextKey, fromResource);
+
+        /// <summary>
+        /// Whether the model dropdown shows the provider's whole inventory as well
+        /// as the short list. Off by default, and remembered: someone who went
+        /// looking for a model outside the short list is usually still using it
+        /// next time they open the dialog.
+        /// </summary>
+        public static bool ShowAllModels { get => BoolOr(ShowAllModelsKey, false); set => Write(ShowAllModelsKey, value ? "1" : "0"); }
 
         public static string PromptPath { get => Read(PromptPathKey); set => Write(PromptPathKey, value); }
 

@@ -26,6 +26,9 @@ namespace Supervertaler.PromptEditor
     {
         private readonly ComboBox _provider = new ComboBox();
         private readonly ComboBox _model = new ComboBox();
+        private readonly Button _fetchModels = new Button();
+        private readonly CheckBox _showAllModels = new CheckBox();
+        private Label _modelStatus;
         private readonly TextBox _endpoint = new TextBox();
         private readonly NumericUpDown _parallel = new NumericUpDown();
         private readonly NumericUpDown _batchSize = new NumericUpDown();
@@ -93,7 +96,7 @@ namespace Supervertaler.PromptEditor
             // A different provider is a different catalogue. Guarded because
             // assigning SelectedItem during load raises this too, and at that
             // point the key has not been read yet.
-            _provider.SelectedIndexChanged += (s, e) => { if (!_loading) LoadModels(refresh: true); };
+            _provider.SelectedIndexChanged += (s, e) => { if (!_loading) ShowModels(); };
             Controls.Add(_provider);
             y += rowH;
 
@@ -112,6 +115,47 @@ namespace Supervertaler.PromptEditor
             };
             Controls.Add(_model);
             y += rowH;
+
+            // The short list is the default and the whole inventory is one tick
+            // away, because a translator in a hurry needs a list they can read,
+            // and a model released after this build has to be reachable anyway.
+            _fetchModels.Text = "Models\u2026";
+            _fetchModels.Left = fieldX; _fetchModels.Top = y; _fetchModels.Width = 84; _fetchModels.Height = 25;
+            _fetchModels.Click += FetchModels;
+            Controls.Add(_fetchModels);
+
+            _showAllModels.Text = "Show all models";
+            _showAllModels.Left = fieldX + 94; _showAllModels.Top = y + 4; _showAllModels.AutoSize = true;
+            _showAllModels.CheckedChanged += (s, e) => { if (!_loading) ShowModels(); };
+            Controls.Add(_showAllModels);
+
+            var modelTips = new ToolTip();
+            modelTips.SetToolTip(_fetchModels,
+                "Ask the provider for its current model list, using the key below. "
+                + "What it returns is remembered and shown with Show all models ticked.");
+            modelTips.SetToolTip(_showAllModels,
+                "Off: the short list \u2013 the few models worth recommending, with a verdict "
+                + "each. On: everything the provider's own list returned as well.");
+
+            y += 29;
+
+            // One line, fixed, ellipsised. The other hints on this form wrap and
+            // then report how tall they became, which is right for text that is
+            // written once - but this one is rewritten at runtime with whatever a
+            // provider says went wrong, and a two-line failure message would
+            // reflow a dialog that has already been laid out.
+            _modelStatus = new Label
+            {
+                Left = fieldX,
+                Top = y,
+                Width = fieldW,
+                Height = 17,
+                AutoSize = false,
+                AutoEllipsis = true,
+                ForeColor = SystemColors.GrayText
+            };
+            Controls.Add(_modelStatus);
+            y += 25;
 
             Caption("Endpoint (optional)", y);
             _endpoint.Left = fieldX; _endpoint.Top = y; _endpoint.Width = fieldW;
@@ -208,29 +252,86 @@ namespace Supervertaler.PromptEditor
         /// <summary>Set while <see cref="LoadCurrent"/> populates the controls.</summary>
         private bool _loading;
 
-        /// <summary>
-        /// Fills the dropdown from the cache immediately, then asks the provider in
-        /// the background and updates if the answer differs. Nothing here blocks:
-        /// a provider that is slow or unreachable must not stop the dialog opening,
-        /// and the typed value is always preserved.
-        /// </summary>
-        private async void LoadModels(bool refresh)
-        {
-            var provider = (_provider.SelectedItem as string) ?? LlmProviders.Anthropic;
+        private string Provider => (_provider.SelectedItem as string) ?? LlmProviders.Anthropic;
 
-            Show(ModelCatalog.Cached(provider));
+        /// <summary>
+        /// Fills the dropdown from what is already known - the short list, plus the
+        /// last fetch when the tick box asks for it. Never goes to the network, so
+        /// opening the dialog costs nothing and sends no key anywhere.
+        /// </summary>
+        private void ShowModels()
+        {
+            var provider = Provider;
+            Show(ModelCatalog.Entries(provider, _showAllModels.Checked));
+
+            _fetchModels.Enabled = ModelCatalog.CanFetch(provider);
+            _modelStatus.ForeColor = SystemColors.GrayText;
+
+            var extra = ModelCatalog.ExtraCount(provider);
+            var on = ModelCatalog.FetchedOn(provider);
+
+            if (on == null)
+                _modelStatus.Text = "The models worth recommending. Models\u2026 asks the provider for the rest.";
+            else if (extra == 0)
+                _modelStatus.Text = "Provider list fetched " + on + "; nothing in it beyond the short list.";
+            else
+                _modelStatus.Text = "Provider list fetched " + on + "; " + extra
+                    + (extra == 1 ? " model" : " models") + " beyond the short list.";
+        }
+
+        /// <summary>
+        /// Asks the provider for its own list. Explicit rather than automatic: the
+        /// short list is what the dialog shows, so fetching is the act of saying
+        /// "show me the rest" - and it ticks the box, because that is what the
+        /// click meant.
+        /// </summary>
+        private async void FetchModels(object sender, EventArgs e)
+        {
+            var provider = Provider;
+
+            _fetchModels.Enabled = false;
+            _modelStatus.ForeColor = SystemColors.GrayText;
+            _modelStatus.Text = "Asking " + provider + " for its model list\u2026";
 
             try
             {
-                var fresh = await ModelCatalog.RefreshAsync(
-                    provider, ApiKeyInUse(), _endpoint.Text.Trim(), refresh, CancellationToken.None)
+                var fetched = await ModelCatalog
+                    .FetchAsync(provider, ApiKeyInUse(), _endpoint.Text.Trim(), CancellationToken.None)
                     .ConfigureAwait(true);
 
-                if (fresh != null && !IsDisposed) Show(fresh);
+                if (IsDisposed) return;
+
+                if (fetched == null)
+                {
+                    _modelStatus.Text = "No API key is set, so there is nobody to ask.";
+                    return;
+                }
+
+                var extra = ModelCatalog.ExtraCount(provider);
+
+                // A click on this button means "show me". Ticking the box
+                // repopulates by itself, so only populate here when it was on.
+                if (extra > 0 && !_showAllModels.Checked) _showAllModels.Checked = true;
+                else ShowModels();
+
+                _modelStatus.ForeColor = SystemColors.GrayText;
+                _modelStatus.Text = provider + ": " + fetched.Count + " models"
+                    + (extra > 0
+                        ? ", " + extra + " beyond the short list."
+                        : ", none beyond the short list.");
             }
-            catch
+            catch (Exception ex)
             {
-                // Reported inside the catalogue; the cache is already on screen.
+                if (IsDisposed) return;
+
+                // The dropdown still holds the short list, so this is a status
+                // line rather than a dialog: nothing anyone was doing is lost.
+                _modelStatus.ForeColor = Color.FromArgb(180, 60, 60);
+                _modelStatus.Text = "Could not list models: " + ex.Message;
+            }
+            finally
+            {
+                if (!IsDisposed) _fetchModels.Enabled = ModelCatalog.CanFetch(provider);
             }
         }
 
@@ -313,8 +414,10 @@ namespace Supervertaler.PromptEditor
             _apiKey.Text = key.Key;
             _apiKeySource.Text = key.HasKey ? "Key in use: " + key.Source : "No API key is set.";
 
-            // Last, because listing models needs the key and the endpoint.
-            LoadModels(refresh: false);
+            _showAllModels.Checked = SharedSettings.ShowAllModels;
+
+            // Last, because the status line reports on the provider just chosen.
+            ShowModels();
         }
 
         private void Save()
@@ -327,6 +430,7 @@ namespace Supervertaler.PromptEditor
             SharedSettings.UseTerminologyContext = _useTerminology.Checked;
             SharedSettings.UseDocumentContext = _useDocumentContext.Checked;
             SharedSettings.BridgeMode = _bridgeMode.Checked;
+            SharedSettings.ShowAllModels = _showAllModels.Checked;
 
             // Recorded only as an override. Saving the key it was already showing
             // would pin a copy and stop the Trados file being the one place to
