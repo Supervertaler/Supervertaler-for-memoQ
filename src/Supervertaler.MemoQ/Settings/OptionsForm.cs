@@ -29,7 +29,10 @@ namespace Supervertaler.MemoQ.Settings
     internal sealed class OptionsForm : Form
     {
         private readonly ComboBox _provider = new ComboBox();
-        private readonly TextBox _model = new TextBox();
+        private readonly ComboBox _model = new ComboBox();
+        private readonly Button _fetchModels = new Button();
+        private readonly CheckBox _showAllModels = new CheckBox();
+        private Label _modelNote;
         private readonly TextBox _endpoint = new TextBox();
         private readonly TextBox _apiKey = new TextBox();
         private readonly ComboBox _promptPick = new ComboBox();
@@ -105,13 +108,62 @@ namespace Supervertaler.MemoQ.Settings
             _provider.Left = fieldX; _provider.Top = y; _provider.Width = fieldW;
             _provider.DropDownStyle = ComboBoxStyle.DropDownList;
             _provider.Items.AddRange(LlmProviders.All);
+
+            // A different provider is a different list. Guarded because assigning
+            // SelectedItem while loading raises this too, and at that point the
+            // stored model has not been read yet.
+            _provider.SelectedIndexChanged += (s, e) => { if (!_loading) ShowModels(); };
             Controls.Add(_provider);
             y += rowH;
 
             Caption("Model", y);
             _model.Left = fieldX; _model.Top = y; _model.Width = fieldW;
+
+            // Editable, and it was a plain text box until now - which meant this
+            // dialog, the one the setup guide sends people to first, asked them to
+            // know a model id by heart. It offers the short list instead, and
+            // still takes anything typed, because a gateway or a local model
+            // appears in no provider's catalogue.
+            _model.DropDownStyle = ComboBoxStyle.DropDown;
+            _model.AutoCompleteMode = AutoCompleteMode.SuggestAppend;
+            _model.AutoCompleteSource = AutoCompleteSource.ListItems;
+            _model.SelectedIndexChanged += (s, e) =>
+            {
+                if (_model.SelectedItem is ModelCatalog.Entry entry) _modelId = entry.Id;
+            };
             Controls.Add(_model);
             y += rowH;
+
+            _fetchModels.Text = "Models\u2026";
+            _fetchModels.Left = fieldX; _fetchModels.Top = y; _fetchModels.Width = 96; _fetchModels.Height = 25;
+            _fetchModels.Click += OnFetchModelsClicked;
+            Controls.Add(_fetchModels);
+
+            _showAllModels.Text = "Show all models";
+            _showAllModels.Left = fieldX + 106; _showAllModels.Top = y + 4; _showAllModels.AutoSize = true;
+            _showAllModels.CheckedChanged += (s, e) => { if (!_loading) ShowModels(); };
+            Controls.Add(_showAllModels);
+
+            var modelTips = new ToolTip();
+            modelTips.SetToolTip(_fetchModels,
+                "Ask the provider for its current model list, using the API key below. "
+                + "What it returns is remembered and shown with Show all models ticked.");
+            modelTips.SetToolTip(_showAllModels,
+                "Off: the short list \u2013 the few models worth recommending, with a verdict "
+                + "each. On: everything the provider's own list returned as well.");
+
+            y += 29;
+
+            // One line, fixed, ellipsised. This label is rewritten at runtime with
+            // whatever a provider says went wrong, and a two-line failure message
+            // would reflow a dialog that has already been laid out.
+            _modelNote = new Label
+            {
+                Left = fieldX, Top = y, Width = fieldW, Height = 17,
+                AutoSize = false, AutoEllipsis = true, ForeColor = SystemColors.GrayText
+            };
+            Controls.Add(_modelNote);
+            y += 25;
 
             Caption("API key", y);
             _apiKey.Left = fieldX; _apiKey.Top = y; _apiKey.Width = fieldW;
@@ -353,6 +405,13 @@ namespace Supervertaler.MemoQ.Settings
 
         private void LoadFrom(SupervertalerSettings settings)
         {
+            _loading = true;
+            try { LoadFromCore(settings); }
+            finally { _loading = false; }
+        }
+
+        private void LoadFromCore(SupervertalerSettings settings)
+        {
             var g = settings.GeneralSettings ?? new SupervertalerGeneralSettings();
             var s = settings.SecureSettings ?? new SupervertalerSecureSettings();
 
@@ -363,8 +422,11 @@ namespace Supervertaler.MemoQ.Settings
             _provider.SelectedItem = Array.IndexOf(LlmProviders.All, provider) >= 0
                 ? provider
                 : LlmProviders.Anthropic;
-            _model.Text = SharedSettings.ModelOr(g.Model);
+            _modelId = SharedSettings.ModelOr(g.Model);
+            _model.Text = _modelId;
             _endpoint.Text = SharedSettings.EndpointOr(g.Endpoint);
+            _showAllModels.Checked = SharedSettings.ShowAllModels;
+            ShowModels();
             // What is actually in force, which may be the key this user keeps
             // in Supervertaler for Trados rather than anything memoQ stored.
             _resourceApiKey = s.ApiKey;
@@ -406,7 +468,7 @@ namespace Supervertaler.MemoQ.Settings
                 new SupervertalerGeneralSettings
                 {
                     Provider = (_provider.SelectedItem as string) ?? LlmProviders.Anthropic,
-                    Model = _model.Text.Trim(),
+                    Model = ChosenModelId(),
                     Endpoint = _endpoint.Text.Trim(),
                     PromptPath = SelectedPromptPath(),
                     SystemPrompt = _systemPrompt.ReadOnly ? _inlineInstructions : _systemPrompt.Text,
@@ -701,6 +763,141 @@ namespace Supervertaler.MemoQ.Settings
             return (text ?? string.Empty).Replace("\r\n", "\n").Replace("\n", "\r\n");
         }
 
+        /// <summary>
+        /// The model id, kept apart from what the combo displays: the list shows a
+        /// name and a verdict, and it is the id that goes to the provider.
+        /// </summary>
+        private string _modelId = "";
+
+        /// <summary>Set while <see cref="LoadFrom"/> populates the controls.</summary>
+        private bool _loading;
+
+        private string CurrentProvider => (_provider.SelectedItem as string) ?? LlmProviders.Anthropic;
+
+        /// <summary>
+        /// Fills the dropdown from what is already known - the short list, plus the
+        /// last fetch when the tick box asks for it. Never goes to the network, so
+        /// opening this dialog costs nothing and sends no key anywhere.
+        /// </summary>
+        private void ShowModels()
+        {
+            var provider = CurrentProvider;
+            var entries = ModelCatalog.Entries(provider, _showAllModels.Checked);
+
+            var wanted = _modelId;
+
+            _model.BeginUpdate();
+            _model.Items.Clear();
+            foreach (var entry in entries) _model.Items.Add(entry);
+            _model.EndUpdate();
+
+            // Re-select what is configured, or leave it in the box when neither
+            // list carries it - which is normal for a gateway.
+            var match = entries.FirstOrDefault(e =>
+                string.Equals(e.Id, wanted, StringComparison.OrdinalIgnoreCase));
+
+            if (match != null) _model.SelectedItem = match;
+            else _model.Text = wanted;
+
+            _modelId = wanted;
+
+            _fetchModels.Enabled = ModelCatalog.CanFetch(provider);
+            _modelNote.ForeColor = SystemColors.GrayText;
+
+            var extra = ModelCatalog.ExtraCount(provider);
+            var on = ModelCatalog.FetchedOn(provider);
+
+            if (on == null)
+                _modelNote.Text = "The models worth recommending. Models\u2026 asks the provider for the rest.";
+            else if (extra == 0)
+                _modelNote.Text = "Provider list fetched " + on + "; nothing in it beyond the short list.";
+            else
+                _modelNote.Text = "Provider list fetched " + on + "; " + extra
+                    + (extra == 1 ? " model" : " models") + " beyond the short list.";
+        }
+
+        /// <summary>
+        /// The id to send to the provider. A picked row is matched back to its id;
+        /// anything else is taken literally, which is how a gateway is entered.
+        /// </summary>
+        private string ChosenModelId()
+        {
+            var typed = (_model.Text ?? string.Empty).Trim();
+
+            foreach (var item in _model.Items)
+            {
+                if (item is ModelCatalog.Entry entry
+                    && string.Equals(entry.ToString(), typed, StringComparison.Ordinal))
+                    return entry.Id;
+            }
+
+            return typed;
+        }
+
+        /// <summary>The key this dialog would translate with, typed or inherited.</summary>
+        private string ApiKeyInUse()
+        {
+            var typed = _apiKey.Text.Trim();
+            return typed.Length > 0 ? typed : ApiKeys.Resolve(CurrentProvider, _resourceApiKey).Key;
+        }
+
+        /// <summary>
+        /// Asks the provider for its own list. Explicit rather than automatic: the
+        /// short list is what the dialog shows, so fetching is the act of saying
+        /// "show me the rest" - and it ticks the box, because that is what the
+        /// click meant.
+        /// </summary>
+        private async void OnFetchModelsClicked(object sender, EventArgs e)
+        {
+            var provider = CurrentProvider;
+
+            _fetchModels.Enabled = false;
+            _modelNote.ForeColor = SystemColors.GrayText;
+            _modelNote.Text = "Asking " + provider + " for its model list\u2026";
+
+            try
+            {
+                var fetched = await ModelCatalog
+                    .FetchAsync(provider, ApiKeyInUse(), _endpoint.Text.Trim(), CancellationToken.None)
+                    .ConfigureAwait(true);
+
+                if (IsDisposed) return;
+
+                if (fetched == null)
+                {
+                    _modelNote.Text = "No API key is set, so there is nobody to ask.";
+                    return;
+                }
+
+                var extra = ModelCatalog.ExtraCount(provider);
+
+                // A click on this button means "show me". Ticking the box
+                // repopulates by itself, so only populate here when it was on.
+                if (extra > 0 && !_showAllModels.Checked) _showAllModels.Checked = true;
+                else ShowModels();
+
+                _modelNote.ForeColor = SystemColors.GrayText;
+                _modelNote.Text = provider + ": " + fetched.Count + " models"
+                    + (extra > 0
+                        ? ", " + extra + " beyond the short list."
+                        : ", none beyond the short list.");
+            }
+            catch (Exception ex)
+            {
+                if (IsDisposed) return;
+
+                // The dropdown still holds the short list, so this is a note
+                // rather than a dialog: nothing anyone was doing is lost.
+                PluginLog.Write("Could not list models for " + provider, ex);
+                _modelNote.ForeColor = Color.Firebrick;
+                _modelNote.Text = "Could not list models: " + ex.Message;
+            }
+            finally
+            {
+                if (!IsDisposed) _fetchModels.Enabled = ModelCatalog.CanFetch(provider);
+            }
+        }
+
         private void OnOkClicked(object sender, EventArgs e)
         {
             if (string.IsNullOrWhiteSpace(_model.Text))
@@ -716,7 +913,7 @@ namespace Supervertaler.MemoQ.Settings
             // blob is kept in step so that an older build, or a copy of this
             // resource opened somewhere else, still finds sensible values.
             SharedSettings.Provider = (_provider.SelectedItem as string) ?? LlmProviders.Anthropic;
-            SharedSettings.Model = _model.Text.Trim();
+            SharedSettings.Model = ChosenModelId();
             SharedSettings.Endpoint = _endpoint.Text.Trim();
             SharedSettings.PromptPath = SelectedPromptPath();
             MemoryBankPicker.Save(MemoryBankPicker.Chosen(_memoryBank));
@@ -725,6 +922,7 @@ namespace Supervertaler.MemoQ.Settings
             SharedSettings.UseTerminologyContext = _useTerminology.Checked;
             SharedSettings.UseDocumentContext = _useDocumentContext.Checked;
             SharedSettings.BridgeMode = _bridgeMode.Checked;
+            SharedSettings.ShowAllModels = _showAllModels.Checked;
             SharedSettings.WriteInstructions(_systemPrompt.ReadOnly ? _inlineInstructions : _systemPrompt.Text);
 
             // Recorded only when it differs from what the other sources already

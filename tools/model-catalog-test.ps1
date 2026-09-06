@@ -175,5 +175,53 @@ Check ($canFetch.Invoke($null, [object[]]@($openai))) "OpenAI can be asked for i
 Check ($canFetch.Invoke($null, [object[]]@($google))) "Google can be asked for its list"
 Check (-not $canFetch.Invoke($null, [object[]]@('no-such-provider'))) "an unknown provider cannot"
 
+# ---- 12. both dialogs actually offer the list ---------------------------
+# The catalogue being right is worth nothing if a dialog still shows a bare
+# text box, which is what memoQ's own Configure plugin dialog did until now -
+# the one the setup guide sends people to first. Constructed headlessly, so
+# this fails at build time rather than the next time someone opens it.
+Add-Type -AssemblyName System.Windows.Forms
+
+$Instance = [Reflection.BindingFlags]'NonPublic,Instance'
+$Ctor = [Reflection.BindingFlags]'Instance,Public,NonPublic'
+
+function ModelBox($form, $field) {
+    return $form.GetType().GetField($field, $Instance).GetValue($form)
+}
+
+$generalT = $plugin.GetType('Supervertaler.MemoQ.Settings.SupervertalerGeneralSettings')
+$secureT = $plugin.GetType('Supervertaler.MemoQ.Settings.SupervertalerSecureSettings')
+$settingsT = $plugin.GetType('Supervertaler.MemoQ.Settings.SupervertalerSettings')
+$settings = $settingsT.GetMethod('Create').Invoke($null,
+    @([Activator]::CreateInstance($generalT), [Activator]::CreateInstance($secureT)))
+
+$optionsT = $plugin.GetType('Supervertaler.MemoQ.Settings.OptionsForm')
+$options = [Activator]::CreateInstance($optionsT, $Ctor, $null, @($settings), $null)
+try {
+    $box = ModelBox $options '_model'
+    Check ($box -is [Windows.Forms.ComboBox]) "memoQ's own dialog offers a list, not a bare box: $($box.GetType().Name)"
+    Check ($box.DropDownStyle -eq [Windows.Forms.ComboBoxStyle]::DropDown) "and it is still typeable"
+    Check ($box.Items.Count -ge 3) "filled with the short list: $($box.Items.Count) models"
+
+    $labelled = @($box.Items | Where-Object { $_.ToString().Contains([char]0x2013) })
+    Check ($labelled.Count -eq $box.Items.Count) "every row carries its verdict"
+
+    $tick = ModelBox $options '_showAllModels'
+    Check (-not $tick.Checked) "the short list is what it opens on"
+    Check ((ModelBox $options '_fetchModels').Enabled) "and the provider can be asked for the rest"
+}
+finally { $options.Dispose() }
+
+$editorExe = 'D:\Google Drive\Dev\Sv\Supervertaler-for-memoQ\src\Supervertaler.PromptEditor\bin\Release\Supervertaler.PromptEditor.exe'
+$editor = [Reflection.Assembly]::LoadFrom($editorExe)
+$settingsFormT = $editor.GetType('Supervertaler.PromptEditor.SettingsForm')
+$settingsForm = [Activator]::CreateInstance($settingsFormT, $Ctor, $null, @(), $null)
+try {
+    $box = ModelBox $settingsForm '_model'
+    Check ($box.Items.Count -ge 3) "the editor's dialog is filled the same way: $($box.Items.Count) models"
+    Check (-not (ModelBox $settingsForm '_showAllModels').Checked) "and opens on the short list too"
+}
+finally { $settingsForm.Dispose() }
+
 Write-Host ''
 Write-Host "MODEL CATALOG TEST COMPLETE - $fails failure(s)"
