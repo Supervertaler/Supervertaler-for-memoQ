@@ -34,6 +34,7 @@ namespace Supervertaler.MemoQ.Settings
         private readonly Button _fetchModels = new Button();
         private readonly CheckBox _showAllModels = new CheckBox();
         private Label _modelNote;
+        private Label _apiKeyNote;
         private readonly TextBox _endpoint = new TextBox();
         private readonly TextBox _apiKey = new TextBox();
         private readonly ComboBox _promptPick = new ComboBox();
@@ -182,8 +183,20 @@ namespace Supervertaler.MemoQ.Settings
             Caption("API key", y);
             _apiKey.Left = fieldX; _apiKey.Top = y; _apiKey.Width = fieldW;
             _apiKey.UseSystemPasswordChar = true;
+            _apiKey.TextChanged += (s, e) => ShowKeyShape();
             Controls.Add(_apiKey);
-            y += rowH;
+            y += rowH - 6;
+
+            // Said as it is typed rather than after the request fails. A provider
+            // answering a key from another service says the key is incorrect,
+            // which is true and the least useful way to put it.
+            _apiKeyNote = new Label
+            {
+                Left = fieldX, Top = y, Width = fieldW, Height = 17,
+                AutoSize = false, AutoEllipsis = true, ForeColor = Color.Firebrick
+            };
+            Controls.Add(_apiKeyNote);
+            y += 24;
 
             Caption("Endpoint (optional)", y);
             _endpoint.Left = fieldX; _endpoint.Top = y; _endpoint.Width = fieldW;
@@ -816,13 +829,17 @@ namespace Supervertaler.MemoQ.Settings
         private void ShowKeyFor(string provider)
         {
             string typed;
-            if (_typedKeys.TryGetValue(provider, out typed))
-            {
-                _apiKey.Text = typed;
-                return;
-            }
+            if (_typedKeys.TryGetValue(provider, out typed)) _apiKey.Text = typed;
+            else _apiKey.Text = ApiKeys.Resolve(provider, ResourceKeyFor(provider)).Key;
 
-            _apiKey.Text = ApiKeys.Resolve(provider, ResourceKeyFor(provider)).Key;
+            ShowKeyShape();
+        }
+
+        /// <summary>Whether the key in the box looks like one for the chosen provider.</summary>
+        private void ShowKeyShape()
+        {
+            if (_apiKeyNote == null) return;
+            _apiKeyNote.Text = ApiKeys.CheckShape(CurrentProvider, _apiKey.Text.Trim()) ?? string.Empty;
         }
 
         /// <summary>
@@ -840,6 +857,31 @@ namespace Supervertaler.MemoQ.Settings
 
             if (string.Equals(shown, inherited, StringComparison.Ordinal)) _typedKeys.Remove(_lastProvider);
             else _typedKeys[_lastProvider] = shown;
+        }
+
+        /// <summary>
+        /// Writes every key this dialog touched into the shared file, where Trados,
+        /// memoQ and Sidekick all read it. One file, one key per provider: the
+        /// point of the exercise is that a key pasted anywhere works everywhere.
+        ///
+        /// <para>memoQ’s own <c>apikey</c> is cleared once the file has the key,
+        /// so there is no second copy left to go stale - but only once, and only
+        /// when the write succeeded.</para>
+        /// </summary>
+        private void SaveKeys()
+        {
+            RememberTypedKey();
+
+            var wrote = true;
+            foreach (var entry in _typedKeys)
+                if (!ApiKeys.Remember(entry.Key, entry.Value)) wrote = false;
+
+            // The box as it stands, whether typed or inherited. Saving an
+            // inherited key is not a copy any more: it is the same file it came
+            // from, and on a fresh install it is how memoQ’s stored key gets in.
+            if (!ApiKeys.Remember(CurrentProvider, _apiKey.Text.Trim())) wrote = false;
+
+            if (wrote) SharedSettings.ApiKey = string.Empty;
         }
 
         /// <summary>memoQ’s stored key, for the provider it was stored against only.</summary>
@@ -1011,12 +1053,7 @@ namespace Supervertaler.MemoQ.Settings
             SharedSettings.ShowAllModels = _showAllModels.Checked;
             SharedSettings.WriteInstructions(_systemPrompt.ReadOnly ? _inlineInstructions : _systemPrompt.Text);
 
-            // Recorded only when it differs from what the other sources already
-            // supply. Writing it unconditionally would pin a copy of the Trados
-            // key here and quietly stop that file being the one place to rotate.
-            var typed = _apiKey.Text.Trim();
-            var without = ApiKeys.Fallback(CurrentProvider, ResourceKeyFor(CurrentProvider)).Key;
-            SharedSettings.ApiKey = string.Equals(typed, without, StringComparison.Ordinal) ? string.Empty : typed;
+            SaveKeys();
 
             Result = Collect();
         }

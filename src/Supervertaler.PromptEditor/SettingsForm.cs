@@ -225,6 +225,7 @@ namespace Supervertaler.PromptEditor
             Caption("API key", y);
             _apiKey.Left = fieldX; _apiKey.Top = y; _apiKey.Width = fieldW;
             _apiKey.UseSystemPasswordChar = true;
+            _apiKey.TextChanged += (s, e) => ShowKeyShape();
             Controls.Add(_apiKey);
             y += 26;
             _apiKeySource = Hint(string.Empty, fieldX, fieldW);
@@ -435,13 +436,35 @@ namespace Supervertaler.PromptEditor
                 _apiKey.Text = typed;
                 _apiKeySource.Text = "Key typed here, in place of the one "
                     + (inherited.HasKey ? inherited.Source : "that is not set");
+                _apiKeySource.ForeColor = SystemColors.GrayText;
+                ShowKeyShape();
                 return;
             }
 
             _apiKey.Text = inherited.Key;
+            _apiKeySource.ForeColor = SystemColors.GrayText;
             _apiKeySource.Text = inherited.HasKey
                 ? "Key in use: " + inherited.Source
                 : "No API key is set for " + provider + ".";
+
+            ShowKeyShape();
+        }
+
+        /// <summary>
+        /// Whether the key in the box looks like one for the chosen provider, said
+        /// as it is typed rather than after the request fails. A provider answering
+        /// a key from another service says the key is incorrect, which is true and
+        /// the least useful way to put it.
+        /// </summary>
+        private void ShowKeyShape()
+        {
+            if (_apiKeySource == null) return;
+
+            var wrong = ApiKeys.CheckShape(Provider, _apiKey.Text.Trim());
+            if (wrong == null) return;
+
+            _apiKeySource.Text = wrong;
+            _apiKeySource.ForeColor = Color.Firebrick;
         }
 
         /// <summary>
@@ -509,12 +532,17 @@ namespace Supervertaler.PromptEditor
             SharedSettings.BridgeMode = _bridgeMode.Checked;
             SharedSettings.ShowAllModels = _showAllModels.Checked;
 
-            // Recorded only as an override. Saving the key it was already showing
-            // would pin a copy and stop the Trados file being the one place to
-            // rotate it.
-            var typed = _apiKey.Text.Trim();
-            var without = ApiKeys.Fallback(SharedSettings.Provider, null).Key;
-            SharedSettings.ApiKey = string.Equals(typed, without, StringComparison.Ordinal) ? string.Empty : typed;
+            // Into the shared key file, where Trados, memoQ and Sidekick all read
+            // it. memoQ’s own apikey is cleared once the file has taken over, so
+            // there is no second copy left to go stale.
+            RememberTypedKey();
+
+            var wrote = true;
+            foreach (var entry in _typedKeys)
+                if (!ApiKeys.Remember(entry.Key, entry.Value)) wrote = false;
+
+            if (!ApiKeys.Remember(Provider, _apiKey.Text.Trim())) wrote = false;
+            if (wrote) SharedSettings.ApiKey = string.Empty;
         }
     }
 }

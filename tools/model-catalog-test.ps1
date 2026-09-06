@@ -31,7 +31,7 @@ $catalog = $plugin.GetType('Supervertaler.MemoQ.Core.ModelCatalog')
 $providers = $plugin.GetType('Supervertaler.MemoQ.Settings.LlmProviders')
 $llmModels = $plugin.GetType('Supervertaler.Core.LlmModels')
 
-$coreKey = $catalog.GetMethod('CoreKey', $Static)
+$coreKey = $providers.GetMethod('CoreKey', $Static)
 $canFetch = $catalog.GetMethod('CanFetch', $Static)
 $curated = $catalog.GetMethod('Curated', $Static)
 $entries = $catalog.GetMethod('Entries', $Static)

@@ -52,29 +52,17 @@ namespace Supervertaler.MemoQ.Core
             }
         }
 
-        /// <summary>
-        /// memoQ names its three providers for the user; core names all nine for
-        /// the wire. One translation, in one place.
-        /// </summary>
-        internal static string CoreKey(string provider)
-        {
-            if (string.Equals(provider, LlmProviders.Anthropic, StringComparison.OrdinalIgnoreCase)) return LlmModels.ProviderClaude;
-            if (string.Equals(provider, LlmProviders.OpenAI, StringComparison.OrdinalIgnoreCase)) return LlmModels.ProviderOpenAi;
-            if (string.Equals(provider, LlmProviders.Google, StringComparison.OrdinalIgnoreCase)) return LlmModels.ProviderGemini;
-            return null;
-        }
-
         /// <summary>True when this provider publishes a list we know how to read.</summary>
         public static bool CanFetch(string provider)
         {
-            var key = CoreKey(provider);
+            var key = LlmProviders.CoreKey(provider);
             return key != null && LlmModelCatalog.CanFetch(key);
         }
 
         /// <summary>The short list: what to show when "Show all models" is off.</summary>
         public static List<Entry> Curated(string provider)
         {
-            var key = CoreKey(provider);
+            var key = LlmProviders.CoreKey(provider);
             if (key == null) return new List<Entry>();
 
             return (LlmModels.GetModelsForProvider(key) ?? new LlmModelInfo[0])
@@ -139,7 +127,7 @@ namespace Supervertaler.MemoQ.Core
         public static async Task<List<Entry>> FetchAsync(
             string provider, string apiKey, string endpoint, CancellationToken ct)
         {
-            var key = CoreKey(provider);
+            var key = LlmProviders.CoreKey(provider);
             if (key == null || !LlmModelCatalog.CanFetch(key)) return null;
             if (string.IsNullOrWhiteSpace(apiKey)) return null;
 
