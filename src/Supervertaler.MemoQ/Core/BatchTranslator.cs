@@ -258,12 +258,20 @@ namespace Supervertaler.MemoQ.Core
             }
             else
             {
+                // The first request of a run goes out alone (#5). Everything
+                // after it reads the cache that request wrote, rather than three
+                // more requests racing it and each paying write rate. One extra
+                // round trip at the start of a job, once.
+                var warming = await context.EnterWarmupAsync(cancellationToken).ConfigureAwait(false);
+
                 using (var client = new LlmClient(
                            SessionRunner.MapProviderForCore(general.Provider),
                            general.Model,
                            apiKey,
                            string.IsNullOrWhiteSpace(general.Endpoint) ? null : general.Endpoint.Trim()))
                 {
+                    try
+                    {
                     // Pre-translate sends one batch after another with the same
                     // instructions and the same bank, so every batch after the
                     // first is a cache read at a tenth of the input rate. Asking
@@ -283,6 +291,14 @@ namespace Supervertaler.MemoQ.Core
                     // check - and this one is the difference between about seven
                     // dollars and about seventy cents on a long job.
                     usage = client.LastUsage;
+                    }
+                    finally
+                    {
+                        // In a finally, and outside the success path: a warming
+                        // request that throws must still open the gate, or every
+                        // other batch waits on one that will never arrive.
+                        if (warming) context.LeaveWarmup();
+                    }
                 }
 
                 TranslationCache.Set(cacheKey, raw);

@@ -2,6 +2,8 @@ using System;
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
+using System.Threading;
+using System.Threading.Tasks;
 using MemoQ.MTInterfaces;
 using Supervertaler.MemoQ.Settings;
 
@@ -449,6 +451,76 @@ namespace Supervertaler.MemoQ.Core
         /// prompt carries nothing else that varies, that turns a per-row cost
         /// into a per-job one.</para>
         /// </summary>
+        /// <summary>
+        /// Lets one request finish before the rest of the first wave go out, so
+        /// they read the prompt cache instead of each writing it (#5).
+        ///
+        /// <para>A cache write is not readable until the request that wrote it
+        /// completes, and memoQ calls the session on <c>Parallel.ForEach</c>
+        /// workers - so on a measured 38-batch run the first four requests all
+        /// raced, all missed, and all paid write rate. Three of those four writes
+        /// were avoidable, worth about 79 cents on that document and more as the
+        /// bank grows.</para>
+        ///
+        /// <para>One-shot and per engine. It lives here rather than in a static
+        /// because the block being cached is this engine's system prompt: a new
+        /// engine means a new prompt, a new cache entry, and a gate that has to
+        /// close again. If it persisted, every batch would serialise and the run
+        /// would take four times as long for nothing.</para>
+        /// </summary>
+        private readonly SemaphoreSlim _warmGate = new SemaphoreSlim(1, 1);
+        private volatile bool _warmed;
+
+        /// <summary>
+        /// True when the caller must open the gate afterwards - meaning it is the
+        /// one warming the cache. False when the cache is already warm, or when
+        /// waiting for the warmer failed or was cancelled: in both of those the
+        /// right answer is to go ahead unsynchronised rather than to stall.
+        /// </summary>
+        public async Task<bool> EnterWarmupAsync(CancellationToken cancellationToken)
+        {
+            if (_warmed) return false;
+
+            try
+            {
+                await _warmGate.WaitAsync(cancellationToken).ConfigureAwait(false);
+            }
+            catch (Exception)
+            {
+                // A cancelled or faulted wait must not stop the translation. The
+                // worst case is the old behaviour - a second cache write.
+                return false;
+            }
+
+            // Re-checked inside the gate: everyone queued behind the warmer arrives
+            // here after it has finished, and only the first of them should have
+            // been the warmer.
+            if (_warmed)
+            {
+                _warmGate.Release();
+                return false;
+            }
+
+            return true;
+        }
+
+        /// <summary>
+        /// Opens the gate after the warming request, whatever became of it.
+        ///
+        /// <para>Called from a finally, never at the end of the happy path: if the
+        /// warming request throws - a bad key, a refused model, a dropped
+        /// connection - every other batch in the run is queued behind a request
+        /// that will never complete, and the whole Pre-translate hangs. The gate
+        /// opening is not conditional on the call having worked.</para>
+        /// </summary>
+        public void LeaveWarmup()
+        {
+            _warmed = true;
+            try { _warmGate.Release(); }
+            catch (ObjectDisposedException) { }
+            catch (SemaphoreFullException) { }
+        }
+
         public string KbContextBlock()
         {
             var bank = (SharedSettings.MemoryBank ?? string.Empty).Trim();
