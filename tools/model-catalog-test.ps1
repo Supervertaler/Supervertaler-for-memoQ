@@ -223,5 +223,38 @@ try {
 }
 finally { $settingsForm.Dispose() }
 
+# ---- 13. switching provider switches the key and the model --------------
+# Both dialogs used to fill the API key box once, at load, for whichever
+# provider they opened on - so choosing OpenAI and pressing Fetch list sent an
+# Anthropic key to OpenAI and got back a 401 that blamed the key. The model
+# came over too: Google with claude-opus-5 selected is a pair that can only
+# fail at the provider.
+#
+# Key resolution is suppressed under SUPERVERTALER_HARNESS, so every provider
+# inherits an empty key here. That is enough: a box still holding the previous
+# provider's value is exactly the fault, and a typed value coming back proves
+# the per-provider memory.
+$settingsForm = [Activator]::CreateInstance($settingsFormT, $Ctor, $null, @(), $null)
+try {
+    $providerBox = ModelBox $settingsForm '_provider'
+    $keyBox = ModelBox $settingsForm '_apiKey'
+    $modelBox = ModelBox $settingsForm '_model'
+
+    $providerBox.SelectedItem = $anthropic
+    $keyBox.Text = 'typed-for-anthropic'
+
+    $providerBox.SelectedItem = $openai
+    Check ($keyBox.Text -ne 'typed-for-anthropic') `
+        "switching provider does not leave the old provider's key in the box: '$($keyBox.Text)'"
+
+    $firstOpenAi = (Ids ($curated.Invoke($null, [object[]]@($openai))))[0]
+    $chosen = $settingsFormT.GetMethod('ChosenModelId', $Instance).Invoke($settingsForm, @())
+    Check ($chosen -eq $firstOpenAi) "and moves the model to the new provider's first recommendation: $chosen"
+
+    $providerBox.SelectedItem = $anthropic
+    Check ($keyBox.Text -eq 'typed-for-anthropic') "a key typed for a provider comes back on returning to it"
+}
+finally { $settingsForm.Dispose() }
+
 Write-Host ''
 Write-Host "MODEL CATALOG TEST COMPLETE - $fails failure(s)"

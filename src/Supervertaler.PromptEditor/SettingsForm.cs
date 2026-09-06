@@ -96,7 +96,23 @@ namespace Supervertaler.PromptEditor
             // A different provider is a different catalogue. Guarded because
             // assigning SelectedItem during load raises this too, and at that
             // point the key has not been read yet.
-            _provider.SelectedIndexChanged += (s, e) => { if (!_loading) ShowModels(); };
+            // A different provider is a different list, and the model that was
+            // chosen for the old one is meaningless under the new one - leaving
+            // claude-opus-5 selected under Google saves a pair that can only fail
+            // at the provider, with an error that does not say why. Clearing it
+            // lets the new provider's first recommendation take the field.
+            //
+            // Only on a switch the user made. During loading the stored model has
+            // to survive, because it may be a gateway id in neither list.
+            _provider.SelectedIndexChanged += (s, e) =>
+            {
+                if (_loading) return;
+                RememberTypedKey();
+                _lastProvider = Provider;
+                _modelId = "";
+                ShowKeyFor(Provider);
+                ShowModels();
+            };
             Controls.Add(_provider);
             y += rowH;
 
@@ -119,7 +135,7 @@ namespace Supervertaler.PromptEditor
             // The short list is the default and the whole inventory is one tick
             // away, because a translator in a hurry needs a list they can read,
             // and a model released after this build has to be reachable anyway.
-            _fetchModels.Text = "Models\u2026";
+            _fetchModels.Text = "Fetch list";
             _fetchModels.Left = fieldX; _fetchModels.Top = y; _fetchModels.Width = 84; _fetchModels.Height = 25;
             _fetchModels.Click += FetchModels;
             Controls.Add(_fetchModels);
@@ -271,7 +287,7 @@ namespace Supervertaler.PromptEditor
             var on = ModelCatalog.FetchedOn(provider);
 
             if (on == null)
-                _modelStatus.Text = "The models worth recommending. Models\u2026 asks the provider for the rest.";
+                _modelStatus.Text = "The models worth recommending. Fetch list asks the provider for the rest.";
             else if (extra == 0)
                 _modelStatus.Text = "Provider list fetched " + on + "; nothing in it beyond the short list.";
             else
@@ -346,15 +362,25 @@ namespace Supervertaler.PromptEditor
             foreach (var e in entries) _model.Items.Add(e);
             _model.EndUpdate();
 
-            // Re-select what was configured, or leave it in the box when the
-            // provider does not list it — which is normal for a gateway.
+            // Re-select what is configured, or leave it in the box when neither
+            // list carries it - which is normal for a gateway. With nothing
+            // configured at all, the first recommendation is the answer: this
+            // list is ordered, and its first entry is the one to reach for.
             var match = entries.FirstOrDefault(e =>
                 string.Equals(e.Id, typed, StringComparison.OrdinalIgnoreCase));
 
-            if (match != null) _model.SelectedItem = match;
-            else _model.Text = typed;
+            if (match == null && string.IsNullOrWhiteSpace(typed)) match = entries.FirstOrDefault();
 
-            _modelId = typed;
+            if (match != null)
+            {
+                _model.SelectedItem = match;
+                _modelId = match.Id;
+            }
+            else
+            {
+                _model.Text = typed;
+                _modelId = typed;
+            }
         }
 
         /// <summary>
@@ -379,7 +405,59 @@ namespace Supervertaler.PromptEditor
         private string ApiKeyInUse()
         {
             var typed = _apiKey.Text.Trim();
-            return typed.Length > 0 ? typed : ApiKeys.Resolve((_provider.SelectedItem as string), null).Key;
+            return typed.Length > 0 ? typed : ApiKeys.Resolve(Provider, null).Key;
+        }
+
+        /// <summary>The provider the key box is currently showing a key for.</summary>
+        private string _lastProvider = "";
+
+        /// <summary>
+        /// Keys typed here, by provider, for as long as this dialog is open. Only
+        /// the current provider’s key is saved - this exists so that looking at
+        /// another provider and coming back does not discard what was half-typed.
+        /// </summary>
+        private readonly Dictionary<string, string> _typedKeys =
+            new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+
+        /// <summary>
+        /// The API key box follows the provider. It used to be filled once, at
+        /// load, for whichever provider the dialog opened on - so switching to
+        /// OpenAI and pressing Fetch list sent an Anthropic key to OpenAI and got
+        /// back a 401 blaming the key rather than the mix-up.
+        /// </summary>
+        private void ShowKeyFor(string provider)
+        {
+            var inherited = ApiKeys.Resolve(provider, null);
+
+            string typed;
+            if (_typedKeys.TryGetValue(provider, out typed))
+            {
+                _apiKey.Text = typed;
+                _apiKeySource.Text = "Key typed here, in place of the one "
+                    + (inherited.HasKey ? inherited.Source : "that is not set");
+                return;
+            }
+
+            _apiKey.Text = inherited.Key;
+            _apiKeySource.Text = inherited.HasKey
+                ? "Key in use: " + inherited.Source
+                : "No API key is set for " + provider + ".";
+        }
+
+        /// <summary>
+        /// Keeps what was typed for the provider being left. Compared against what
+        /// that provider would have inherited, so a box merely showing an
+        /// inherited key is not recorded as an override.
+        /// </summary>
+        private void RememberTypedKey()
+        {
+            if (string.IsNullOrEmpty(_lastProvider)) return;
+
+            var shown = _apiKey.Text.Trim();
+            var inherited = ApiKeys.Resolve(_lastProvider, null).Key;
+
+            if (string.Equals(shown, inherited, StringComparison.Ordinal)) _typedKeys.Remove(_lastProvider);
+            else _typedKeys[_lastProvider] = shown;
         }
 
         /// <summary>
@@ -410,9 +488,8 @@ namespace Supervertaler.PromptEditor
 
             // Null for the resource: this program cannot read memoQ's settings, and
             // does not need to, because memoQ copies that key into the shared file.
-            var key = ApiKeys.Resolve(provider, null);
-            _apiKey.Text = key.Key;
-            _apiKeySource.Text = key.HasKey ? "Key in use: " + key.Source : "No API key is set.";
+            _lastProvider = provider;
+            ShowKeyFor(provider);
 
             _showAllModels.Checked = SharedSettings.ShowAllModels;
 

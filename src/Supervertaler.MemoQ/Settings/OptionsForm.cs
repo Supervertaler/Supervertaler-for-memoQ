@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using System.Diagnostics;
 using System.Drawing;
 using System.IO;
@@ -109,10 +110,23 @@ namespace Supervertaler.MemoQ.Settings
             _provider.DropDownStyle = ComboBoxStyle.DropDownList;
             _provider.Items.AddRange(LlmProviders.All);
 
-            // A different provider is a different list. Guarded because assigning
-            // SelectedItem while loading raises this too, and at that point the
-            // stored model has not been read yet.
-            _provider.SelectedIndexChanged += (s, e) => { if (!_loading) ShowModels(); };
+            // A different provider is a different list, and the model that was
+            // chosen for the old one is meaningless under the new one - leaving
+            // claude-opus-5 selected under Google saves a pair that can only fail
+            // at the provider, with an error that does not say why. Clearing it
+            // lets the new provider's first recommendation take the field.
+            //
+            // Only on a switch the user made. During loading the stored model has
+            // to survive, because it may be a gateway id in neither list.
+            _provider.SelectedIndexChanged += (s, e) =>
+            {
+                if (_loading) return;
+                RememberTypedKey();
+                _lastProvider = CurrentProvider;
+                _modelId = "";
+                ShowKeyFor(CurrentProvider);
+                ShowModels();
+            };
             Controls.Add(_provider);
             y += rowH;
 
@@ -134,7 +148,7 @@ namespace Supervertaler.MemoQ.Settings
             Controls.Add(_model);
             y += rowH;
 
-            _fetchModels.Text = "Models\u2026";
+            _fetchModels.Text = "Fetch list";
             _fetchModels.Left = fieldX; _fetchModels.Top = y; _fetchModels.Width = 96; _fetchModels.Height = 25;
             _fetchModels.Click += OnFetchModelsClicked;
             Controls.Add(_fetchModels);
@@ -430,6 +444,8 @@ namespace Supervertaler.MemoQ.Settings
             // What is actually in force, which may be the key this user keeps
             // in Supervertaler for Trados rather than anything memoQ stored.
             _resourceApiKey = s.ApiKey;
+            _loadedProvider = provider;
+            _lastProvider = provider;
             _apiKey.Text = ApiKeys.Resolve(provider, s.ApiKey).Key;
             // Normalise to CRLF for display. A multiline TextBox does not treat a
             // bare LF as a line break, and the stored prompt reliably has them:
@@ -774,6 +790,66 @@ namespace Supervertaler.MemoQ.Settings
 
         private string CurrentProvider => (_provider.SelectedItem as string) ?? LlmProviders.Anthropic;
 
+        /// <summary>The provider this dialog opened on. memoQ’s own stored key belongs
+        /// to that one and to no other, so it is offered nowhere else.</summary>
+        private string _loadedProvider = "";
+
+        /// <summary>The provider the key box is currently showing a key for.</summary>
+        private string _lastProvider = "";
+
+        /// <summary>
+        /// Keys typed here, by provider, for as long as this dialog is open. Only
+        /// the current provider’s key is saved on OK - this exists so that looking
+        /// at another provider and coming back does not silently discard what was
+        /// half-typed.
+        /// </summary>
+        private readonly Dictionary<string, string> _typedKeys =
+            new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+
+        /// <summary>
+        /// The API key box follows the provider. It used to be filled once, at
+        /// load, for whichever provider the dialog opened on - so switching to
+        /// OpenAI and pressing Fetch list sent an Anthropic key to OpenAI and got
+        /// back a 401 blaming the key rather than the mix-up. Test connection had
+        /// the same fault, more expensively, because it fails after the request.
+        /// </summary>
+        private void ShowKeyFor(string provider)
+        {
+            string typed;
+            if (_typedKeys.TryGetValue(provider, out typed))
+            {
+                _apiKey.Text = typed;
+                return;
+            }
+
+            _apiKey.Text = ApiKeys.Resolve(provider, ResourceKeyFor(provider)).Key;
+        }
+
+        /// <summary>
+        /// Keeps what was typed for the provider being left. Compared against what
+        /// that provider would have inherited, so a box merely showing an
+        /// inherited key is not recorded as an override - which would pin a copy
+        /// and stop the shared file being the one place to rotate it.
+        /// </summary>
+        private void RememberTypedKey()
+        {
+            if (string.IsNullOrEmpty(_lastProvider)) return;
+
+            var shown = _apiKey.Text.Trim();
+            var inherited = ApiKeys.Resolve(_lastProvider, ResourceKeyFor(_lastProvider)).Key;
+
+            if (string.Equals(shown, inherited, StringComparison.Ordinal)) _typedKeys.Remove(_lastProvider);
+            else _typedKeys[_lastProvider] = shown;
+        }
+
+        /// <summary>memoQ’s stored key, for the provider it was stored against only.</summary>
+        private string ResourceKeyFor(string provider)
+        {
+            return string.Equals(provider, _loadedProvider, StringComparison.OrdinalIgnoreCase)
+                ? _resourceApiKey
+                : null;
+        }
+
         /// <summary>
         /// Fills the dropdown from what is already known - the short list, plus the
         /// last fetch when the tick box asks for it. Never goes to the network, so
@@ -792,14 +868,24 @@ namespace Supervertaler.MemoQ.Settings
             _model.EndUpdate();
 
             // Re-select what is configured, or leave it in the box when neither
-            // list carries it - which is normal for a gateway.
+            // list carries it - which is normal for a gateway. With nothing
+            // configured at all, the first recommendation is the answer: this
+            // list is ordered, and its first entry is the one to reach for.
             var match = entries.FirstOrDefault(e =>
                 string.Equals(e.Id, wanted, StringComparison.OrdinalIgnoreCase));
 
-            if (match != null) _model.SelectedItem = match;
-            else _model.Text = wanted;
+            if (match == null && string.IsNullOrWhiteSpace(wanted)) match = entries.FirstOrDefault();
 
-            _modelId = wanted;
+            if (match != null)
+            {
+                _model.SelectedItem = match;
+                _modelId = match.Id;
+            }
+            else
+            {
+                _model.Text = wanted;
+                _modelId = wanted;
+            }
 
             _fetchModels.Enabled = ModelCatalog.CanFetch(provider);
             _modelNote.ForeColor = SystemColors.GrayText;
@@ -808,7 +894,7 @@ namespace Supervertaler.MemoQ.Settings
             var on = ModelCatalog.FetchedOn(provider);
 
             if (on == null)
-                _modelNote.Text = "The models worth recommending. Models\u2026 asks the provider for the rest.";
+                _modelNote.Text = "The models worth recommending. Fetch list asks the provider for the rest.";
             else if (extra == 0)
                 _modelNote.Text = "Provider list fetched " + on + "; nothing in it beyond the short list.";
             else
@@ -929,7 +1015,7 @@ namespace Supervertaler.MemoQ.Settings
             // supply. Writing it unconditionally would pin a copy of the Trados
             // key here and quietly stop that file being the one place to rotate.
             var typed = _apiKey.Text.Trim();
-            var without = ApiKeys.Fallback(_provider.SelectedItem as string, _resourceApiKey).Key;
+            var without = ApiKeys.Fallback(CurrentProvider, ResourceKeyFor(CurrentProvider)).Key;
             SharedSettings.ApiKey = string.Equals(typed, without, StringComparison.Ordinal) ? string.Empty : typed;
 
             Result = Collect();
