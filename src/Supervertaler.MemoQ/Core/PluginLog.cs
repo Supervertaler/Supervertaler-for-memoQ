@@ -62,6 +62,41 @@ namespace Supervertaler.MemoQ.Core
         // target does work.
         private static string _primaryFailure;
 
+        // The model last written to the log, so a change is written once
+        // rather than the model on every one of forty batch lines.
+        private static string _lastModel;
+
+        /// <summary>
+        /// True when this provider and model differ from the last pair reported -
+        /// and records them, so the next call with the same pair answers false.
+        /// Separate from the write so it can be exercised without a log file.
+        /// </summary>
+        internal static bool ModelChanged(string provider, string model)
+        {
+            var key = (provider ?? "").Trim() + " / " + (model ?? "").Trim();
+            lock (_lock)
+            {
+                if (string.Equals(_lastModel, key, StringComparison.Ordinal)) return false;
+                _lastModel = key;
+                return true;
+            }
+        }
+
+        /// <summary>
+        /// Names the model where the work is done (#2). The only line that named
+        /// one used to be written when memoQ built the engine and never revised -
+        /// so after a switch from Opus to Fable in the settings, the Activity
+        /// window went on saying Opus for the rest of the session, while every
+        /// segment was in fact translated by Fable. Written on change, not on
+        /// every request: a mid-run switch shows up as one line at the moment it
+        /// took effect.
+        /// </summary>
+        public static void ModelInUse(string provider, string model)
+        {
+            if (ModelChanged(provider, model))
+                Write($"model: {provider} / {model} (in force from here on)");
+        }
+
         public static void Write(string message)
         {
             var line = $"[{DateTime.Now:yyyy-MM-dd HH:mm:ss.fff}] [{Environment.CurrentManagedThreadId}] {message}\r\n";

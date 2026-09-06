@@ -215,6 +215,7 @@ namespace Supervertaler.PromptEditor
             [DataMember(Name = "origin")] public string Origin { get; set; }
             [DataMember(Name = "documentName")] public string DocumentName { get; set; }
             [DataMember(Name = "segmentCount")] public int SegmentCount { get; set; }
+            [DataMember(Name = "unit")] public string Unit { get; set; }
             [DataMember(Name = "termCount")] public int TermCount { get; set; }
             [DataMember(Name = "confirmedPairCount")] public int ConfirmedPairCount { get; set; }
             [DataMember(Name = "provider")] public string Provider { get; set; }
@@ -242,6 +243,21 @@ namespace Supervertaler.PromptEditor
             [DataMember(Name = "segmentCount")] public int SegmentCount { get; set; }
             [DataMember(Name = "wordCount")] public int WordCount { get; set; }
             [DataMember(Name = "origin")] public string Origin { get; set; }
+            [DataMember(Name = "unit")] public string Unit { get; set; }
+        }
+
+        /// <summary>
+        /// "170 paragraphs" or "9 segments" - the count with the unit the bridge
+        /// said it was counting. Saying "segments" for paragraphs under-reported a
+        /// 370-segment document by half in the one place a job's size is judged
+        /// before money is spent on a draft.
+        /// </summary>
+        internal static string Counted(int count, string unit)
+        {
+            unit = (unit ?? "").Trim();
+            if (unit.Length == 0) unit = "segments";
+            if (count == 1 && unit.EndsWith("s")) unit = unit.Substring(0, unit.Length - 1);
+            return count.ToString("N0") + " " + unit;
         }
 
         [DataContract]
@@ -479,8 +495,7 @@ namespace Supervertaler.PromptEditor
                 _domain.Text = c.Domain ?? c.KeywordDomain ?? "";
                 _detectedDescription = c.Description ?? "";
 
-                _documentInfo.Text = c.SegmentCount.ToString("N0") + " segment"
-                    + (c.SegmentCount == 1 ? "" : "s")
+                _documentInfo.Text = MemoQBridgeClient.Counted(c.SegmentCount, c.Unit)
                     + (string.IsNullOrWhiteSpace(c.Origin) ? "" : " from " + c.Origin)
                     + ", " + c.WordCount.ToString("N0") + " words \u00b7 "
                     + d.ConfirmedPairs + " confirmed"
@@ -612,7 +627,7 @@ namespace Supervertaler.PromptEditor
                 Height = 42,
                 Padding = new Padding(10, 8, 10, 0),
                 ForeColor = SystemColors.GrayText,
-                Text = p.SegmentCount.ToString("N0") + " segment" + (p.SegmentCount == 1 ? "" : "s")
+                Text = MemoQBridgeClient.Counted(p.SegmentCount, p.Unit)
                      + (string.IsNullOrWhiteSpace(p.Origin) ? "" : " from " + p.Origin)
                      + (string.IsNullOrWhiteSpace(p.DocumentName) ? "" : " (" + p.DocumentName + ")")
                      + "  \u00b7  " + p.TermCount + " glossary term" + (p.TermCount == 1 ? "" : "s")

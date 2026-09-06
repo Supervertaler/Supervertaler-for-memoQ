@@ -935,8 +935,8 @@ namespace Supervertaler.MemoQ.Core
             }
 
             var summary = string.IsNullOrEmpty(description)
-                ? $"{analysis.SegmentCount:N0} segments | {analysis.WordCount:N0} words"
-                : $"Context: {description} | {analysis.SegmentCount:N0} segments | {analysis.WordCount:N0} words";
+                ? $"{analysis.SegmentCount:N0} {doc.Unit} | {analysis.WordCount:N0} words"
+                : $"Context: {description} | {analysis.SegmentCount:N0} {doc.Unit} | {analysis.WordCount:N0} words";
 
             var meta = new List<string>();
             if (!string.IsNullOrWhiteSpace(doc.Client)) meta.Add("Client: " + doc.Client);
@@ -958,6 +958,7 @@ namespace Supervertaler.MemoQ.Core
                     DetectedDomain = detectedDomain,
                     AnalysisSummary = summary,
                     SegmentCount = sources.Count,
+                    SegmentUnit = doc.Unit,
                     SourceSegments = sources,
                     TermbaseTerms = terms,
                     TotalTermCount = terms.Count,
@@ -1024,6 +1025,7 @@ namespace Supervertaler.MemoQ.Core
                     Origin = doc.Origin,
                     DocumentName = doc.DocumentName,
                     SegmentCount = doc.Sources.Count,
+                    Unit = doc.Unit,
                     TermCount = plan.TermCount,
                     ConfirmedPairCount = plan.PairCount,
                     Provider = general.Provider,
@@ -1089,6 +1091,14 @@ namespace Supervertaler.MemoQ.Core
 
             public string Origin;
 
+            /// <summary>
+            /// What one entry of <c>Sources</c> is: "segments" from the capture
+            /// store, "paragraphs" from the live document. A preview part is a
+            /// paragraph, and a 370-segment document showed as 170 for as long as
+            /// the two were labelled alike.
+            /// </summary>
+            public string Unit = "segments";
+
             /// <summary>The capture key, which is what DocumentMemory is filed under.</summary>
             public string Key;
         }
@@ -1114,6 +1124,7 @@ namespace Supervertaler.MemoQ.Core
                 result.Sources = captured.Sources.ToList();
                 result.Plain = result.Sources.Select(TagBridge.StripTagMarkers).ToList();
                 result.Origin = "captured segments";
+                result.Unit = "segments";
             }
 
             // The live document, when the preview tool is connected and holds more
@@ -1138,6 +1149,7 @@ namespace Supervertaler.MemoQ.Core
 
                     result.DocumentName = live.DocumentName ?? result.DocumentName;
                     result.Origin = "the live document";
+                    result.Unit = "paragraphs";
 
                     var first = live.Rows.FirstOrDefault();
                     if (first != null)
@@ -1263,7 +1275,8 @@ namespace Supervertaler.MemoQ.Core
                 Domains = global::Supervertaler.Core.DocumentContextClassifier.Domains,
                 SegmentCount = analysis.SegmentCount,
                 WordCount = analysis.WordCount,
-                Origin = doc.Origin
+                Origin = doc.Origin,
+                Unit = doc.Unit
             }));
         }
 
@@ -1308,6 +1321,9 @@ namespace Supervertaler.MemoQ.Core
             [DataMember(Name = "segmentCount")] public int SegmentCount { get; set; }
             [DataMember(Name = "wordCount")] public int WordCount { get; set; }
 
+            /// <summary>"segments" or "paragraphs" - what segmentCount counts.</summary>
+            [DataMember(Name = "unit")] public string Unit { get; set; }
+
             /// <summary>
             /// Where the text came from. The dialog used to report the capture
             /// store's count, which read "1 segment captured" on a run that in
@@ -1323,6 +1339,7 @@ namespace Supervertaler.MemoQ.Core
             [DataMember(Name = "origin")] public string Origin { get; set; }
             [DataMember(Name = "documentName")] public string DocumentName { get; set; }
             [DataMember(Name = "segmentCount")] public int SegmentCount { get; set; }
+            [DataMember(Name = "unit")] public string Unit { get; set; }
             [DataMember(Name = "termCount")] public int TermCount { get; set; }
             [DataMember(Name = "confirmedPairCount")] public int ConfirmedPairCount { get; set; }
             [DataMember(Name = "provider")] public string Provider { get; set; }

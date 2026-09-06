@@ -264,6 +264,10 @@ namespace Supervertaler.MemoQ.Core
                 // round trip at the start of a job, once.
                 var warming = await context.EnterWarmupAsync(cancellationToken).ConfigureAwait(false);
 
+                // Resolved fresh for this request, so this is the model that will
+                // actually be called - not the one the engine was built with.
+                PluginLog.ModelInUse(general.Provider, general.Model);
+
                 using (var client = new LlmClient(
                            SessionRunner.MapProviderForCore(general.Provider),
                            general.Model,
