@@ -112,5 +112,54 @@ Check $same "the real key file is byte-identical after all of that"
 Check ($path -like '*\settings\api-keys.json') "the file is the shared one: $path"
 Check ($null -eq $storeGet.Invoke($null, [object[]]@('no-such-provider'))) "an unknown provider has no key"
 
+# ---- 4. what Set's false actually means ---------------------------------
+# False must mean the write failed, and nothing else. When it also meant
+# "nothing needed writing", every ordinary OK in memoQ's dialog looked like a
+# failed save - because a dialog saves every field whether or not it was
+# touched, so the commonest case of all is writing the value already there.
+#
+# There is no test copy of this file, so it is snapshotted and put back. The
+# provider id is one no product uses; the real entries are checked untouched
+# before the restore, which is the property that matters.
+$store_set = $store.GetMethod('Set', $Static)
+$probe = 'sv-harness-probe'
+
+$snapshot = if (Test-Path $path) { [IO.File]::ReadAllBytes($path) } else { $null }
+$realBefore = $storeGet.Invoke($null, [object[]]@('claude'))
+
+try {
+    Check ($store_set.Invoke($null, [object[]]@($probe, 'first-value'))) "writing a new key succeeds"
+    Check ($storeGet.Invoke($null, [object[]]@($probe)) -eq 'first-value') "and it reads back"
+
+    Check ($store_set.Invoke($null, [object[]]@($probe, 'first-value'))) `
+        "writing the value already stored succeeds - it needed no write, which is not a failure"
+
+    Check ($store_set.Invoke($null, [object[]]@($probe, 'second-value'))) "changing it succeeds"
+    Check ($storeGet.Invoke($null, [object[]]@($probe)) -eq 'second-value') "and the new value reads back"
+
+    Check ($store_set.Invoke($null, [object[]]@($probe, ''))) "removing it succeeds"
+    Check ($null -eq $storeGet.Invoke($null, [object[]]@($probe))) "and it is gone"
+
+    Check ($store_set.Invoke($null, [object[]]@($probe, ''))) `
+        "removing what is not there succeeds - there was nothing to write"
+
+    # The whole file is rewritten on every Set, so the entries this harness never
+    # named are the ones at risk.
+    Check ($storeGet.Invoke($null, [object[]]@('claude')) -eq $realBefore) `
+        "a write for one provider leaves the others alone"
+}
+finally {
+    # Unconditionally, and before anything else can fail: this is the user's own
+    # key file, and there is no second copy of it anywhere.
+    if ($null -ne $snapshot) { [IO.File]::WriteAllBytes($path, $snapshot) }
+    elseif (Test-Path $path) { Remove-Item $path -Force }
+}
+
+$restored = if (Test-Path $path) { [IO.File]::ReadAllBytes($path) } else { $null }
+$intact = if ($null -eq $snapshot -and $null -eq $restored) { $true }
+          elseif ($null -eq $snapshot -or $null -eq $restored) { $false }
+          else { -not (Compare-Object $snapshot $restored) }
+Check $intact "the key file is byte-identical to how the harness found it"
+
 Write-Host ''
 Write-Host "API KEYS TEST COMPLETE - $fails failure(s)"
