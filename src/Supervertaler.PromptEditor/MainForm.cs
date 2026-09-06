@@ -33,6 +33,17 @@ namespace Supervertaler.PromptEditor
         private Label _category;
         private Label _preserved;
         private RichTextBox _editor;
+        private GlossaryGrid _glossaryGrid;
+        private TableLayoutPanel _promptFields;
+
+        /// <summary>
+        /// The bank article open in the editor, or null when a prompt is. Only one
+        /// of the three can be open, and which one decides what Save writes -
+        /// so it is one field each rather than a flag saying which to believe.
+        /// </summary>
+        private string _articlePath;
+
+        private GlossaryDocument _glossaryDoc;
         private ListBox _warnings;
         private ToolStripButton _save;
         private ToolStripDropDownButton _insert;
@@ -552,7 +563,16 @@ namespace Supervertaler.PromptEditor
                 ForeColor = Color.FromArgb(0x8A, 0x50, 0x00)
             };
 
+            // The glossary grid shares the pane with the prompt editor and is
+            // hidden until a glossary is selected. One pane rather than a second
+            // window: what you clicked in the tree opens where you are looking.
+            _glossaryGrid = new GlossaryGrid { Visible = false };
+            _glossaryGrid.Edited += (s, e) => { _dirty = true; UpdateDirtyUi(); };
+
+            _promptFields = fields;
+
             var right = new Panel { Dock = DockStyle.Fill };
+            right.Controls.Add(_glossaryGrid);
             right.Controls.Add(_editor);
             right.Controls.Add(_warnings);
             right.Controls.Add(fields);
@@ -965,6 +985,17 @@ namespace Supervertaler.PromptEditor
 
         private void TreeAfterSelect(object sender, TreeViewEventArgs e)
         {
+            switch (e.Node?.Tag)
+            {
+                case BankArticleNode article:
+                    LoadArticle(article);
+                    return;
+
+                case GlossaryNode glossary:
+                    LoadGlossary(glossary);
+                    return;
+            }
+
             var prompt = e.Node?.Tag as PromptTemplate;
             if (prompt == null)
             {
@@ -1011,6 +1042,13 @@ namespace Supervertaler.PromptEditor
             try
             {
                 _current = p;
+
+                // Coming back from an article or a glossary: the prompt fields and
+                // the prose editor have to return, or the pane keeps whichever
+                // shape the last selection left it in.
+                _articlePath = null;
+                _glossaryDoc = null;
+                ShowGlossary(false);
 
                 _name.Text = p.Name ?? "";
                 _description.Text = p.Description ?? "";
@@ -1059,6 +1097,132 @@ namespace Supervertaler.PromptEditor
             return (app == "trados" || app == "memoq") ? app : "both";
         }
 
+        /// <summary>
+        /// A memory-bank article, in the same editor a prompt uses - it is
+        /// Markdown either way. The prompt fields are hidden rather than blanked:
+        /// an article has no name, description, product or sort order, and showing
+        /// four empty boxes invites someone to fill them in.
+        /// </summary>
+        private void LoadArticle(BankArticleNode article)
+        {
+            if (!ConfirmDiscard()) return;
+
+            _loading = true;
+            try
+            {
+                ShowGlossary(false);
+                _current = null;
+                _glossaryDoc = null;
+                _articlePath = article.Path;
+
+                string text;
+                try
+                {
+                    text = File.ReadAllText(article.Path, Encoding.UTF8);
+                }
+                catch (Exception ex)
+                {
+                    MessageBox.Show(this, "Could not read the article.\r\n\r\n" + ex.Message,
+                        "Supervertaler", MessageBoxButtons.OK, MessageBoxIcon.Error);
+                    return;
+                }
+
+                _editor.Text = text;
+                _warnings.Items.Clear();
+                _status.Text = article.Path;
+
+                SetEditingEnabled(true);
+                ShowPromptFields(false);
+            }
+            finally
+            {
+                _loading = false;
+                _dirty = false;
+                UpdateDirtyUi();
+            }
+        }
+
+        /// <summary>The glossary, as the table it is rather than as prose.</summary>
+        private void LoadGlossary(GlossaryNode glossary)
+        {
+            if (!ConfirmDiscard()) return;
+
+            _loading = true;
+            try
+            {
+                _current = null;
+                _articlePath = null;
+
+                try
+                {
+                    _glossaryDoc = GlossaryDocument.Load(glossary.Path);
+                }
+                catch (Exception ex)
+                {
+                    MessageBox.Show(this, "Could not read the glossary.\r\n\r\n" + ex.Message,
+                        "Supervertaler", MessageBoxButtons.OK, MessageBoxIcon.Error);
+                    return;
+                }
+
+                _glossaryGrid.Load(_glossaryDoc);
+                ShowGlossary(true);
+                _warnings.Items.Clear();
+                _status.Text = glossary.Path;
+            }
+            finally
+            {
+                _loading = false;
+                _dirty = false;
+                UpdateDirtyUi();
+            }
+        }
+
+        private void ShowGlossary(bool on)
+        {
+            _glossaryGrid.Visible = on;
+            _editor.Visible = !on;
+            if (on) _glossaryGrid.BringToFront(); else _editor.BringToFront();
+            ShowPromptFields(!on);
+        }
+
+        /// <summary>
+        /// The name, description, product and sort order belong to prompts alone -
+        /// an article and a glossary have none of them. The whole row panel is
+        /// hidden rather than the four boxes: their captions are separate labels
+        /// with no link back, so hiding the boxes alone would leave "Name",
+        /// "Description", "Available in" and "Sort order" pointing at nothing.
+        /// </summary>
+        private void ShowPromptFields(bool on)
+        {
+            if (_promptFields != null) _promptFields.Visible = on;
+        }
+
+        private bool Saved()
+        {
+            _dirty = false;
+            UpdateDirtyUi();
+            return true;
+        }
+
+        private bool SaveArticle()
+        {
+            try
+            {
+                // Written back as it was read: UTF-8 with no byte order mark, which
+                // is what MemoryBankReader expects. A BOM survives into the prompt
+                // as three characters at the top of the article.
+                File.WriteAllText(_articlePath, _editor.Text, new UTF8Encoding(false));
+            }
+            catch (Exception ex)
+            {
+                MessageBox.Show(this, "Could not save the article.\r\n\r\n" + ex.Message,
+                    "Supervertaler", MessageBoxButtons.OK, MessageBoxIcon.Error);
+                return false;
+            }
+
+            return Saved();
+        }
+
         private void Clear()
         {
             _loading = true;
@@ -1095,6 +1259,9 @@ namespace Supervertaler.PromptEditor
                     MessageBoxButtons.OK, MessageBoxIcon.Information);
                 return false;
             }
+
+            if (_glossaryDoc != null) return _glossaryGrid.Save(this) && Saved();
+            if (_articlePath != null) return SaveArticle();
 
             var name = _name.Text.Trim();
             if (name.Length == 0)
@@ -2282,11 +2449,17 @@ namespace Supervertaler.PromptEditor
 
         private void MarkDirty()
         {
-            if (_loading || _highlighting || _current == null) return;
+            if (_loading || _highlighting) return;
+
+            // A memory-bank article has no PromptTemplate behind it, and the test
+            // used to be _current == null alone - so typing in an article never
+            // marked the window unsaved, and switching away discarded it without
+            // asking. Nothing is open only when both are null.
+            if (_current == null && _articlePath == null) return;
 
             // A read-only prompt cannot be edited, so anything that reaches here
             // for one is machinery, not the user.
-            if (_current.IsReadOnly) return;
+            if (_current != null && _current.IsReadOnly) return;
             if (_dirty) return;
 
             _dirty = true;
