@@ -41,6 +41,7 @@ namespace Supervertaler.PromptEditor
         public const string Save        = "\uE74E";   // Save
         public const string Placeholder = "\uE943";   // Code
         public const string AutoPrompt  = "\uE945";   // LightningBolt
+        public const string Images      = "\uEB9F";   // Pictures
         public const string Mcp         = "\uE8F2";   // ChatBubbles
         public const string Activity    = "\uE9D9";   // Diagnostic
         public const string Settings    = "\uE713";   // Settings

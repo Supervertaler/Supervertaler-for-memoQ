@@ -20,6 +20,7 @@ $protected = @(
     'shared.txt'                    # provider, model, prompt, glossary, memory bank
     'instructions.txt'              # the inline instructions
     'memory-bank-projects.txt'      # which bank each project uses
+    'document-files.txt'            # where each document's original file is
 ) | ForEach-Object { Join-Path $dir $_ }
 
 # The fetched model lists, one file per provider. Named by enumeration rather

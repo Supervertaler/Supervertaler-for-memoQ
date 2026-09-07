@@ -132,13 +132,27 @@ namespace Supervertaler.PromptEditor
             [DataMember(Name = "sourceLanguage")] public string SourceLanguage { get; set; }
             [DataMember(Name = "targetLanguage")] public string TargetLanguage { get; set; }
             [DataMember(Name = "documents")] public DocumentInfo[] Documents { get; set; }
+            [DataMember(Name = "liveDocuments")] public LiveDocumentInfo[] LiveDocuments { get; set; }
             [DataMember(Name = "note")] public string Note { get; set; }
+        }
+
+        /// <summary>A document the preview tool has reported - present whether or not MT plugins are enabled for the project.</summary>
+        [DataContract]
+        internal class LiveDocumentInfo
+        {
+            [DataMember(Name = "documentGuid")] public string DocumentGuid { get; set; }
+            [DataMember(Name = "documentName")] public string DocumentName { get; set; }
+            [DataMember(Name = "langPair")] public string LangPair { get; set; }
+            [DataMember(Name = "rows")] public int Rows { get; set; }
+            [DataMember(Name = "importPath")] public string ImportPath { get; set; }
         }
 
         [DataContract]
         internal class DocumentInfo
         {
             [DataMember(Name = "key")] public string Key { get; set; }
+            [DataMember(Name = "documentGuid")] public string DocumentGuid { get; set; }
+            [DataMember(Name = "importPath")] public string ImportPath { get; set; }
             [DataMember(Name = "origin")] public string Origin { get; set; }
             [DataMember(Name = "projectName")] public string ProjectName { get; set; }
             [DataMember(Name = "documentName")] public string DocumentName { get; set; }

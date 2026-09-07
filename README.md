@@ -42,6 +42,14 @@ glossary terms still travel.
 – per client or per project, sent with every request and in full to AutoPrompt.
 Remembered per memoQ project; the `_shared` bank travels whatever else is chosen.
 
+**Images.** The model sees the text, not the figures. The editor's **Images…**
+panel gets the images out of the documents into the memory bank, then has each
+one described – by the AI, with what the text says about it alongside, or from
+the text alone for free – and saves the descriptions as `figures.md`, which every
+prompt reads. Reference signs seen in a drawing but absent from the text are
+listed. Documents are found through the live document link; one memoQ cannot
+place – a project checked out from a server – is located once and remembered.
+
 **Terminology.** A tab-separated glossary appears as a memoQ terminology provider
 – matched terms highlighted in the source, entries rendered in the Translation
 results pane – and the same terms are sent to the model as preferred or forbidden

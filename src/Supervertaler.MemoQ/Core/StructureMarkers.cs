@@ -152,23 +152,31 @@ namespace Supervertaler.MemoQ.Core
 
             var document = context.LastMetadata?.DocumentID ?? Guid.Empty;
             var rows = document == Guid.Empty ? null : PreviewStore.Rows(document);
+            var haveRows = rows != null && rows.Count > 0;
+            var recorded = haveRows ? rows.Select(r => r.ImportPath).FirstOrDefault(p => !string.IsNullOrWhiteSpace(p)) : null;
 
-            if (rows == null || rows.Count == 0)
+            // memoQ's own answer when the file is there; the one the user pointed
+            // at in the Images panel when it is not - a project checked out from a
+            // server records the project manager's path, not one on this disk.
+            var path = document == Guid.Empty ? null : DocumentFiles.Resolve(document.ToString("D"), recorded);
+
+            if (path == null)
             {
                 plan.Mode = StructureContextMode.Unavailable;
-                plan.Reason = "the preview tool has not reported this document, so its file is not known";
+                plan.Reason = !haveRows
+                    ? "the preview tool has not reported this document, so its file is not known"
+                    : string.IsNullOrWhiteSpace(recorded)
+                        ? "the preview tool gave no file path"
+                        : "the file is not on this computer: " + recorded;
                 return plan;
             }
 
-            var path = rows.Select(r => r.ImportPath).FirstOrDefault(p => !string.IsNullOrWhiteSpace(p));
             var paragraphs = ParagraphsOf(path);
 
             if (paragraphs == null)
             {
                 plan.Mode = StructureContextMode.Unavailable;
-                plan.Reason = string.IsNullOrWhiteSpace(path)
-                    ? "the preview tool gave no file path"
-                    : "not a readable .docx: " + path;
+                plan.Reason = "not a readable .docx: " + path;
                 return plan;
             }
 
@@ -179,14 +187,21 @@ namespace Supervertaler.MemoQ.Core
                 return plan;
             }
 
-            var parts = rows.Select(r => Normalise(TagBridge.StripTagMarkers(r.Source ?? ""))).ToList();
+            // With preview rows, each row is matched to its paragraph. Without
+            // them (a located file on a project the preview tool has not
+            // reported) the paragraphs stand in for the rows: MarkerFor matches a
+            // segment to the paragraph it starts, which is the same lookup.
+            var parts = haveRows
+                ? rows.Select(r => Normalise(TagBridge.StripTagMarkers(r.Source ?? ""))).ToList()
+                : paragraphs.Select(p => Normalise(p.Text ?? "")).ToList();
             var markers = Match(paragraphs, parts);
 
             for (var i = 0; i < parts.Count; i++)
                 plan.Paragraphs.Add(new KeyValuePair<string, string>(parts[i], markers[i]));
 
             plan.Mode = StructureContextMode.Markers;
-            plan.Reason = markers.Count(m => m != null) + " of " + parts.Count + " paragraphs carry a marker";
+            plan.Reason = markers.Count(m => m != null) + " of " + parts.Count
+                        + (haveRows ? " paragraphs carry a marker" : " document paragraphs carry a marker (from the located file)");
             return plan;
         }
 

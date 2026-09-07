@@ -326,6 +326,18 @@ namespace Supervertaler.MemoQ.Core
             TryWrite(ctx, 200, Json(new HelpBody { Markdown = HelpCard }));
         }
 
+        /// <summary>
+        /// Where memoQ imported the document from, as the preview tool reports
+        /// it. Real on a local project; the project manager's path on a server
+        /// one, which the editor's Images panel treats as a hint, not a file.
+        /// </summary>
+        private static string ImportPathOf(Guid documentId)
+        {
+            if (documentId == Guid.Empty) return null;
+            try { return PreviewStore.Rows(documentId).Select(r => r.ImportPath).FirstOrDefault(p => !string.IsNullOrWhiteSpace(p)); }
+            catch { return null; }
+        }
+
         private void HandleProject(HttpListenerContext ctx)
         {
             var docs = CaptureStore.Snapshot();
@@ -346,6 +358,8 @@ namespace Supervertaler.MemoQ.Core
                 Documents = docs.Select(d => new ProjectDocumentBody
                 {
                     Key = d.Key,
+                    DocumentGuid = d.DocumentId == Guid.Empty ? null : d.DocumentId.ToString("D"),
+                    ImportPath = ImportPathOf(d.DocumentId),
                     ProjectName = DocumentNames.Resolve(d.DocumentId)?.Project,
                     DocumentName = DocumentNames.Resolve(d.DocumentId)?.Document,
                     Origin = d.ViaTerminology
@@ -368,7 +382,8 @@ namespace Supervertaler.MemoQ.Core
                         DocumentGuid = d.DocumentGuid.ToString("D"),
                         DocumentName = d.DocumentName,
                         LangPair = (d.SourceLangCode ?? "?") + "-" + (d.TargetLangCode ?? "?"),
-                        Rows = PreviewStore.Count(d.DocumentGuid)
+                        Rows = PreviewStore.Count(d.DocumentGuid),
+                        ImportPath = d.ImportPath
                     }).ToArray()
                     : null,
                 Note = docs.Count == 0
@@ -2071,12 +2086,15 @@ namespace Supervertaler.MemoQ.Core
             [DataMember(Name = "documentName", EmitDefaultValue = false)] public string DocumentName { get; set; }
             [DataMember(Name = "langPair")] public string LangPair { get; set; }
             [DataMember(Name = "rows")] public int Rows { get; set; }
+            [DataMember(Name = "importPath", EmitDefaultValue = false)] public string ImportPath { get; set; }
         }
 
         [DataContract]
         internal class ProjectDocumentBody
         {
             [DataMember(Name = "key")] public string Key { get; set; }
+            [DataMember(Name = "documentGuid", EmitDefaultValue = false)] public string DocumentGuid { get; set; }
+            [DataMember(Name = "importPath", EmitDefaultValue = false)] public string ImportPath { get; set; }
             [DataMember(Name = "origin")] public string Origin { get; set; }
             [DataMember(Name = "projectName", EmitDefaultValue = false)] public string ProjectName { get; set; }
             [DataMember(Name = "documentName", EmitDefaultValue = false)] public string DocumentName { get; set; }

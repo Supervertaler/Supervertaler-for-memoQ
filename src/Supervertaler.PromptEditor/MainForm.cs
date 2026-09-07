@@ -227,6 +227,7 @@ namespace Supervertaler.PromptEditor
             // and the website call it, so a user who has read about AutoPrompt
             // finds a button called AutoPrompt. The tooltip carries the
             // explanation the name drops.
+            memoqMenu.DropDownItems.Add(new ToolStripMenuItem("&Images…", null, (s, e) => ShowImages()));
             memoqMenu.DropDownItems.Add(new ToolStripMenuItem("&AutoPrompt…", null, (s, e) => DraftForProject())
             {
                 ToolTipText = "AutoPrompt: have the AI write a prompt tailored to the document open in memoQ"
@@ -333,6 +334,9 @@ namespace Supervertaler.PromptEditor
             var draft = Button("AutoPrompt…", Glyphs.AutoPrompt,
                 "AutoPrompt: have the AI write a prompt tailored to the document open in memoQ",
                 (s, e) => DraftForProject(), AccentColour);
+            var images = Button("Images\u2026", Glyphs.Images,
+                "Images: get the pictures out of the documents and have them described, so the AI knows what each figure shows",
+                (s, e) => ShowImages());
 
             // Right-aligned items are laid out from the right edge inwards, so
             // this list reads right to left on screen: settings, activity, MCP.
@@ -377,6 +381,7 @@ namespace Supervertaler.PromptEditor
                 newPromptButton, _save, new ToolStripSeparator(),
                 _insert, new ToolStripSeparator(),
                 draft,
+                images,
                 settingsButton, activityButton, _mcpMode
             });
 
@@ -2113,6 +2118,16 @@ namespace Supervertaler.PromptEditor
 
         /// <summary>Shows which glossary is active, or says plainly that none is.</summary>
         /// <summary>How Supervertaler translates: the same settings memoQ shows.</summary>
+        // Kept for the life of the window: a description run outlives the
+        // dialog that started it, and the host is what it reports back through.
+        private ImagesHost _images;
+
+        private void ShowImages()
+        {
+            if (_images == null) _images = new ImagesHost(this, ActivateBank, s => _status.Text = s);
+            _images.Show();
+        }
+
         private void ShowSettings()
         {
             using (var dialog = new SettingsForm())
