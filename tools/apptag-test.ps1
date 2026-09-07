@@ -25,7 +25,7 @@ function Check($ok, $label) {
 $cases = @(
     @('memoq', ' [memoQ]'),
     @('trados', ' [Trados]'),
-    @('workbench', ' [Workbench]'),
+    @('workbench', ''),            # Workbench is retired (core 7b518b4): no marker is written for it any more
     @('both', ''),
     @('', ''),
     @($null, ''),
@@ -43,8 +43,8 @@ Check $ok "markers, $($cases.Count) cases"
 # A prompt may legitimately have brackets in its name, so only the three known
 # markers may be removed - anything else is part of what the user called it.
 $stems = @(
-    @('BRANTS (ORFF) dut-NL-eng-GB [memoQ]', 'BRANTS (ORFF) dut-NL-eng-GB'),
-    @('BRANTS (ORFF-033-NL-WO) v2 [Trados]', 'BRANTS (ORFF-033-NL-WO) v2'),
+    @('Acme (PROJ-001) dut-NL-eng-GB [memoQ]', 'Acme (PROJ-001) dut-NL-eng-GB'),
+    @('Acme (PROJ-002-NL-WO) v2 [Trados]', 'Acme (PROJ-002-NL-WO) v2'),
     @('Something [Workbench]', 'Something'),
     @('Something [memoq]', 'Something'),          # case-insensitive on the way in
     @('Claim wording [draft]', 'Claim wording [draft]'),

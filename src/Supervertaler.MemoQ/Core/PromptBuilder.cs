@@ -1,4 +1,5 @@
 using System;
+using Supervertaler.Core;
 using System.Collections.Generic;
 using System.Linq;
 using System.Text;
@@ -45,7 +46,9 @@ namespace Supervertaler.MemoQ.Core
             IReadOnlyList<DocumentMemory.Pair> recalled = null,
             IReadOnlyList<TermIndex.Match> ownTerms = null,
             string instructions = null,
-            string kbContext = null)
+            string kbContext = null,
+            StructureContextMode structure = StructureContextMode.Off,
+            string structureMarker = null)
         {
             // `instructions` is the resolved prompt — a library prompt when one is
             // selected, otherwise the settings' own text. The settings fallback
@@ -53,6 +56,19 @@ namespace Supervertaler.MemoQ.Core
             var system = (instructions ?? settings.SystemPrompt ?? SupervertalerGeneralSettings.DefaultSystemPrompt)
                 .Replace("{SOURCE_LANG}", DescribeLanguage(sourceLangCode))
                 .Replace("{TARGET_LANG}", DescribeLanguage(targetLangCode));
+
+            // The structure rule goes FIRST (#7). Trados puts it after its base
+            // prompt and before the custom one; memoQ has no base prompt - the
+            // library prompt is the whole system prompt - so "before the custom
+            // prompt" means at the top. That is what lets it reach prompts this
+            // plugin did not write. It is the same text for every request of a
+            // job while the mode holds, so the cache prefix is unaffected.
+            var structureRule = StructureContext.RuleFor(structure);
+            if (!string.IsNullOrWhiteSpace(structureRule))
+            {
+                system = "# DOCUMENT STRUCTURE" + Environment.NewLine + Environment.NewLine
+                       + structureRule + Environment.NewLine + Environment.NewLine + system;
+            }
 
             // The memory bank goes in the SYSTEM half, not with the rest of the
             // context, and the distinction is not cosmetic. Everything appended
@@ -106,7 +122,15 @@ namespace Supervertaler.MemoQ.Core
             AppendFragmentRule(sb, bundle.Source);
 
             sb.AppendLine("Source segment:");
-            sb.AppendLine(TagBridge.ToTaggedText(bundle.Source));
+
+            // The marker rides in front of the text as a sentinel the model is
+            // told is not content. Prefix returns the text untouched for a null
+            // marker, so a segment that is not the first of its paragraph, or a
+            // document without lists, costs nothing here.
+            var sourceLine = TagBridge.ToTaggedText(bundle.Source);
+            if (structure == StructureContextMode.Markers)
+                sourceLine = StructureContext.Prefix(structureMarker, sourceLine);
+            sb.AppendLine(sourceLine);
 
             return new BuiltPrompt { System = system, User = sb.ToString() };
         }
@@ -137,11 +161,14 @@ namespace Supervertaler.MemoQ.Core
             IReadOnlyList<DocumentMemory.Pair> recalled,
             IReadOnlyList<TermIndex.Match> ownTerms,
             string instructions,
-            string kbContext = null)
+            string kbContext = null,
+            StructureContextMode structure = StructureContextMode.Off)
         {
+            // No marker: a batch carries its own segments, each already prefixed
+            // by the caller, and the placeholder segment here is dropped below.
             var built = Build(new TranslationBundle { Source = SegmentBuilder.CreateFromString(" ") },
                 settings, sourceLangCode, targetLangCode, metadata, recalled, ownTerms, instructions,
-                kbContext);
+                kbContext, structure);
 
             // Build appends a "Source segment:" trailer; a batch supplies its own
             // segments, so drop it.

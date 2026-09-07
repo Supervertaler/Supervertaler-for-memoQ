@@ -19,6 +19,7 @@ $script:probed = @{}
 $common = [Reflection.Assembly]::LoadFrom("$MemoQPath\MemoQ.Addins.Common.dll")
 $mt = [Reflection.Assembly]::LoadFrom("$MemoQPath\MemoQ.MTInterfaces.dll")
 $plugin = [Reflection.Assembly]::LoadFrom($PluginDll)
+$off = [Activator]::CreateInstance($plugin.GetType('Supervertaler.Core.StructureContextMode'))   # structure context: Off
 
 $PublicStatic = [Reflection.BindingFlags]'Public,Static'
 $NonPublicStatic = [Reflection.BindingFlags]'NonPublic,Static'
@@ -47,7 +48,7 @@ function UserPromptFor([string]$sourceText, $status) {
         $bundleType.GetField('SegmentContext').SetValue($bundle, $items)
     }
 
-    $built = $build.Invoke($null, [object[]]@($bundle, $settings, 'eng', 'nld', $null, $null, $null, 'Translate.', $null))
+    $built = $build.Invoke($null, [object[]]@($bundle, $settings, 'eng', 'nld', $null, $null, $null, 'Translate.', $null, $off, $null))
     return $built.GetType().GetProperty('User').GetValue($built)
 }
 

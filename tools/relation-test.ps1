@@ -20,6 +20,7 @@ $script:probed = @{}
 $common = [Reflection.Assembly]::LoadFrom("$MemoQPath\MemoQ.Addins.Common.dll")
 $mt = [Reflection.Assembly]::LoadFrom("$MemoQPath\MemoQ.MTInterfaces.dll")
 $plugin = [Reflection.Assembly]::LoadFrom($PluginDll)
+$off = [Activator]::CreateInstance($plugin.GetType('Supervertaler.Core.StructureContextMode'))   # structure context: Off
 $PublicStatic = [Reflection.BindingFlags]'Public,Static'
 
 $sbType = $common.GetType('MemoQ.Addins.Common.DataStructures.SegmentBuilder')
@@ -49,7 +50,7 @@ try {
     $settings = [Activator]::CreateInstance($settingsType)
 
     $built = $builder.GetMethod('Build', $PublicStatic).Invoke(
-        $null, [object[]]@($bundle, $settings, 'eng', 'dut', $null, $null, $matches, 'Translate.', $null))
+        $null, [object[]]@($bundle, $settings, 'eng', 'dut', $null, $null, $matches, 'Translate.', $null, $off, $null))
     $user = $built.GetType().GetProperty('User').GetValue($built)
 
     $saysSameTerminology = $user -like '*same terminology filtered to what is in front of you*'
@@ -69,7 +70,7 @@ try {
     $empty = [Activator]::CreateInstance($bundleType)
     $bundleType.GetField('Source').SetValue($empty, (Seg 'Nothing matches here.'))
     $plain = $builder.GetMethod('Build', $PublicStatic).Invoke(
-        $null, [object[]]@($empty, $settings, 'eng', 'dut', $null, $null, $null, 'Translate.', $null))
+        $null, [object[]]@($empty, $settings, 'eng', 'dut', $null, $null, $null, 'Translate.', $null, $off, $null))
     $plainUser = $plain.GetType().GetProperty('User').GetValue($plain)
     $quiet = -not ($plainUser -like '*Client terminology*') -and -not ($plainUser -like '*Forbidden terms*')
     Write-Host "$(if ($quiet) {'PASS'} else {'FAIL'}) no terminology, no blocks and no precedence talk"

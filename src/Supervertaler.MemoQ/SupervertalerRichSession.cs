@@ -1,4 +1,5 @@
 using System;
+using Supervertaler.Core;
 using System.Collections.Generic;
 using System.Linq;
 using System.Threading;
@@ -161,6 +162,10 @@ namespace Supervertaler.MemoQ
 
             var general = context.General;
             PluginLog.ModelInUse(general.Provider, general.Model);
+
+            // Same plan as a batch takes (#7); one segment is one lookup in it.
+            var structure = StructureMarkers.PlanFor(context);
+            StructureMarkers.LogOnce(structure);
             var apiKey = context.ApiKey;
 
             var taggedSource = TagBridge.ToTaggedText(bundle.Source);
@@ -221,7 +226,8 @@ namespace Supervertaler.MemoQ
             var prompt = PromptBuilder.Build(
                 bundle, general, context.SourceLangCode, context.TargetLangCode,
                 context.LastMetadata, recalled, ownTerms, instructions,
-                context.KbContextBlock());
+                context.KbContextBlock(),
+                structure.Mode, structure.MarkerFor(bundle.Source.PlainText));
 
             // memoQ asks for the same segment more than once — twice within two
             // seconds merely for landing on it — so an identical prompt is served
@@ -257,9 +263,21 @@ namespace Supervertaler.MemoQ
                     prompt.System,
                     cancellationToken: cancellationToken).ConfigureAwait(false);
 
-                TranslationCache.Set(cacheKey, raw?.Trim());
+                var reply = raw?.Trim();
 
-                var translation = TagBridge.FromTaggedText(raw?.Trim(), bundle.Source);
+                // Stripped before it is cached as well as before it is shown, so
+                // a served-from-cache answer is as clean as a fresh one.
+                if (structure.Mode == StructureContextMode.Markers)
+                {
+                    reply = StructureContext.Strip(reply, out var echoed);
+                    if (echoed)
+                        PluginLog.Write("structure: the model echoed a list marker at the start of this segment; "
+                            + "removed before it reached the document");
+                }
+
+                TranslationCache.Set(cacheKey, reply);
+
+                var translation = TagBridge.FromTaggedText(reply, bundle.Source);
 
                 // Sizes and counts only, never the text: this log gets pasted into
                 // issues and the source is confidential client material.

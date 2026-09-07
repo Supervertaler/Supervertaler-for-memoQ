@@ -193,13 +193,28 @@ namespace Supervertaler.MemoQ.Core
         {
             var general = context.General;
 
+            // The document's list markers, when the preview tool has told us
+            // which file this is (#7). One plan per chunk: reading the .docx is
+            // cached per path, the matching is a walk over the paragraphs the
+            // preview tool holds, and the log line fires only when the answer
+            // changes from the last chunk's.
+            var structure = StructureMarkers.PlanFor(context);
+            StructureMarkers.LogOnce(structure);
+
             // Numbering is 1-based and local to the request, which is what
             // BuildBatchUserPrompt and ParseBatchResponse agree on.
             var inputs = chunk
                 .Select((s, i) => new BatchSegmentInput
                 {
                     Number = i + 1,
-                    SourceText = TagBridge.ToTaggedText(s),
+
+                    // Marker first, then the text, when markers are being sent -
+                    // and only on the first segment of a paragraph, which is
+                    // what MarkerFor answers. Prefix with a null marker is the
+                    // text alone.
+                    SourceText = structure.Mode == StructureContextMode.Markers
+                        ? StructureContext.Prefix(structure.MarkerFor(s.PlainText), TagBridge.ToTaggedText(s))
+                        : TagBridge.ToTaggedText(s),
 
                     // The best fuzzy TM match for this row, when memoQ forwarded
                     // one. Carried per row rather than once per chunk because each
@@ -233,7 +248,7 @@ namespace Supervertaler.MemoQ.Core
             var built = PromptBuilder.BuildForBatch(
                 general, context.SourceLangCode, context.TargetLangCode,
                 context.LastMetadata, recalled, ownTerms, instructions,
-                context.KbContextBlock());
+                context.KbContextBlock(), structure.Mode);
 
             // The context this batch produced goes in front of its own segments,
             // leaving the system prompt identical from one batch to the next -
@@ -309,6 +324,21 @@ namespace Supervertaler.MemoQ.Core
             }
 
             var parsed = TranslationPrompt.ParseBatchResponse(raw, chunk.Count);
+
+            // A marker the model echoed at the start of a target is removed before
+            // it can reach the document, and said so: that line is the evidence,
+            // per model, of whether the rule is obeyed. Only when markers were
+            // sent - with the mode off the reply is whatever it always was.
+            if (structure.Mode == StructureContextMode.Markers)
+            {
+                for (var k = 0; k < parsed.Count; k++)
+                {
+                    parsed[k].Translation = StructureContext.Strip(parsed[k].Translation, out var echoed);
+                    if (echoed)
+                        PluginLog.Write($"structure: the model echoed a list marker at the start of segment {k + 1} "
+                            + "of this batch; removed before it reached the document");
+                }
+            }
 
             var tokens = usage == null ? "" :
                 $" | tokens: in {usage.RegularInputTokens:N0}"

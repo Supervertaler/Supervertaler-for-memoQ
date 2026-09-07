@@ -52,6 +52,7 @@ namespace Supervertaler.MemoQ.Core
         private const string TerminologyContextKey = "useterminology";
         private const string DocumentContextKey = "usedocumentcontext";
         private const string ShowAllModelsKey = "showallmodels";
+        private const string StructureContextKey = "structurecontext";
         private const string PromptPathKey = "promptpath";
         private const string ApiKeyKey = "apikey";
         private const string SourceLangKey = "langsource";
@@ -214,6 +215,16 @@ namespace Supervertaler.MemoQ.Core
         /// next time they open the dialog.
         /// </summary>
         public static bool ShowAllModels { get => BoolOr(ShowAllModelsKey, false); set => Write(ShowAllModelsKey, value ? "1" : "0"); }
+
+        /// <summary>
+        /// Whether the document’s list markers - the a), b), c) on the steps of a
+        /// claim - go to the model as structure context (#7). On by default and
+        /// deliberately without a tick box in either dialog: two real runs showed
+        /// no echoed marker and no false defect flag, and a switch for something
+        /// whose failure mode is benign is one more thing to explain. The key is
+        /// a kill switch, read from the file only. Absent means on.
+        /// </summary>
+        public static bool StructureContext { get => BoolOr(StructureContextKey, true); set => Write(StructureContextKey, value ? "1" : "0"); }
 
 
         public static string PromptPath { get => Read(PromptPathKey); set => Write(PromptPathKey, value); }

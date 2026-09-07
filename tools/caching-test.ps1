@@ -26,6 +26,7 @@ $script:probed = @{}
 })
 
 $plugin = [Reflection.Assembly]::LoadFrom($PluginDll)
+$off = [Activator]::CreateInstance($plugin.GetType('Supervertaler.Core.StructureContextMode'))   # structure context: Off
 $mt     = [Reflection.Assembly]::LoadFrom("$MemoQPath\MemoQ.MTInterfaces.dll")
 $Static = [Reflection.BindingFlags]'Public,NonPublic,Static'
 
@@ -51,7 +52,7 @@ function Meta($domain, $subject) {
 $KB = 'MEMORY-BANK-MARKER: the client prefers the formal register.'
 
 function BuildBatch($metadata) {
-    $argv = New-Object object[] 8
+    $argv = New-Object object[] 9
     $argv[0] = $general
     $argv[1] = 'eng'
     $argv[2] = 'nld'
@@ -60,6 +61,7 @@ function BuildBatch($metadata) {
     $argv[5] = $null          # ownTerms
     $argv[6] = 'INSTRUCTIONS-MARKER'
     $argv[7] = $KB
+    $argv[8] = $off
     return $builder.GetMethod('BuildForBatch', $Static).Invoke($null, $argv)
 }
 

@@ -30,6 +30,7 @@ $script:probed = @{}
 })
 
 $plugin = [Reflection.Assembly]::LoadFrom($PluginDll)
+$off = [Activator]::CreateInstance($plugin.GetType('Supervertaler.Core.StructureContextMode'))   # structure context: Off
 $Static = [Reflection.BindingFlags]'Public,NonPublic,Static'
 $NonPublicInstance = [Reflection.BindingFlags]'NonPublic,Instance'
 
@@ -292,7 +293,7 @@ try {
 
     $general = [Activator]::CreateInstance($generalT)
     $built = $pb.GetMethod('Build', $Static).Invoke($null,
-        @($bundle, $general, 'eng', 'nld', $null, $null, $null, 'INSTRUCTIONS', $marker))
+        @($bundle, $general, 'eng', 'nld', $null, $null, $null, 'INSTRUCTIONS', $marker, $off, $null))
 
     $sys = $built.GetType().GetProperty('System').GetValue($built)
     $usr = $built.GetType().GetProperty('User').GetValue($built)
