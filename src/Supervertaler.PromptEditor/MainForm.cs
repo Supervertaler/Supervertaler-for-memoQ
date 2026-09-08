@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Collections.Generic;
 using System.Diagnostics;
 using System.Drawing;
@@ -228,7 +228,7 @@ namespace Supervertaler.PromptEditor
             // finds a button called AutoPrompt. The tooltip carries the
             // explanation the name drops.
             memoqMenu.DropDownItems.Add(new ToolStripMenuItem("&Sync with memoQ now", null, (s, e) => SyncProject()));
-            memoqMenu.DropDownItems.Add(new ToolStripMenuItem("&Images…", null, (s, e) => ShowImages()));
+            memoqMenu.DropDownItems.Add(new ToolStripMenuItem("&FigureLens…", null, (s, e) => ShowImages()));
             memoqMenu.DropDownItems.Add(new ToolStripMenuItem("&AutoPrompt…", null, (s, e) => DraftForProject())
             {
                 ToolTipText = "AutoPrompt: have the AI write a prompt tailored to the document open in memoQ"
@@ -335,8 +335,8 @@ namespace Supervertaler.PromptEditor
             var draft = Button("AutoPrompt…", Glyphs.AutoPrompt,
                 "AutoPrompt: have the AI write a prompt tailored to the document open in memoQ",
                 (s, e) => DraftForProject(), AccentColour);
-            var images = Button("Images\u2026", Glyphs.Images,
-                "Images: get the pictures out of the documents and have them described, so the AI knows what each figure shows",
+            var images = Button("FigureLens\u2026", Glyphs.Images,
+                "FigureLens: get the pictures out of the documents and have them described, so the AI knows what each figure shows",
                 (s, e) => ShowImages());
 
             // Right-aligned items are laid out from the right edge inwards, so

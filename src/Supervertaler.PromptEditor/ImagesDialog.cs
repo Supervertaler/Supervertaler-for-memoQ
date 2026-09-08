@@ -146,7 +146,7 @@ namespace Supervertaler.PromptEditor
             AutoScaleDimensions = new SizeF(96F, 96F);
             AutoScaleMode = AutoScaleMode.Dpi;
             AppIcon.Apply(this);
-            Text = "Images";
+            Text = "FigureLens";
             StartPosition = FormStartPosition.CenterParent;
             FormBorderStyle = FormBorderStyle.Sizable;
             MinimizeBox = false; MaximizeBox = false; ShowInTaskbar = false;
@@ -160,8 +160,8 @@ namespace Supervertaler.PromptEditor
             root.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100f));
             var row = 0;
 
-            var intro = Wrap("The AI sees the text of your documents, not the pictures in them. Two steps give it a description of each image: "
-                           + "get the images out of the documents into a folder, then have them described.");
+            var intro = Wrap("The AI sees the text of your documents, not the pictures in them. FigureLens gives it a description of each image, "
+                           + "in two steps: get the images out of the documents into a folder, then have them described.");
             root.Controls.Add(intro, 0, row); root.SetColumnSpan(intro, 2); row++;
 
             // What is there
@@ -276,7 +276,7 @@ namespace Supervertaler.PromptEditor
 
         private static void OpenHelp()
         {
-            try { Process.Start(new ProcessStartInfo("https://docs.supervertaler.com/memoq/prompt-editor/#images") { UseShellExecute = true }); }
+            try { Process.Start(new ProcessStartInfo("https://docs.supervertaler.com/memoq/prompt-editor/#figurelens") { UseShellExecute = true }); }
             catch { /* a browser that will not open is not worth a second dialog */ }
         }
 
@@ -284,7 +284,7 @@ namespace Supervertaler.PromptEditor
         {
             if (action == null) return;
             try { action(); }
-            catch (Exception ex) { MessageBox.Show(this, ex.Message, "Images", MessageBoxButtons.OK, MessageBoxIcon.Error); }
+            catch (Exception ex) { MessageBox.Show(this, ex.Message, "FigureLens", MessageBoxButtons.OK, MessageBoxIcon.Error); }
             RefreshState();
         }
 
@@ -385,7 +385,7 @@ namespace Supervertaler.PromptEditor
         {
             if (st.DocumentCount == 0)
                 return string.IsNullOrEmpty(st.WhyNoDocuments)
-                    ? "No documents yet. Images are read from the documents memoQ has told Supervertaler about, or from a file you add below."
+                    ? "No documents yet. FigureLens reads images from the documents memoQ has told Supervertaler about, or from a file you add below."
                     : st.WhyNoDocuments;
             // A document whose file is not here was never opened, so nothing is
             // known about what is in it. Counting it among documents found to

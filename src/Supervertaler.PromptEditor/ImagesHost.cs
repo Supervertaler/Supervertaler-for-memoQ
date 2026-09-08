@@ -551,7 +551,7 @@ namespace Supervertaler.PromptEditor
 
                     var signs = FiguresFile.SignsNotInText(visions, textSigns, rawSourceText);
                     var markdown = FiguresFile.RenderWithVision(documents, signs,
-                        "Images → Describe images with AI");
+                        "FigureLens → Describe images with AI");
                     FiguresFile.Save(outPath, markdown);
 
                     var failed = visions.Count(v => !string.IsNullOrEmpty(v.Error));
@@ -613,7 +613,7 @@ namespace Supervertaler.PromptEditor
             var documents = _docs.Where(d => d.Path != null)
                 .Select(d => new KeyValuePair<string, DocxImageSet>(d.Name, SetFor(d.Path)))
                 .ToList();
-            var markdown = FiguresFile.RenderFromText(documents, "Images → Describe from the text only",
+            var markdown = FiguresFile.RenderFromText(documents, "FigureLens → Describe from the text only",
                 out var wrote, out var refused);
             if (markdown == null) { Say("No images in the documents listed – nothing written."); return; }
 
@@ -723,7 +723,7 @@ namespace Supervertaler.PromptEditor
         // ---- helpers -----------------------------------------------------------
 
         private void Say(string text) =>
-            MessageBox.Show(_owner, text, "Images", MessageBoxButtons.OK, MessageBoxIcon.Information);
+            MessageBox.Show(_owner, text, "FigureLens", MessageBoxButtons.OK, MessageBoxIcon.Information);
 
         /// <summary>Report the end of a background run on the UI thread, if there still is one.</summary>
         private void Done(string text)
@@ -734,7 +734,7 @@ namespace Supervertaler.PromptEditor
                 _owner.BeginInvoke(new Action(() =>
                 {
                     _status(text.Split('\n')[0]);
-                    MessageBox.Show(_owner, text, "Images", MessageBoxButtons.OK, MessageBoxIcon.Information);
+                    MessageBox.Show(_owner, text, "FigureLens", MessageBoxButtons.OK, MessageBoxIcon.Information);
                 }));
             }
             catch { }
