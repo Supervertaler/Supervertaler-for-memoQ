@@ -1,4 +1,4 @@
-# AutoPrompt prefers the live document, and falls back to memoQ's project domain.
+﻿# AutoPrompt prefers the live document, and falls back to memoQ's project domain.
 $ErrorActionPreference = 'Stop'
 $MemoQPath = 'C:\Program Files\memoQ\memoQ-12'
 $PluginDll = 'D:\Google Drive\Dev\Sv\Supervertaler-for-memoQ\src\Supervertaler.MemoQ\bin\Release\Supervertaler.MemoQ.dll'
@@ -76,6 +76,43 @@ $lang = $srcType.GetField('SourceLangCode').GetValue($src)
 
 Write-Host "$(if ($sources.Count -eq 12) {'PASS'} else {'FAIL'}) live document used when nothing is captured: $($sources.Count) source(s), origin='$origin'"
 Write-Host "$(if ($lang -eq 'dut-NL') {'PASS'} else {'FAIL'}) language codes come from the live rows: $lang"
+
+# ---- 2b. the document CHOSEN is the one used ------------------------------
+# On a project whose MT plugins the project manager has disabled, nothing is
+# ever captured, so every document is live-only and the chosen key is the only
+# thing telling them apart. Picking the largest would silently draft against
+# the wrong document.
+$otherGuid = [Guid]::NewGuid()
+$parts2 = [Activator]::CreateInstance($listType)
+foreach ($i in 1..30) {
+    $p = [Activator]::CreateInstance($partType)
+    $partType.GetField('PartId').SetValue($p, "mQ-default-other-$i")
+    $partType.GetField('DocumentGuid').SetValue($p, $otherGuid)
+    $partType.GetField('DocumentName').SetValue($p, 'The bigger document.docx')
+    $partType.GetField('SourceLangCode').SetValue($p, 'eng-GB')
+    $partType.GetField('TargetLangCode').SetValue($p, 'dut-NL')
+    $partType.GetField('Source').SetValue($p, "An entirely different document, paragraph $i.")
+    $partType.GetField('Target').SetValue($p, '')
+    $parts2.Add($p)
+}
+$argv2 = [object[]]::new(1); $argv2[0] = $parts2
+$preview.GetMethod('Upsert').Invoke($null, $argv2) | Out-Null
+$preview.GetMethod('NoteTool').Invoke($null, [object[]]@($true)) | Out-Null
+
+$chosen = $resolve.Invoke($bridge, [object[]]@([string]$docGuid.ToString('D')))
+$chosenSources = $chosen.GetType().GetField('Sources').GetValue($chosen)
+$chosenLang = $chosen.GetType().GetField('SourceLangCode').GetValue($chosen)
+Write-Host "$(if ($chosenSources.Count -eq 12) {'PASS'} else {'FAIL'}) the chosen document is used, not the largest: $($chosenSources.Count) source(s) (12 expected, the other has 30)"
+Write-Host "$(if ($chosenLang -eq 'dut-NL') {'PASS'} else {'FAIL'}) and its own language pair travels with it: $chosenLang"
+
+$chosen2 = $resolve.Invoke($bridge, [object[]]@([string]$otherGuid.ToString('D')))
+$chosen2Sources = $chosen2.GetType().GetField('Sources').GetValue($chosen2)
+Write-Host "$(if ($chosen2Sources.Count -eq 30) {'PASS'} else {'FAIL'}) choosing the other one uses that instead: $($chosen2Sources.Count)"
+
+# A key naming no live document falls back to the largest rather than nothing.
+$fallback = $resolve.Invoke($bridge, [object[]]@([string][Guid]::NewGuid().ToString('D')))
+$fallbackSources = $fallback.GetType().GetField('Sources').GetValue($fallback)
+Write-Host "$(if ($fallbackSources.Count -eq 0) {'PASS'} else {'FAIL'}) a key naming no live document draws nothing rather than the wrong document: $($fallbackSources.Count)"
 
 # ---- 3. with the tool disconnected it must not invent anything -----------
 $preview.GetMethod('NoteTool').Invoke($null, [object[]]@($false)) | Out-Null

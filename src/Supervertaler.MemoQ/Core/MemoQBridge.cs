@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using System.Collections.Generic;
 using System.Diagnostics;
 using System.IO;
@@ -1167,13 +1167,24 @@ namespace Supervertaler.MemoQ.Core
             // better for classification than a scattering of sentences.
             if (PreviewStore.ToolAlive)
             {
+                // The document the caller actually chose, when the key names one
+                // the preview tool is reporting. Without this the largest live
+                // document won whatever was picked - fine with one document open,
+                // wrong with several, and on a project whose MT plugins are
+                // disabled EVERY document is live-only, so the choice is the only
+                // thing distinguishing them.
+                Guid chosen;
+                var wanted = Guid.TryParse(documentKey ?? "", out chosen) && chosen != Guid.Empty ? chosen : Guid.Empty;
+
                 var live = PreviewStore.Documents()
                     .Where(d => d != null)
+                    .Where(d => wanted == Guid.Empty || d.DocumentGuid == wanted)
                     .Select(d => new { d.DocumentGuid, d.DocumentName, Rows = PreviewStore.Rows(d.DocumentGuid) })
                     .OrderByDescending(d => d.Rows.Count)
                     .FirstOrDefault();
 
-                if (live != null && live.Rows.Count > result.Sources.Count)
+                // A document chosen by name has nothing captured to beat.
+                if (live != null && (live.Rows.Count > result.Sources.Count || wanted != Guid.Empty))
                 {
                     result.Sources = live.Rows
                         .Select(r => r.Source ?? string.Empty)

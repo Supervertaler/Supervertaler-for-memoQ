@@ -159,6 +159,9 @@ namespace Supervertaler.PromptEditor
             [DataMember(Name = "client")] public string Client { get; set; }
 
             public bool IsVisitedBucket => Key != null && Key.StartsWith("visited_", StringComparison.Ordinal);
+
+            /// <summary>Synthesised from the live document link rather than captured. Not sent over the wire.</summary>
+            public bool IsLive;
             [DataMember(Name = "domain")] public string Domain { get; set; }
             [DataMember(Name = "subject")] public string Subject { get; set; }
             [DataMember(Name = "capturedSegments")] public int CapturedSegments { get; set; }
@@ -413,7 +416,33 @@ namespace Supervertaler.PromptEditor
                 // That bucket is one bag per language pair fed by the
                 // terminology plugin, useful when a document was pre-translated
                 // with another engine, but never the natural default.
-                _documents = (project?.Documents ?? new MemoQBridgeClient.DocumentInfo[0])
+                // Captured documents, plus any the live document link is
+                // reporting that nothing has captured. On a project whose MT
+                // plugins the project manager has switched off, the plugin is
+                // never called and so captures nothing - the live link is then
+                // the only source of the document, and without this the list was
+                // empty on exactly the projects that most need a prompt written
+                // for them.
+                var captured = (project?.Documents ?? new MemoQBridgeClient.DocumentInfo[0]).ToList();
+                var known = new HashSet<string>(
+                    captured.Select(d => d.DocumentGuid).Where(g => !string.IsNullOrWhiteSpace(g)),
+                    StringComparer.OrdinalIgnoreCase);
+
+                foreach (var l in project?.LiveDocuments ?? new MemoQBridgeClient.LiveDocumentInfo[0])
+                {
+                    if (string.IsNullOrWhiteSpace(l.DocumentGuid) || !known.Add(l.DocumentGuid)) continue;
+                    captured.Add(new MemoQBridgeClient.DocumentInfo
+                    {
+                        Key = l.DocumentGuid,
+                        DocumentGuid = l.DocumentGuid,
+                        DocumentName = l.DocumentName,
+                        ImportPath = l.ImportPath,
+                        CapturedSegments = l.Rows,
+                        IsLive = true,
+                    });
+                }
+
+                _documents = captured
                     .OrderBy(d => d.IsVisitedBucket ? 1 : 0)
                     .ToArray();
 
@@ -437,8 +466,12 @@ namespace Supervertaler.PromptEditor
                     else
                         label = (d.Subject ?? d.Domain ?? "Document") + "  (name unknown)";
 
-                    _document.Items.Add(label + "   (" + d.CapturedSegments + " segment"
-                        + (d.CapturedSegments == 1 ? "" : "s") + ")");
+                    // A live document is measured in paragraphs, not segments -
+                    // a preview part is a paragraph - and saying so keeps the
+                    // count honest against memoQ's row numbers.
+                    var unit = d.IsLive ? "paragraph" : "segment";
+                    _document.Items.Add(label + "   (" + d.CapturedSegments + " " + unit
+                        + (d.CapturedSegments == 1 ? "" : "s") + (d.IsLive ? ", from the live document" : "") + ")");
                 }
 
                 if (_documents.Length == 0)
