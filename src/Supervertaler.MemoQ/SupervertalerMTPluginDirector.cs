@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Drawing;
 using System.Windows.Forms;
 using MemoQ.Addins.Common.Framework;
@@ -53,6 +53,14 @@ namespace Supervertaler.MemoQ
             _activated = true;
             PluginLog.Write("Initialize: settings directory = "
                 + (environment?.PluginSettingsDirectory ?? "(null)"));
+
+            // Here rather than in the engine constructor: memoQ builds an engine
+            // only for a project that uses the MT plugin, so a project whose
+            // manager has switched MT plugins off never started the bridge - and
+            // the editor, the live document link and Claude Desktop then had
+            // nothing to connect to, on exactly the projects where reading the
+            // document matters most. Initialize runs whenever memoQ does.
+            MemoQBridge.EnsureStarted();
         }
 
         public void Cleanup()

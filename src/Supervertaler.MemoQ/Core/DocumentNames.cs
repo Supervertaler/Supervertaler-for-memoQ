@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Collections.Generic;
 using System.IO;
 using System.Text.RegularExpressions;
@@ -47,13 +47,10 @@ namespace Supervertaler.MemoQ.Core
         /// <summary>The folders to look in. Set by a harness to point at a folder of its own.</summary>
         internal static string[] RootsOverride;
 
-        private static string[] Roots()
+        private static IList<string> Roots()
         {
             if (RootsOverride != null && RootsOverride.Length > 0) return RootsOverride;
-            return new[]
-            {
-                Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.MyDocuments), "My memoQ Projects")
-            };
+            return MemoQProjects.Roots();
         }
 
         public static Names Resolve(Guid documentId)
@@ -88,6 +85,31 @@ namespace Supervertaler.MemoQ.Core
         {
             var guidFolder = documentId.ToString("D");
 
+            // memoQ's own register of its projects first: it names each project's
+            // actual folder, so it finds a project wherever the user keeps it -
+            // including the several places at once that moving the projects
+            // folder leaves behind - and it carries the project's GUID, which is
+            // the one memoQ sends with a translation request.
+            if (RootsOverride == null || RootsOverride.Length == 0)
+            {
+                foreach (var project in MemoQProjects.Registered())
+                {
+                    if (string.IsNullOrWhiteSpace(project.Folder)) continue;
+
+                    var registered = Path.Combine(project.Folder, "Documents", guidFolder);
+                    if (!Directory.Exists(registered)) continue;   // stale rows outlive the folders they name
+
+                    return new Names
+                    {
+                        Project = string.IsNullOrWhiteSpace(project.Name) ? Path.GetFileName(project.Folder) : project.Name,
+                        ProjectId = project.Id != Guid.Empty ? project.Id : ProjectIdOf(Path.Combine(project.Folder, "project.mprx")),
+                        Document = DocumentNameIn(registered)
+                    };
+                }
+            }
+
+            // Then whatever is on disk under the projects folders, for a project
+            // the register does not list.
             foreach (var root in Roots())
             {
                 if (string.IsNullOrEmpty(root) || !Directory.Exists(root)) continue;
@@ -103,45 +125,58 @@ namespace Supervertaler.MemoQ.Core
                         ProjectId = ProjectIdOf(Path.Combine(project, "project.mprx"))
                     };
 
-                    // Newest version folder wins (ver1, ver2, …).
-                    string info = null;
-                    foreach (var ver in Directory.GetDirectories(docDir))
-                    {
-                        var candidate = Path.Combine(ver, "majorVersionStore.info");
-                        if (File.Exists(candidate)) info = candidate;
-                    }
-
-                    if (info != null)
-                    {
-                        var bytes = File.ReadAllBytes(info);
-                        // The first printable run that looks like a file name. The
-                        // byte before it is a length prefix, which the regex skips
-                        // by requiring printable ASCII.
-                        // ISO-8859-1: one byte per char, so ASCII survives and the
-                        // regex offsets stay honest. (Encoding.Latin1 is .NET 5+.)
-                        var text = System.Text.Encoding.GetEncoding(28591).GetString(bytes);
-                        var m = Regex.Match(text, @"[\x20-\x7e]{3,}\.[A-Za-z0-9]{2,6}(?=[^\x20-\x7e]|$)");
-                        if (m.Success && !m.Value.Contains("\\") && !m.Value.Contains("/"))
-                        {
-                            var value = m.Value;
-
-                            // The byte before the string is its length, and for a
-                            // name of 32–126 characters that byte is itself printable
-                            // — a 36-character name arrives as "$Example…". If the
-                            // first character's code equals the length of what
-                            // follows, it is the prefix, not the name.
-                            if (value.Length > 1 && value[0] == value.Length - 1)
-                                value = value.Substring(1);
-
-                            names.Document = value.Trim();
-                        }
-                    }
-
+                    names.Document = DocumentNameIn(docDir);
                     return names;
                 }
             }
 
             return null;
+        }
+
+        /// <summary>
+        /// The document's own file name, out of memoQ's per-document store.
+        /// Null when it cannot be read - a label is worth having, never worth
+        /// failing over.
+        /// </summary>
+        private static string DocumentNameIn(string docDir)
+        {
+            try
+            {
+                // Newest version folder wins (ver1, ver2, …).
+                string info = null;
+                foreach (var ver in Directory.GetDirectories(docDir))
+                {
+                    var candidate = Path.Combine(ver, "majorVersionStore.info");
+                    if (File.Exists(candidate)) info = candidate;
+                }
+                if (info == null) return null;
+
+                // The first printable run that looks like a file name. The byte
+                // before it is a length prefix, which the regex skips by
+                // requiring printable ASCII.
+                // ISO-8859-1: one byte per char, so ASCII survives and the regex
+                // offsets stay honest. (Encoding.Latin1 is .NET 5+.)
+                var text = System.Text.Encoding.GetEncoding(28591).GetString(File.ReadAllBytes(info));
+                var m = Regex.Match(text, @"[\x20-\x7e]{3,}\.[A-Za-z0-9]{2,6}(?=[^\x20-\x7e]|$)");
+                if (!m.Success || m.Value.Contains("\\") || m.Value.Contains("/")) return null;
+
+                var value = m.Value;
+
+                // The byte before the string is its length, and for a name of
+                // 32–126 characters that byte is itself printable — a
+                // 36-character name arrives as "$Example…". If the first
+                // character's code equals the length of what follows, it is the
+                // prefix, not the name.
+                if (value.Length > 1 && value[0] == value.Length - 1)
+                    value = value.Substring(1);
+
+                return value.Trim();
+            }
+            catch (Exception ex)
+            {
+                PluginLog.Write("DocumentNames: could not read the document name in " + docDir, ex);
+                return null;
+            }
         }
 
         /// <summary>

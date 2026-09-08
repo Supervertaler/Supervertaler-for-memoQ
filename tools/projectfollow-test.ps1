@@ -75,6 +75,8 @@ $projectB = [Guid]::NewGuid().ToString('D')
 $docA = [Guid]::NewGuid().ToString('D')
 $docB = [Guid]::NewGuid().ToString('D')
 $docNoMprx = [Guid]::NewGuid().ToString('D')
+$projectC = [Guid]::NewGuid().ToString('D')
+$docC = [Guid]::NewGuid().ToString('D')
 MakeProject 'Acme (PROJ-001)' $projectA @($docA) | Out-Null
 MakeProject 'Acme (PROJ-002) server copy' $projectB @($docB) | Out-Null
 MakeProject 'Folder without a project file' ([Guid]::NewGuid().ToString('D')) @($docNoMprx) $false | Out-Null
@@ -183,6 +185,58 @@ Follow $docA $ctx | Out-Null
 Check ([Guid]$currentProject.GetValue($ctx) -eq [Guid]$projectA) 'with an engine, the engine learns the project too'
 Check ($bank.GetValue($null) -eq 'acme-proj-001') 'and the bank follows'
 
+# ---- 5b. memoQ's own register of where its projects are --------------------------
+# The projects folder is a setting (Options > Locations > Projects), so a
+# hardcoded "My memoQ Projects" finds nothing for a user who moved it - and
+# after a move, projects sit in BOTH places at once. memoQ writes the actual
+# folder of every project into ProjectRegistry.dat, and the custom folder into
+# Preferences.xml; both are read rather than assumed.
+$projectsT = $plugin.GetType('Supervertaler.MemoQ.Core.MemoQProjects')
+
+# A registry naming: one project in a custom location, one whose folder has
+# been deleted since (a stale row - the real one had exactly this), and one
+# with no GUID recorded.
+$moved = MakeProject 'Acme (PROJ-003) moved' $projectC @($docC)
+$regPath = Join-Path $root 'ProjectRegistry.dat'
+$blocks = @(
+    "<ProjectAdminInfoBlock><CoreInfo><Name>Acme (PROJ-003) moved</Name><ID>$projectC</ID></CoreInfo><ProjectFolderFullPath>$moved</ProjectFolderFullPath></ProjectAdminInfoBlock>",
+    "<ProjectAdminInfoBlock><CoreInfo><Name>Deleted since</Name><ID>$([Guid]::NewGuid())</ID></CoreInfo><ProjectFolderFullPath>$(Join-Path $root 'gone-since')</ProjectFolderFullPath></ProjectAdminInfoBlock>",
+    "<ProjectAdminInfoBlock><CoreInfo><Name>No name recorded</Name></CoreInfo><ProjectFolderFullPath>$(Join-Path $root 'Acme (PROJ-001)')</ProjectFolderFullPath></ProjectAdminInfoBlock>"
+)
+[IO.File]::WriteAllText($regPath, '<?xml version="1.0" encoding="utf-8"?><ArrayOfProjectAdminInfoBlock>' + ($blocks -join '') + '</ArrayOfProjectAdminInfoBlock>', (New-Object Text.UTF8Encoding($true)))
+$prefsPath = Join-Path $root 'Preferences.xml'
+$customRoot = Join-Path $root 'custom-projects'
+New-Item -ItemType Directory -Path $customRoot -Force | Out-Null
+[IO.File]::WriteAllText($prefsPath, "<?xml version=`"1.0`"?><Preferences><ProjectsCustomPath>$customRoot</ProjectsCustomPath></Preferences>", (New-Object Text.UTF8Encoding($true)))
+
+$projectsT.GetField('RegistryPathOverride', $Static).SetValue($null, [string]$regPath)
+$projectsT.GetField('PreferencesPathOverride', $Static).SetValue($null, [string]$prefsPath)
+
+$registered = @($projectsT.GetMethod('Registered', $Static).Invoke($null, @()))
+Check ($registered.Count -eq 3) "every registered project is read (got $($registered.Count))"
+Check ($registered[0].Name -eq 'Acme (PROJ-003) moved' -and $registered[0].Id.ToString('D') -eq $projectC) 'with its name and the GUID memoQ sends'
+Check ($registered[0].Folder -eq $moved) 'and the folder memoQ actually keeps it in'
+Check ($registered[2].Id -eq [Guid]::Empty) 'a row with no ID reads as Empty rather than failing the file'
+
+$roots = @($projectsT.GetMethod('Roots', $Static).Invoke($null, @()))
+Check ($roots -contains $customRoot) 'the custom projects folder is read from the preferences'
+Check ($roots -contains [string]$projectsT.GetProperty('DefaultRoot', $Static).GetValue($null)) 'and the default is kept too - a move leaves projects in both places'
+Check ($roots.Count -eq ($roots | Select-Object -Unique).Count) 'no duplicate roots'
+
+# The document in the moved project resolves through the registry, with no
+# root scanning at all.
+$namesT.GetField('RootsOverride', $Static).SetValue($null, $null)
+$n3 = Resolve $docC
+Check ($n3 -ne $null -and $n3.Project -eq 'Acme (PROJ-003) moved') "a document in a moved project is found (got '$(if ($n3) {$n3.Project})')"
+Check ($n3 -ne $null -and $n3.ProjectId.ToString('D') -eq $projectC) 'and carries the project GUID from the register'
+Check ($n3 -ne $null -and $n3.Document -eq 'PROJ-001 spec.docx') 'and the document file name'
+
+# A stale row - the folder deleted since - must not stop the search.
+Check ((Resolve ([Guid]::NewGuid())) -eq $null) 'a stale row is skipped rather than throwing'
+$projectsT.GetField('RegistryPathOverride', $Static).SetValue($null, $null)
+$projectsT.GetField('PreferencesPathOverride', $Static).SetValue($null, $null)
+$namesT.GetField('RootsOverride', $Static).SetValue($null, [string[]]@($root))
+
 # ---- 6. the file stamp the editor watches -----------------------------------------
 $stamp = $sharedT.GetProperty('FileStamp', $Static)
 $before = [long]$stamp.GetValue($null)
@@ -195,6 +249,8 @@ Check ([long]$stamp.GetValue($null) -eq $after) 'and reading it twice gives the 
 
 } finally {
     $namesT.GetField('RootsOverride', $Static).SetValue($null, $null)
+    $projectsT.GetField('RegistryPathOverride', $Static).SetValue($null, $null)
+    $projectsT.GetField('PreferencesPathOverride', $Static).SetValue($null, $null)
     try { Remove-Item -Recurse -Force $root -ErrorAction SilentlyContinue } catch { }
 }
 

@@ -1,4 +1,4 @@
-# Runs a harness with the user's real shared settings protected.
+﻿# Runs a harness with the user's real shared settings protected.
 #
 # Constructing an EngineContext seeds the shared settings file from whatever
 # settings object it was handed. In memoQ that is the user's MT settings
@@ -26,6 +26,12 @@ $protected = @(
 # The fetched model lists, one file per provider. Named by enumeration rather
 # than by hand: the set grows with the providers, and a harness that fetches
 # would otherwise leave a real list replaced by a test one.
+# The bridge handshake. A harness that loads the plugin starts its own bridge
+# and writes this file with its own PID; when it exits, the file names a dead
+# process and the editor reports "memoQ appears to have closed" against a memoQ
+# that is running perfectly well. Measured, not hypothetical - it happened.
+$protected += 'D:\Supervertaler\memoq\runtime\bridge.json'
+
 $modelDir = Join-Path $dir 'models'
 if (Test-Path $modelDir) {
     $protected += (Get-ChildItem -Path $modelDir -Filter *.txt -File | ForEach-Object { $_.FullName })

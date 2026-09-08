@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Collections.Generic;
 using System.Diagnostics;
 using System.IO;
@@ -74,6 +74,25 @@ namespace Supervertaler.MemoQ.Core
                 _instance?.WriteHandshakeIfOurs();
             }
         }
+
+        /// <summary>
+        /// Starts the listener without aiming it, for the director's Initialize.
+        ///
+        /// <para>memoQ calls Initialize on every module it loads, when it starts,
+        /// whatever any project's settings say. Everything else here used to hang
+        /// off <see cref="SupervertalerMTEngine"/>'s constructor, and memoQ builds
+        /// an engine only for a project that actually uses the MT plugin - so on a
+        /// project checked out from a server with "MT plugins are currently
+        /// disabled", no engine was ever built, no bridge ever listened, and the
+        /// editor, the live document link and the MCP server all had nothing to
+        /// talk to. The preview tool still ran and still posted; there was simply
+        /// no one at the other end.</para>
+        ///
+        /// <para>The context is deliberately not set here. Aiming stays in
+        /// <see cref="Aim"/>, from a session, because memoQ builds throwaway
+        /// engines - see the note there.</para>
+        /// </summary>
+        public static void EnsureStarted() => EnsureStarted(null);
 
         public static void EnsureStarted(EngineContext context)
         {
