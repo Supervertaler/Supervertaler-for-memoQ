@@ -102,7 +102,9 @@ $decoy = Join-Path $root 'decoy.mprx'
 Check ((ProjectIdOf $decoy).ToString('D') -eq $projectB) 'an ID before CoreInfo is not mistaken for the project GUID'
 
 # ---- 2. document GUID -> project -----------------------------------------------
-$resolve = $namesT.GetMethod('Resolve', $Static)
+# Resolve is overloaded (id, and id + document name), so the overload has to
+# be named or GetMethod throws AmbiguousMatchException.
+$resolve = $namesT.GetMethod('Resolve', $Static, $null, [type[]]@([Guid]), $null)
 function Resolve($g) { return $resolve.Invoke($null, [object[]]@([Guid]$g)) }
 $n = Resolve $docA
 Check ($n -ne $null -and $n.Project -eq 'Acme (PROJ-001)') "the document resolves to its project folder (got '$(if ($n) {$n.Project})')"
@@ -114,7 +116,9 @@ Check ((Resolve ([Guid]::NewGuid())) -eq $null) 'a document no folder holds reso
 Check ((Resolve ([Guid]::Empty)) -eq $null) 'the empty GUID resolves to nothing'
 
 # ---- 3. following it -------------------------------------------------------------
-$follow = $followT.GetMethod('Follow', $Static)
+# Follow is overloaded too - name the two-argument one.
+$engineCtT = $plugin.GetType('Supervertaler.MemoQ.Core.EngineContext')
+$follow = $followT.GetMethod('Follow', $Static, $null, [type[]]@([Guid], $engineCtT), $null)
 function Follow($g, $ctx) { return $follow.Invoke($null, [object[]]@([Guid]$g, $ctx)) }
 $bankProject = $sharedT.GetProperty('MemoryBankProject', $Static)
 $bankName = $sharedT.GetProperty('MemoryBankProjectName', $Static)
@@ -233,6 +237,59 @@ Check ($n3 -ne $null -and $n3.Document -eq 'PROJ-001 spec.docx') 'and the docume
 
 # A stale row - the folder deleted since - must not stop the search.
 Check ((Resolve ([Guid]::NewGuid())) -eq $null) 'a stale row is skipped rather than throwing'
+$projectsT.GetField('RegistryPathOverride', $Static).SetValue($null, $null)
+$projectsT.GetField('PreferencesPathOverride', $Static).SetValue($null, $null)
+$namesT.GetField('RootsOverride', $Static).SetValue($null, [string[]]@($root))
+
+# ---- 5c. a project checked out from a server -------------------------------------
+# Measured on a real one: such a project stores its documents under short codes
+# (5kaxk-skl, zwu24-prv) and NO folder anywhere carries the document's id, so
+# the id alone can never place it. Its project.mprx does list DocumentNames,
+# and the preview tool reports the same name.
+$server = Join-Path $root 'Acme (PROJ-004) from the server'
+New-Item -ItemType Directory -Path (Join-Path $server 'Documents\5kaxk-skl') -Force | Out-Null
+New-Item -ItemType Directory -Path (Join-Path $server 'Documents\zwu24-prv') -Force | Out-Null
+$projectD = [Guid]::NewGuid().ToString('D')
+$serverDoc = 'PROJ-004 one-pager.docx'
+[IO.File]::WriteAllText((Join-Path $server 'project.mprx'),
+    '<?xml version="1.0"?><ProjectInfo><CoreInfo><Name>Acme (PROJ-004) from the server</Name><ID>' + $projectD + '</ID><Type>LocalCopy</Type></CoreInfo>' +
+    '<NumOfDocuments>2</NumOfDocuments><DocumentNames><string>Screenshot 2026-09-03 at 16.05.docx</string><string>' + $serverDoc + '</string></DocumentNames></ProjectInfo>',
+    (New-Object Text.UTF8Encoding($false)))
+
+$blocks2 = $blocks + @("<ProjectAdminInfoBlock><CoreInfo><Name>Acme (PROJ-004) from the server</Name><ID>$projectD</ID></CoreInfo><ProjectFolderFullPath>$server</ProjectFolderFullPath></ProjectAdminInfoBlock>")
+[IO.File]::WriteAllText($regPath, '<?xml version="1.0" encoding="utf-8"?><ArrayOfProjectAdminInfoBlock>' + ($blocks2 -join '') + '</ArrayOfProjectAdminInfoBlock>', (New-Object Text.UTF8Encoding($true)))
+$projectsT.GetField('RegistryPathOverride', $Static).SetValue($null, [string]$regPath)
+$projectsT.GetField('PreferencesPathOverride', $Static).SetValue($null, [string]$prefsPath)
+$namesT.GetField('RootsOverride', $Static).SetValue($null, $null)
+
+$byName = $projectsT.GetMethod('ByDocumentName', $Static)
+function ByName($n) { return $byName.Invoke($null, [object[]]@([string]$n)) }
+$e = ByName $serverDoc
+Check ($e -ne $null -and $e.Name -eq 'Acme (PROJ-004) from the server') "a document is placed by its name (got '$(if ($e) {$e.Name})')"
+Check ($e -ne $null -and $e.Id.ToString('D') -eq $projectD) 'and the project GUID comes with it'
+Check ((ByName 'PROJ-004 ONE-PAGER.DOCX') -ne $null) 'the name match ignores case'
+Check ((ByName 'nothing-like-it.docx') -eq $null) 'a name no project lists places nothing'
+Check ((ByName '') -eq $null -and (ByName $null) -eq $null) 'no name places nothing'
+
+# The id alone cannot place it - that is the whole point.
+$serverDocGuid = [Guid]::NewGuid()
+Check ((Resolve $serverDocGuid) -eq $null) 'the id alone finds nothing, as on a real checked-out project'
+$resolve2 = $namesT.GetMethod('Resolve', [type[]]@([Guid], [string]))
+$n4 = $resolve2.Invoke($null, [object[]]@([Guid]$serverDocGuid, [string]$serverDoc))
+Check ($n4 -ne $null -and $n4.Project -eq 'Acme (PROJ-004) from the server') 'the id plus the name does place it'
+Check ($n4 -ne $null -and $n4.Document -eq $serverDoc) 'and the document keeps its name'
+
+# Ambiguity is refused rather than guessed: naming the wrong project would file
+# a memory bank against the wrong client.
+$twin = Join-Path $root 'Acme (PROJ-005) another client'
+New-Item -ItemType Directory -Path $twin -Force | Out-Null
+[IO.File]::WriteAllText((Join-Path $twin 'project.mprx'),
+    '<?xml version="1.0"?><ProjectInfo><CoreInfo><Name>Acme (PROJ-005) another client</Name><ID>' + [Guid]::NewGuid().ToString('D') + '</ID></CoreInfo>' +
+    '<DocumentNames><string>' + $serverDoc + '</string></DocumentNames></ProjectInfo>', (New-Object Text.UTF8Encoding($false)))
+$blocks3 = $blocks2 + @("<ProjectAdminInfoBlock><CoreInfo><Name>Acme (PROJ-005) another client</Name><ID>$([Guid]::NewGuid())</ID></CoreInfo><ProjectFolderFullPath>$twin</ProjectFolderFullPath></ProjectAdminInfoBlock>")
+[IO.File]::WriteAllText($regPath, '<?xml version="1.0" encoding="utf-8"?><ArrayOfProjectAdminInfoBlock>' + ($blocks3 -join '') + '</ArrayOfProjectAdminInfoBlock>', (New-Object Text.UTF8Encoding($true)))
+Check ((ByName $serverDoc) -eq $null) 'two projects holding a file of that name: neither is named, rather than the wrong one'
+
 $projectsT.GetField('RegistryPathOverride', $Static).SetValue($null, $null)
 $projectsT.GetField('PreferencesPathOverride', $Static).SetValue($null, $null)
 $namesT.GetField('RootsOverride', $Static).SetValue($null, [string[]]@($root))

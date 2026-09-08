@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
@@ -141,14 +141,73 @@ namespace Supervertaler.MemoQ.Core
                 .ToList();
         }
 
+        /// <summary>
+        /// The project whose <c>project.mprx</c> lists a document of this file
+        /// name - the only way to place a document of a project checked out from
+        /// a server.
+        ///
+        /// <para>A local project stores each document under
+        /// <c>Documents\&lt;document guid&gt;</c>, which is what makes a document
+        /// findable by the id memoQ hands the plugin. A checked-out server project
+        /// does not: its documents live under short codes (<c>5kaxk-skl</c>,
+        /// <c>zwu24-prv</c>) and no folder anywhere carries the document's id.
+        /// Measured on a real one. What the project file does carry is
+        /// <c>DocumentNames</c>, and the preview tool reports the same name.</para>
+        ///
+        /// <para>Null unless exactly one project matches. Two projects holding a
+        /// file of the same name is entirely possible - "Annex A.docx" - and
+        /// naming the wrong project would file a memory bank against the wrong
+        /// client, which is worse than not naming it at all.</para>
+        /// </summary>
+        public static Entry ByDocumentName(string documentName)
+        {
+            var wanted = (documentName ?? "").Trim();
+            if (wanted.Length == 0) return null;
+
+            Entry found = null;
+
+            foreach (var project in Registered())
+            {
+                if (string.IsNullOrWhiteSpace(project.Folder)) continue;
+
+                try
+                {
+                    var mprx = Path.Combine(project.Folder, "project.mprx");
+                    if (!File.Exists(mprx)) continue;
+
+                    var text = File.ReadAllText(mprx);
+                    var start = text.IndexOf("<DocumentNames>", StringComparison.Ordinal);
+                    if (start < 0) continue;
+                    var end = text.IndexOf("</DocumentNames>", start, StringComparison.Ordinal);
+                    if (end < 0) continue;
+
+                    var names = Regex.Matches(text.Substring(start, end - start), "<string>([^<]*)</string>")
+                        .Cast<Match>()
+                        .Select(m => Unescape(m.Groups[1].Value).Trim());
+
+                    if (!names.Any(n => string.Equals(n, wanted, StringComparison.OrdinalIgnoreCase))) continue;
+
+                    if (found != null) return null;   // ambiguous: two projects hold a file of this name
+                    found = project;
+                }
+                catch (Exception ex)
+                {
+                    PluginLog.Write("MemoQProjects: could not read the documents of " + project.Folder, ex);
+                }
+            }
+
+            return found;
+        }
+
         /// <summary>First value of an element, unescaped enough for a path or a name.</summary>
         private static string Value(string xml, string element)
         {
             var m = Regex.Match(xml ?? "", "<" + element + ">([^<]*)</" + element + ">");
-            if (!m.Success) return null;
-            return m.Groups[1].Value
-                .Replace("&amp;", "&").Replace("&lt;", "<").Replace("&gt;", ">")
-                .Replace("&quot;", "\"").Replace("&apos;", "'");
+            return m.Success ? Unescape(m.Groups[1].Value) : null;
         }
+
+        private static string Unescape(string s) => (s ?? "")
+            .Replace("&amp;", "&").Replace("&lt;", "<").Replace("&gt;", ">")
+            .Replace("&quot;", "\"").Replace("&apos;", "'");
     }
 }

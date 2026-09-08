@@ -53,7 +53,15 @@ namespace Supervertaler.MemoQ.Core
             return MemoQProjects.Roots();
         }
 
-        public static Names Resolve(Guid documentId)
+        public static Names Resolve(Guid documentId) => Resolve(documentId, null);
+
+        /// <summary>
+        /// <paramref name="documentName"/> is the file name the preview tool
+        /// reports. It is the only way to place a document of a project checked
+        /// out from a server, whose documents are not stored under their id - see
+        /// <see cref="MemoQProjects.ByDocumentName"/>.
+        /// </summary>
+        public static Names Resolve(Guid documentId, string documentName)
         {
             if (documentId == Guid.Empty) return null;
 
@@ -66,7 +74,7 @@ namespace Supervertaler.MemoQ.Core
             Names found = null;
             try
             {
-                found = Scan(documentId);
+                found = Scan(documentId) ?? ByName(documentName);
             }
             catch (Exception ex)
             {
@@ -79,6 +87,26 @@ namespace Supervertaler.MemoQ.Core
                 else _misses[documentId] = DateTime.UtcNow;
             }
             return found;
+        }
+
+        /// <summary>
+        /// The project that lists a document of this name. Only reached when no
+        /// folder carries the document's id, which is the normal state of a
+        /// project checked out from a server.
+        /// </summary>
+        private static Names ByName(string documentName)
+        {
+            if (string.IsNullOrWhiteSpace(documentName)) return null;
+
+            var project = MemoQProjects.ByDocumentName(documentName);
+            if (project == null) return null;
+
+            return new Names
+            {
+                Project = string.IsNullOrWhiteSpace(project.Name) ? Path.GetFileName(project.Folder) : project.Name,
+                ProjectId = project.Id != Guid.Empty ? project.Id : ProjectIdOf(Path.Combine(project.Folder, "project.mprx")),
+                Document = documentName.Trim()
+            };
         }
 
         private static Names Scan(Guid documentId)

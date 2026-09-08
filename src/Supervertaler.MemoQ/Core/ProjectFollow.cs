@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 
 namespace Supervertaler.MemoQ.Core
 {
@@ -25,11 +25,19 @@ namespace Supervertaler.MemoQ.Core
         /// what it resolved to, or null when no project folder holds the
         /// document – nothing is changed in that case.
         /// </summary>
-        public static DocumentNames.Names Follow(Guid documentGuid, EngineContext context)
+        public static DocumentNames.Names Follow(Guid documentGuid, EngineContext context) =>
+            Follow(documentGuid, null, context);
+
+        /// <summary>
+        /// <paramref name="documentName"/> is what places a document of a project
+        /// checked out from a server, whose documents are not stored under their
+        /// id - see <see cref="MemoQProjects.ByDocumentName"/>.
+        /// </summary>
+        public static DocumentNames.Names Follow(Guid documentGuid, string documentName, EngineContext context)
         {
             if (documentGuid == Guid.Empty) return null;
 
-            var names = DocumentNames.Resolve(documentGuid);
+            var names = DocumentNames.Resolve(documentGuid, documentName);
             if (names == null || names.ProjectId == Guid.Empty) return names;
 
             if (context != null) context.NoteProject(names.ProjectId, names.Project);

@@ -1478,9 +1478,9 @@ namespace Supervertaler.MemoQ.Core
         // target text, the active row, the document's real name.
 
         /// <summary>The project follows what the preview tool shows - see <see cref="ProjectFollow"/>.</summary>
-        private void Follow(Guid documentGuid)
+        private void Follow(Guid documentGuid, string documentName)
         {
-            try { ProjectFollow.Follow(documentGuid, _context); }
+            try { ProjectFollow.Follow(documentGuid, documentName, _context); }
             catch (Exception ex) { PluginLog.Write("ProjectFollow failed", ex); }
         }
 
@@ -1505,13 +1505,20 @@ namespace Supervertaler.MemoQ.Core
             }
 
             DocumentNames.Names names = null;
-            try { names = ProjectFollow.Follow(doc.DocumentGuid, _context); }
+            try { names = ProjectFollow.Follow(doc.DocumentGuid, doc.DocumentName, _context); }
             catch (Exception ex) { PluginLog.Write("ProjectFollow failed", ex); }
 
             if (names == null || names.ProjectId == Guid.Empty)
             {
+                // Deliberately not "the folder was not found": the folder is
+                // found. A project checked out from a memoQ server stores its
+                // documents under short codes rather than under the id memoQ
+                // hands a plugin, so nothing on disk carries that id, and the
+                // document's own name is then the only way to place it.
                 TryWrite(ctx, 200, Json(new OkBody { Ok = false, Message = "memoQ is showing '" + (doc.DocumentName ?? doc.DocumentGuid.ToString("D"))
-                    + "' but no project folder under My memoQ Projects holds it, so the project cannot be named. If memoQ keeps its projects somewhere else, that folder is not searched yet." }));
+                    + "', but none of the projects memoQ knows about holds a document of that name or id, so the project cannot be named. "
+                    + "This happens when two projects hold a file of the same name - naming one of them could file a memory bank against the wrong client - "
+                    + "and on a project checked out from a server whose documents memoQ stores without their id." }));
                 return;
             }
 
@@ -1540,7 +1547,8 @@ namespace Supervertaler.MemoQ.Core
 
             PreviewStore.Upsert(parts);
             PreviewStore.NoteTool(true);
-            Follow(parts.Select(x => x.DocumentGuid).FirstOrDefault(g => g != Guid.Empty));
+            var shownPart = parts.FirstOrDefault(x => x.DocumentGuid != Guid.Empty);
+            if (shownPart != null) Follow(shownPart.DocumentGuid, shownPart.DocumentName);
             TryWrite(ctx, 200, Json(new OkBody { Ok = true, Message = parts.Count + " part(s) stored" }));
         }
 
@@ -1579,7 +1587,7 @@ namespace Supervertaler.MemoQ.Core
                 TargetStart = req.TargetStart, TargetLength = req.TargetLength,
                 AtUtc = DateTime.UtcNow
             });
-            if (req?.Part != null && Guid.TryParse(req.Part.DocumentGuid, out var shown)) Follow(shown);
+            if (req?.Part != null && Guid.TryParse(req.Part.DocumentGuid, out var shown)) Follow(shown, req.Part.DocumentName);
             PreviewStore.NoteTool(true);
             TryWrite(ctx, 200, Json(new OkBody { Ok = true }));
         }
