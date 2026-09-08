@@ -211,6 +211,19 @@ if [[ "$DEPLOY_OK" == "1" ]]; then
     # could shadow memoQ's. It lives under the user's profile instead, needs no
     # elevation, and memoQ finds it by the AutoStartupCommand it registered.
     PREVIEW_SRC="$ROOT/src/Supervertaler.MemoQ.Preview/bin/$CONFIG"
+
+    # BUILD it, do not merely copy whatever is in bin. The preview tool is not
+    # in the solution, so the build above never touches it: for five days this
+    # script reported "OK …Preview.exe" while deploying a binary from 3
+    # September, and the size check could not tell, because a stale file is a
+    # perfectly consistent size. Found when an icon change did not reach the
+    # tray. --no-incremental because a change to a RESOURCE (the .ico) does not
+    # mark the assembly stale on its own.
+    PREVIEW_PROJ="$ROOT/src/Supervertaler.MemoQ.Preview/Supervertaler.MemoQ.Preview.csproj"
+    if ! MSYS2_ARG_CONV_EXCL="-p:" dotnet build "$(cygpath -w "$PREVIEW_PROJ")"             -c "$CONFIG" -v quiet --no-incremental "-p:MemoQPath=$MEMOQ_WIN" >/dev/null 2>&1; then
+        echo "ERROR: the preview tool failed to build; not deploying it" >&2
+        DEPLOY_OK=0
+    fi
     # Into the shared Supervertaler data folder (D:\Supervertaler here), NOT
     # %LocalAppData%. Claude Code runs as a packaged (MSIX) app, and packaged
     # apps get file-system virtualisation: anything written under AppData from
