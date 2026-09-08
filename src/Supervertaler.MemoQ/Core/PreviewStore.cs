@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Threading;
@@ -155,40 +155,30 @@ namespace Supervertaler.MemoQ.Core
         }
 
         /// <summary>
-        /// The view a part belongs to: its id with the trailing row number
-        /// removed.
+        /// The rows of several documents, one document after another, each in its
+        /// own order.
         ///
-        /// <para>Part ids are <c>mQ-default-&lt;view guid&gt;-&lt;n&gt;</c>. A memoQ
-        /// VIEW - several files merged into one editor tab - keeps each file's own
-        /// <c>DocumentGuid</c> but gives every part of the view the same view
-        /// guid, and numbers them once across the whole view. Measured on a
-        /// three-file view: three documents of 82, 10 and 27 paragraphs, one view
-        /// guid, and no two parts sharing a number. So this is both "which tab is
-        /// this" and, ordered by the number, the order the view shows.</para>
+        /// <para>For a memoQ VIEW - several files merged into one editor tab.
+        /// Measured over the live bridge on a real three-file view: memoQ reports
+        /// it as three separate documents, each with its own DocumentGuid, its own
+        /// import path AND its own view guid in its part ids. Nothing in the
+        /// payload says "these three are one tab", so the set is named by the
+        /// caller rather than inferred here. Within a document the part number is
+        /// the order; between documents the caller's order stands, because memoQ
+        /// offers none.</para>
         /// </summary>
-        public static string ViewOf(string partId)
+        public static List<Part> RowsOfDocuments(IList<Guid> documentGuids)
         {
-            if (string.IsNullOrEmpty(partId)) return null;
-            var i = partId.LastIndexOf('-');
-            return i > 0 ? partId.Substring(0, i) : partId;
-        }
+            var result = new List<Part>();
+            if (documentGuids == null) return result;
 
-        /// <summary>
-        /// Every part of one view, in the order memoQ shows them - across all the
-        /// documents the view merges.
-        /// </summary>
-        public static List<Part> RowsOfView(string viewId)
-        {
-            if (string.IsNullOrEmpty(viewId)) return new List<Part>();
-
-            lock (_lock)
+            foreach (var guid in documentGuids)
             {
-                return _parts.Values
-                    .Where(p => string.Equals(ViewOf(p.PartId), viewId, StringComparison.Ordinal))
-                    .OrderBy(p => NumericTail(p.PartId))
-                    .ThenBy(p => p.PartId, StringComparer.Ordinal)
-                    .ToList();
+                if (guid == Guid.Empty) continue;
+                result.AddRange(Rows(guid));
             }
+
+            return result;
         }
 
         public static int Count(Guid documentGuid)

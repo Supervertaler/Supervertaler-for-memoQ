@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Collections.Generic;
 using System.Diagnostics;
 using System.Drawing;
@@ -145,8 +145,6 @@ namespace Supervertaler.PromptEditor
             [DataMember(Name = "langPair")] public string LangPair { get; set; }
             [DataMember(Name = "rows")] public int Rows { get; set; }
             [DataMember(Name = "importPath")] public string ImportPath { get; set; }
-            /// <summary>Which editor tab it is showing in. Documents of one memoQ view share it.</summary>
-            [DataMember(Name = "viewId")] public string ViewId { get; set; }
         }
 
         [DataContract]
@@ -165,8 +163,8 @@ namespace Supervertaler.PromptEditor
             /// <summary>Synthesised from the live document link rather than captured. Not sent over the wire.</summary>
             public bool IsLive;
 
-            /// <summary>Every document of one memoQ view, rather than a single file. Not sent over the wire.</summary>
-            public bool IsView;
+            /// <summary>Several documents drafted from together, rather than a single file. Not sent over the wire.</summary>
+            public bool IsSet;
             [DataMember(Name = "domain")] public string Domain { get; set; }
             [DataMember(Name = "subject")] public string Subject { get; set; }
             [DataMember(Name = "capturedSegments")] public int CapturedSegments { get; set; }
@@ -447,29 +445,33 @@ namespace Supervertaler.PromptEditor
                     });
                 }
 
-                // A memoQ VIEW is several files merged into one editor tab. memoQ
-                // still reports each file separately - measured: a three-file view
-                // arrives as three documents of 82, 10 and 27 paragraphs sharing
-                // one view id - so without this a prompt for that tab would be
-                // drafted from one file of the three, and the two small ones are
-                // far too thin to classify on their own.
-                foreach (var view in (project?.LiveDocuments ?? new MemoQBridgeClient.LiveDocumentInfo[0])
-                             .Where(l => !string.IsNullOrWhiteSpace(l.ViewId))
-                             .GroupBy(l => l.ViewId, StringComparer.Ordinal)
-                             .Where(g => g.Count() > 1))
+                // Everything memoQ is showing, as one body of text. A memoQ VIEW
+                // merges several files into one editor tab, and memoQ reports it
+                // as separate documents with nothing saying they belong together -
+                // measured on a real three-file view: 82, 10 and 27 paragraphs,
+                // three document ids, three import paths, three view guids. So the
+                // set is named here rather than detected, and the entry says
+                // plainly what it covers: the documents listed beneath it. Without
+                // it, a prompt for such a tab is drafted from one file of the
+                // three, and the two small ones are far too thin on their own.
+                var open = (project?.LiveDocuments ?? new MemoQBridgeClient.LiveDocumentInfo[0])
+                    .Where(l => !string.IsNullOrWhiteSpace(l.DocumentGuid))
+                    .ToList();
+
+                if (open.Count > 1)
                 {
                     captured.Insert(0, new MemoQBridgeClient.DocumentInfo
                     {
-                        Key = "view:" + view.Key,
-                        DocumentName = "All " + view.Count() + " documents in this view",
-                        CapturedSegments = view.Sum(l => l.Rows),
+                        Key = "docs:" + string.Join(",", open.Select(l => l.DocumentGuid)),
+                        DocumentName = "All " + open.Count + " documents memoQ is showing",
+                        CapturedSegments = open.Sum(l => l.Rows),
                         IsLive = true,
-                        IsView = true,
+                        IsSet = true,
                     });
                 }
 
                 _documents = captured
-                    .OrderBy(d => d.IsView ? 0 : 1)
+                    .OrderBy(d => d.IsSet ? 0 : 1)
                     .ThenBy(d => d.IsVisitedBucket ? 1 : 0)
                     .ToArray();
 
@@ -477,7 +479,7 @@ namespace Supervertaler.PromptEditor
                 foreach (var d in _documents)
                 {
                     string label;
-                    if (d.IsView)
+                    if (d.IsSet)
                         label = d.DocumentName;
                     else if (d.IsVisitedBucket)
                         label = "Rows you have visited in the editor (any MT engine)";

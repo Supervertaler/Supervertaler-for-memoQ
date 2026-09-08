@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Collections.Generic;
 using System.Diagnostics;
 using System.IO;
@@ -403,8 +403,7 @@ namespace Supervertaler.MemoQ.Core
                         DocumentName = d.DocumentName,
                         LangPair = (d.SourceLangCode ?? "?") + "-" + (d.TargetLangCode ?? "?"),
                         Rows = PreviewStore.Count(d.DocumentGuid),
-                        ImportPath = d.ImportPath,
-                        ViewId = PreviewStore.ViewOf(d.PartId)
+                        ImportPath = d.ImportPath
                     }).ToArray()
                     : null,
                 Note = docs.Count == 0
@@ -1166,15 +1165,25 @@ namespace Supervertaler.MemoQ.Core
             // The live document, when the preview tool is connected and holds more
             // than has been captured. Its rows are paragraphs, which is if anything
             // better for classification than a scattering of sentences.
-            // "view:<view guid>" - every document of one memoQ view, which is
-            // several files merged into one editor tab. Each keeps its own
-            // DocumentGuid, so without this a prompt drafted for such a tab would
-            // see one file of the three.
-            const string viewPrefix = "view:";
+            // "docs:<guid>,<guid>,..." - several documents drafted from as one.
+            // A memoQ VIEW is several files merged into one editor tab, and memoQ
+            // reports it as separate documents with nothing marking them as one
+            // tab: measured on a real three-file view, each carried its own view
+            // guid as well as its own id and import path. So the caller names the
+            // set and this only concatenates it, in the order given, each
+            // document's paragraphs in its own order.
+            const string setPrefix = "docs:";
             if (PreviewStore.ToolAlive
-                && (documentKey ?? "").StartsWith(viewPrefix, StringComparison.Ordinal))
+                && (documentKey ?? "").StartsWith(setPrefix, StringComparison.Ordinal))
             {
-                var rows = PreviewStore.RowsOfView(documentKey.Substring(viewPrefix.Length));
+                var wantedDocs = documentKey.Substring(setPrefix.Length)
+                    .Split(new[] { ',' }, StringSplitOptions.RemoveEmptyEntries)
+                    .Select(part => { Guid g; return Guid.TryParse(part.Trim(), out g) ? g : Guid.Empty; })
+                    .Where(g => g != Guid.Empty)
+                    .Distinct()
+                    .ToList();
+
+                var rows = PreviewStore.RowsOfDocuments(wantedDocs);
                 if (rows.Count > 0)
                 {
                     result.Sources = rows
@@ -1184,8 +1193,8 @@ namespace Supervertaler.MemoQ.Core
                     result.Plain = result.Sources.Select(TagBridge.StripTagMarkers).ToList();
 
                     var documents = rows.Select(r => r.DocumentGuid).Distinct().Count();
-                    result.DocumentName = documents + (documents == 1 ? " document" : " documents") + " in this view";
-                    result.Origin = "the live document (every document in the view)";
+                    result.DocumentName = documents + (documents == 1 ? " document" : " documents") + " memoQ is showing";
+                    result.Origin = "the live document (" + documents + " documents together)";
                     result.Unit = "paragraphs";
 
                     var head = rows[0];
@@ -2200,8 +2209,6 @@ namespace Supervertaler.MemoQ.Core
             [DataMember(Name = "langPair")] public string LangPair { get; set; }
             [DataMember(Name = "rows")] public int Rows { get; set; }
             [DataMember(Name = "importPath", EmitDefaultValue = false)] public string ImportPath { get; set; }
-            /// <summary>Which editor tab this document is showing in. Documents of one memoQ view share it.</summary>
-            [DataMember(Name = "viewId", EmitDefaultValue = false)] public string ViewId { get; set; }
         }
 
         [DataContract]
