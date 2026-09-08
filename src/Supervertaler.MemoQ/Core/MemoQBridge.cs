@@ -267,6 +267,7 @@ namespace Supervertaler.MemoQ.Core
                 case "GET /v1/tools": HandleTools(ctx); return;
                 case "GET /v1/help": HandleHelp(ctx); return;
                 case "GET /v1/project": HandleProject(ctx); return;
+                case "POST /v1/project/sync": HandleProjectSync(ctx); return;
                 case "GET /v1/segments": HandleSegments(ctx); return;
                 case "GET /v1/confirmed": HandleConfirmed(ctx); return;
                 case "GET /v1/terms": HandleTermLookup(ctx); return;
@@ -1457,6 +1458,47 @@ namespace Supervertaler.MemoQ.Core
         // token. What it forwards is exactly what the MT SDK never showed us:
         // target text, the active row, the document's real name.
 
+        /// <summary>The project follows what the preview tool shows - see <see cref="ProjectFollow"/>.</summary>
+        private void Follow(Guid documentGuid)
+        {
+            try { ProjectFollow.Follow(documentGuid, _context); }
+            catch (Exception ex) { PluginLog.Write("ProjectFollow failed", ex); }
+        }
+
+        /// <summary>
+        /// The editor's "Sync with memoQ": take the project from the document
+        /// memoQ is showing, now, and say what happened in words the panel can show.
+        /// </summary>
+        private void HandleProjectSync(HttpListenerContext ctx)
+        {
+            if (!PreviewStore.ToolAlive)
+            {
+                TryWrite(ctx, 200, Json(new OkBody { Ok = false, Message = "The live document link is not connected, so memoQ has not said which document is open. "
+                    + "memoQ starts the Supervertaler preview tool itself when it is enabled under Options \u2192 External preview tools; then click into a segment and try again." }));
+                return;
+            }
+
+            var doc = PreviewStore.Documents().FirstOrDefault(d => d.DocumentGuid != Guid.Empty);
+            if (doc == null)
+            {
+                TryWrite(ctx, 200, Json(new OkBody { Ok = false, Message = "The live document link is connected but memoQ has not reported a document yet. Click into a segment in memoQ and try again." }));
+                return;
+            }
+
+            DocumentNames.Names names = null;
+            try { names = ProjectFollow.Follow(doc.DocumentGuid, _context); }
+            catch (Exception ex) { PluginLog.Write("ProjectFollow failed", ex); }
+
+            if (names == null || names.ProjectId == Guid.Empty)
+            {
+                TryWrite(ctx, 200, Json(new OkBody { Ok = false, Message = "memoQ is showing '" + (doc.DocumentName ?? doc.DocumentGuid.ToString("D"))
+                    + "' but no project folder under My memoQ Projects holds it, so the project cannot be named. If memoQ keeps its projects somewhere else, that folder is not searched yet." }));
+                return;
+            }
+
+            TryWrite(ctx, 200, Json(new OkBody { Ok = true, Message = "Project: " + names.Project }));
+        }
+
         private void HandlePreviewContent(HttpListenerContext ctx)
         {
             var req = Read<PreviewContentRequest>(ctx);
@@ -1479,6 +1521,7 @@ namespace Supervertaler.MemoQ.Core
 
             PreviewStore.Upsert(parts);
             PreviewStore.NoteTool(true);
+            Follow(parts.Select(x => x.DocumentGuid).FirstOrDefault(g => g != Guid.Empty));
             TryWrite(ctx, 200, Json(new OkBody { Ok = true, Message = parts.Count + " part(s) stored" }));
         }
 
@@ -1517,6 +1560,7 @@ namespace Supervertaler.MemoQ.Core
                 TargetStart = req.TargetStart, TargetLength = req.TargetLength,
                 AtUtc = DateTime.UtcNow
             });
+            if (req?.Part != null && Guid.TryParse(req.Part.DocumentGuid, out var shown)) Follow(shown);
             PreviewStore.NoteTool(true);
             TryWrite(ctx, 200, Json(new OkBody { Ok = true }));
         }

@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using System.Collections.Generic;
 using System.Globalization;
 using System.IO;
@@ -102,6 +102,12 @@ namespace Supervertaler.MemoQ.Core
         }
 
         internal static string Path => System.IO.Path.Combine(Directory, "shared.txt");
+
+        /// <summary>The file's write time as ticks (0 when absent): what a watcher compares, without parsing anything.</summary>
+        public static long FileStamp
+        {
+            get { try { var p = Path; return File.Exists(p) ? File.GetLastWriteTimeUtc(p).Ticks : 0; } catch { return 0; } }
+        }
 
         /// <summary>
         /// The inline instructions, in their own file because they are the one

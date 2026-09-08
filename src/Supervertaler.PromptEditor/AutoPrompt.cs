@@ -180,6 +180,22 @@ namespace Supervertaler.PromptEditor
             return m.Success ? Regex.Unescape(m.Groups[1].Value) : "Glossary activated.";
         }
 
+        /// <summary>Have the plugin take the project from the document memoQ is showing. Key: whether it could; Value: what it says.</summary>
+        public async Task<KeyValuePair<bool, string>> SyncProjectAsync()
+        {
+            var body = new StringContent("{}", Encoding.UTF8, "application/json");
+            var response = await _http.PostAsync(_base + "/v1/project/sync", body).ConfigureAwait(false);
+            var json = await response.Content.ReadAsStringAsync().ConfigureAwait(false);
+            if (!response.IsSuccessStatusCode)
+            {
+                var err = Deserialize<ErrorBody>(json);
+                throw new InvalidOperationException(err?.Error ?? ("HTTP " + (int)response.StatusCode));
+            }
+            var ok = Regex.IsMatch(json, "\"ok\"\\s*:\\s*true");
+            var m = Regex.Match(json, "\"message\"\\s*:\\s*\"((?:[^\"\\\\]|\\\\.)*)\"");
+            return new KeyValuePair<bool, string>(ok, m.Success ? Regex.Unescape(m.Groups[1].Value) : "");
+        }
+
         private static string JsonString(string s)
         {
             var sb = new StringBuilder("\"");

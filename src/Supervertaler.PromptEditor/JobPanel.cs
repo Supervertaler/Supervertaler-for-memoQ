@@ -28,7 +28,7 @@ namespace Supervertaler.PromptEditor
         private readonly TableLayoutPanel _rows = new TableLayoutPanel();
         private readonly ToolTip _tips = new ToolTip { AutoPopDelay = 30000, InitialDelay = 400 };
 
-        public JobPanel(Action chooseModel, Action choosePrompt, Action chooseGlossary, Action chooseBank)
+        public JobPanel(Action chooseModel, Action choosePrompt, Action chooseGlossary, Action chooseBank, Action syncProject = null)
         {
             if (chooseModel == null) throw new ArgumentNullException(nameof(chooseModel));
             if (choosePrompt == null) throw new ArgumentNullException(nameof(choosePrompt));
@@ -73,6 +73,14 @@ namespace Supervertaler.PromptEditor
                 Margin = new Padding(0, 2, 0, 4),
                 Font = new Font(Font, FontStyle.Bold)
             }, null, isProject: true);
+
+            // The name is the way to correct it: a click asks memoQ, through the
+            // live link, which project it is showing.
+            if (syncProject != null)
+            {
+                Project.Value.Cursor = Cursors.Hand;
+                Project.Value.Click += (s, e) => syncProject();
+            }
 
             // Top-docked children stack in reverse order of addition, so the
             // project name goes in last to end up above the rows.

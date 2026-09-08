@@ -227,6 +227,7 @@ namespace Supervertaler.PromptEditor
             // and the website call it, so a user who has read about AutoPrompt
             // finds a button called AutoPrompt. The tooltip carries the
             // explanation the name drops.
+            memoqMenu.DropDownItems.Add(new ToolStripMenuItem("&Sync with memoQ now", null, (s, e) => SyncProject()));
             memoqMenu.DropDownItems.Add(new ToolStripMenuItem("&Images…", null, (s, e) => ShowImages()));
             memoqMenu.DropDownItems.Add(new ToolStripMenuItem("&AutoPrompt…", null, (s, e) => DraftForProject())
             {
@@ -402,7 +403,7 @@ namespace Supervertaler.PromptEditor
             // after the prompt, and banks are named after projects, those four
             // names were usually the same words four times over. The labels that
             // said which was which were the greyed-out part.
-            _job = new JobPanel(ChooseModel, ChoosePrompt, ChooseGlossary, ChooseMemoryBank);
+            _job = new JobPanel(ChooseModel, ChoosePrompt, ChooseGlossary, ChooseMemoryBank, SyncProject);
             _prompt = _job.Prompt;
             _glossary = _job.Glossary;
             _memoryBank = _job.Bank;
@@ -410,6 +411,7 @@ namespace Supervertaler.PromptEditor
             _project = _job.Project;
 
             RefreshProject();
+            StartSettingsWatch();
             RefreshModel();
             RefreshPrompt();
             RefreshGlossary();
@@ -2016,10 +2018,10 @@ namespace Supervertaler.PromptEditor
             {
                 _project.Text = "no project yet";
                 _project.ForeColor = Color.Firebrick;
-                _project.ToolTipText = Tip("memoQ has not sent a translation request yet, so the "
-                    + "plugin does not know which project is open. Select Supervertaler as the MT "
-                    + "engine in the project and click into a segment. Until then a memory bank "
-                    + "chosen here is recorded against whichever project came before.");
+                _project.ToolTipText = Tip("memoQ has not said which project is open yet. Click here to take it "
+                    + "from the document memoQ is showing (through the live document link), or click into "
+                    + "a segment with Supervertaler as the MT engine. Until then a memory bank chosen here "
+                    + "is recorded against whichever project came before.");
                 return;
             }
 
@@ -2028,7 +2030,8 @@ namespace Supervertaler.PromptEditor
             // than two lines.
             _project.Text = name;
             _project.ForeColor = SystemColors.ControlText;
-            _project.ToolTipText = Tip("The memoQ project these apply to:\r\n" + name);
+            _project.ToolTipText = Tip("The memoQ project these apply to:\r\n" + name
+                + "\r\n\r\nClick to sync with the project open in memoQ.");
         }
 
         /// <summary>
@@ -2118,6 +2121,71 @@ namespace Supervertaler.PromptEditor
 
         /// <summary>Shows which glossary is active, or says plainly that none is.</summary>
         /// <summary>How Supervertaler translates: the same settings memoQ shows.</summary>
+        // shared.txt is written by the plugin inside memoQ - a project switch,
+        // the bank following it - and by memoQ's own dialog. Activated catches
+        // the window coming to the front; this catches a change while it
+        // already is. One stat call every two seconds, nothing parsed until
+        // the stamp moves.
+        private readonly Timer _settingsWatch = new Timer { Interval = 2000 };
+        private long _settingsStamp;
+        private string _bankSeen;
+
+        private void StartSettingsWatch()
+        {
+            _settingsStamp = SharedSettings.FileStamp;
+            _bankSeen = SharedSettings.MemoryBank ?? "";
+            _settingsWatch.Tick += (s, e) =>
+            {
+                var stamp = SharedSettings.FileStamp;
+                if (stamp == _settingsStamp) return;
+                _settingsStamp = stamp;
+
+                RefreshProject();
+                RefreshMemoryBank();
+                RefreshModel();
+                RefreshMcpMode();
+
+                // The tree marks the active bank; rebuild it only when that moved.
+                var bank = SharedSettings.MemoryBank ?? "";
+                if (!string.Equals(bank, _bankSeen, StringComparison.Ordinal)) { _bankSeen = bank; LoadTree(); }
+            };
+            _settingsWatch.Start();
+        }
+
+        /// <summary>
+        /// Asks the plugin to take the project from the document memoQ is
+        /// showing. The plugin does this by itself on every preview report;
+        /// this is for the translator who is looking at a name they know is
+        /// wrong and wants it right now, with a reason when it cannot be.
+        /// </summary>
+        private async void SyncProject()
+        {
+            var bridge = MemoQBridgeClient.TryConnect(out var reason);
+            if (bridge == null)
+            {
+                _status.Text = reason;
+                MessageBox.Show(this, reason, "Sync with memoQ", MessageBoxButtons.OK, MessageBoxIcon.Information);
+                return;
+            }
+
+            try
+            {
+                KeyValuePair<bool, string> result;
+                using (bridge) result = await bridge.SyncProjectAsync();
+
+                RefreshProject();
+                RefreshMemoryBank();
+                LoadTree();
+                _status.Text = result.Value;
+                if (!result.Key)
+                    MessageBox.Show(this, result.Value, "Sync with memoQ", MessageBoxButtons.OK, MessageBoxIcon.Information);
+            }
+            catch (Exception ex)
+            {
+                _status.Text = "Sync with memoQ failed: " + ex.Message;
+            }
+        }
+
         // Kept for the life of the window: a description run outlives the
         // dialog that started it, and the host is what it reports back through.
         private ImagesHost _images;

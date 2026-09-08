@@ -315,9 +315,37 @@ namespace Supervertaler.MemoQ.Core
             get { lock (_lock) return _currentProject; }
         }
 
+        private void ApplyProjectMemoryBank(Guid project, string name = null)
+        {
+            if (RecordProject(project, name ?? ProjectNameOrNull())) DropKbCache();
+        }
+
         /// <summary>
-        /// Point SuperMemory at the bank this project uses, when memoQ starts
-        /// sending work from a different one.
+        /// The live document link's way in: the preview tool has shown a document
+        /// of <paramref name="project"/>. The same switch a translation request
+        /// from it would cause, so the panel, the memory bank and the log follow
+        /// whichever channel speaks first.
+        /// </summary>
+        public void NoteProject(Guid project, string name)
+        {
+            if (project == Guid.Empty) return;
+            lock (_lock)
+            {
+                if (project != _currentProject) _currentProject = project;
+            }
+            if (RecordProject(project, name)) DropKbCache();
+        }
+
+        /// <summary>
+        /// Writes which project is open and points SuperMemory at the bank this
+        /// project uses. Returns true when the bank changed. Static because the
+        /// bridge can learn the project from the preview tool before memoQ has
+        /// built an engine – on a project with MT plugins disabled it never does.
+        ///
+        /// <para>Only a change of project touches the bank. This runs on every
+        /// cursor move once the preview tool is connected, and the bank chooser
+        /// writes the bank before it records the choice, so re-applying the
+        /// recorded choice on every call would race the chooser and revert it.</para>
         ///
         /// <para>A project with no bank recorded CLEARS to none rather than
         /// inheriting the last one used. A bank supplies one client's
@@ -331,33 +359,48 @@ namespace Supervertaler.MemoQ.Core
         /// <para>Either outcome is written to the log, so the activity window
         /// reports the change rather than it happening underneath you.</para>
         /// </summary>
-        private void ApplyProjectMemoryBank(Guid project)
+        public static bool RecordProject(Guid project, string name)
         {
             try
             {
+                if (project == Guid.Empty) return false;
+                var id = project.ToString("D");
+                var label = (name ?? string.Empty).Trim();
+
                 // What the two settings dialogs record a later choice against.
                 // memoQ opens them from an MT settings resource and tells them
                 // nothing about projects, so this is their only way to know.
-                SharedSettings.MemoryBankProject = project.ToString("D");
-                SharedSettings.MemoryBankProjectName = ProjectNameOrNull() ?? string.Empty;
+                var sameProject = string.Equals(SharedSettings.MemoryBankProject ?? string.Empty, id, StringComparison.OrdinalIgnoreCase);
+                if (sameProject)
+                {
+                    // The name can arrive later than the GUID (the folder was not
+                    // found on the first request); fill it in, touch nothing else.
+                    if (label.Length > 0 && !string.Equals((SharedSettings.MemoryBankProjectName ?? string.Empty).Trim(), label, StringComparison.Ordinal))
+                        SharedSettings.MemoryBankProjectName = label;
+                    return false;
+                }
+
+                SharedSettings.MemoryBankProject = id;
+                SharedSettings.MemoryBankProjectName = label;
 
                 var wanted = MemoryBankChoice.ForProject(project) ?? string.Empty;
                 var current = SharedSettings.MemoryBank ?? string.Empty;
-                if (string.Equals(wanted, current, StringComparison.Ordinal)) return;
+                if (string.Equals(wanted, current, StringComparison.Ordinal)) return false;
 
                 SharedSettings.MemoryBank = wanted;
-                DropKbCache();
 
-                var where = ProjectLabel();
+                var where = label.Length == 0 ? "this project" : "project " + Quote(label);
                 PluginLog.Write(wanted.Length > 0
                     ? "SuperMemory: " + where + " uses memory bank " + Quote(wanted)
                     : "SuperMemory: no memory bank is set for " + where + ", so it contributes "
                       + "nothing. The previous project's bank is deliberately not carried over - "
                       + "it would supply another client's terminology without saying so.");
+                return true;
             }
             catch (Exception ex)
             {
                 PluginLog.Write("Could not apply the memory bank for this project", ex);
+                return false;
             }
         }
 
