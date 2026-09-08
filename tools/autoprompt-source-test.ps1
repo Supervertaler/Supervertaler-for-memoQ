@@ -114,6 +114,64 @@ $fallback = $resolve.Invoke($bridge, [object[]]@([string][Guid]::NewGuid().ToStr
 $fallbackSources = $fallback.GetType().GetField('Sources').GetValue($fallback)
 Write-Host "$(if ($fallbackSources.Count -eq 0) {'PASS'} else {'FAIL'}) a key naming no live document draws nothing rather than the wrong document: $($fallbackSources.Count)"
 
+# ---- 2c. a memoQ view: several files in one tab ---------------------------
+# Measured on a real one: a three-file view arrives as THREE documents, each
+# keeping its own DocumentGuid, all sharing one view guid in their part ids and
+# numbered once across the whole view. Drafting for such a tab must see all of
+# them, in the order the view shows.
+$viewId = 'mQ-default-2f2c0347-9ddb-4a1e-8c31-5b7e0f2a44d1'
+$viewDocs = @([Guid]::NewGuid(), [Guid]::NewGuid(), [Guid]::NewGuid())
+$viewParts = [Activator]::CreateInstance($listType)
+$n = 0
+# Interleaved deliberately: the view's order is the part number, not the
+# document. Ordering by document would reorder the text under the model.
+foreach ($i in 1..9) {
+    $n++
+    $p = [Activator]::CreateInstance($partType)
+    $partType.GetField('PartId').SetValue($p, "$viewId-$n")
+    $partType.GetField('DocumentGuid').SetValue($p, $viewDocs[$i % 3])
+    $partType.GetField('DocumentName').SetValue($p, "File $($i % 3).docx")
+    $partType.GetField('SourceLangCode').SetValue($p, 'eng-GB')
+    $partType.GetField('TargetLangCode').SetValue($p, 'dut-NL')
+    $partType.GetField('Source').SetValue($p, "View paragraph $n.")
+    $partType.GetField('Target').SetValue($p, '')
+    $viewParts.Add($p)
+}
+$argv3 = [object[]]::new(1); $argv3[0] = $viewParts
+$preview.GetMethod('Upsert').Invoke($null, $argv3) | Out-Null
+$preview.GetMethod('NoteTool').Invoke($null, [object[]]@($true)) | Out-Null
+
+$viewOf = $preview.GetMethod('ViewOf')
+Write-Host "$(if ($viewOf.Invoke($null, [object[]]@("$viewId-7")) -eq $viewId) {'PASS'} else {'FAIL'}) the view id is the part id without its row number"
+Write-Host "$(if ($viewOf.Invoke($null, [object[]]@('')) -eq $null) {'PASS'} else {'FAIL'}) an empty part id has no view"
+
+$rowsOfView = $preview.GetMethod('RowsOfView')
+$vr = $rowsOfView.Invoke($null, [object[]]@([string]$viewId))
+Write-Host "$(if ($vr.Count -eq 9) {'PASS'} else {'FAIL'}) every document of the view is gathered: $($vr.Count) of 9"
+$inOrder = $true
+for ($i = 0; $i -lt $vr.Count; $i++) { if ($vr[$i].Source -ne "View paragraph $($i + 1).") { $inOrder = $false } }
+Write-Host "$(if ($inOrder) {'PASS'} else {'FAIL'}) in the view's own order, not grouped by document"
+Write-Host "$(if ($rowsOfView.Invoke($null, [object[]]@('no-such-view')).Count -eq 0) {'PASS'} else {'FAIL'}) an unknown view gathers nothing"
+
+$viaView = $resolve.Invoke($bridge, [object[]]@("view:$viewId"))
+$viaViewSources = $viaView.GetType().GetField('Sources').GetValue($viaView)
+$viaViewName = $viaView.GetType().GetField('DocumentName').GetValue($viaView)
+$viaViewUnit = $viaView.GetType().GetField('Unit').GetValue($viaView)
+Write-Host "$(if ($viaViewSources.Count -eq 9) {'PASS'} else {'FAIL'}) AutoPrompt drafts from the whole view: $($viaViewSources.Count) paragraph(s)"
+Write-Host "$(if ($viaViewName -eq '3 documents in this view') {'PASS'} else {'FAIL'}) named by what it is: '$viaViewName'"
+Write-Host "$(if ($viaViewUnit -eq 'paragraphs') {'PASS'} else {'FAIL'}) counted in paragraphs: '$viaViewUnit'"
+
+# One document of the view, chosen on its own, is still just that document.
+$one = $resolve.Invoke($bridge, [object[]]@([string]$viewDocs[0].ToString('D')))
+$oneSources = $one.GetType().GetField('Sources').GetValue($one)
+Write-Host "$(if ($oneSources.Count -eq 3) {'PASS'} else {'FAIL'}) choosing one file of the view still gives that file alone: $($oneSources.Count)"
+
+# A view key the tool knows nothing about must not fall through to some other
+# document - a prompt drafted against the wrong text is worse than none.
+$badView = $resolve.Invoke($bridge, [object[]]@('view:mQ-default-nothing-like-it'))
+$badViewSources = $badView.GetType().GetField('Sources').GetValue($badView)
+Write-Host "$(if ($badViewSources.Count -eq 0) {'PASS'} else {'FAIL'}) an unknown view draws nothing rather than another document: $($badViewSources.Count)"
+
 # ---- 3. with the tool disconnected it must not invent anything -----------
 $preview.GetMethod('NoteTool').Invoke($null, [object[]]@($false)) | Out-Null
 $src2 = $resolve.Invoke($bridge, [object[]]@('no-such-capture-key'))

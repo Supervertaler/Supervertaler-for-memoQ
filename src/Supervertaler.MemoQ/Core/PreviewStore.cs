@@ -154,6 +154,43 @@ namespace Supervertaler.MemoQ.Core
             }
         }
 
+        /// <summary>
+        /// The view a part belongs to: its id with the trailing row number
+        /// removed.
+        ///
+        /// <para>Part ids are <c>mQ-default-&lt;view guid&gt;-&lt;n&gt;</c>. A memoQ
+        /// VIEW - several files merged into one editor tab - keeps each file's own
+        /// <c>DocumentGuid</c> but gives every part of the view the same view
+        /// guid, and numbers them once across the whole view. Measured on a
+        /// three-file view: three documents of 82, 10 and 27 paragraphs, one view
+        /// guid, and no two parts sharing a number. So this is both "which tab is
+        /// this" and, ordered by the number, the order the view shows.</para>
+        /// </summary>
+        public static string ViewOf(string partId)
+        {
+            if (string.IsNullOrEmpty(partId)) return null;
+            var i = partId.LastIndexOf('-');
+            return i > 0 ? partId.Substring(0, i) : partId;
+        }
+
+        /// <summary>
+        /// Every part of one view, in the order memoQ shows them - across all the
+        /// documents the view merges.
+        /// </summary>
+        public static List<Part> RowsOfView(string viewId)
+        {
+            if (string.IsNullOrEmpty(viewId)) return new List<Part>();
+
+            lock (_lock)
+            {
+                return _parts.Values
+                    .Where(p => string.Equals(ViewOf(p.PartId), viewId, StringComparison.Ordinal))
+                    .OrderBy(p => NumericTail(p.PartId))
+                    .ThenBy(p => p.PartId, StringComparer.Ordinal)
+                    .ToList();
+            }
+        }
+
         public static int Count(Guid documentGuid)
         {
             lock (_lock) return _parts.Values.Count(p => p.DocumentGuid == documentGuid);

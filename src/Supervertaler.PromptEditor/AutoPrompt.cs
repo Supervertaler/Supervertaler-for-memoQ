@@ -145,6 +145,8 @@ namespace Supervertaler.PromptEditor
             [DataMember(Name = "langPair")] public string LangPair { get; set; }
             [DataMember(Name = "rows")] public int Rows { get; set; }
             [DataMember(Name = "importPath")] public string ImportPath { get; set; }
+            /// <summary>Which editor tab it is showing in. Documents of one memoQ view share it.</summary>
+            [DataMember(Name = "viewId")] public string ViewId { get; set; }
         }
 
         [DataContract]
@@ -162,6 +164,9 @@ namespace Supervertaler.PromptEditor
 
             /// <summary>Synthesised from the live document link rather than captured. Not sent over the wire.</summary>
             public bool IsLive;
+
+            /// <summary>Every document of one memoQ view, rather than a single file. Not sent over the wire.</summary>
+            public bool IsView;
             [DataMember(Name = "domain")] public string Domain { get; set; }
             [DataMember(Name = "subject")] public string Subject { get; set; }
             [DataMember(Name = "capturedSegments")] public int CapturedSegments { get; set; }
@@ -442,15 +447,39 @@ namespace Supervertaler.PromptEditor
                     });
                 }
 
+                // A memoQ VIEW is several files merged into one editor tab. memoQ
+                // still reports each file separately - measured: a three-file view
+                // arrives as three documents of 82, 10 and 27 paragraphs sharing
+                // one view id - so without this a prompt for that tab would be
+                // drafted from one file of the three, and the two small ones are
+                // far too thin to classify on their own.
+                foreach (var view in (project?.LiveDocuments ?? new MemoQBridgeClient.LiveDocumentInfo[0])
+                             .Where(l => !string.IsNullOrWhiteSpace(l.ViewId))
+                             .GroupBy(l => l.ViewId, StringComparer.Ordinal)
+                             .Where(g => g.Count() > 1))
+                {
+                    captured.Insert(0, new MemoQBridgeClient.DocumentInfo
+                    {
+                        Key = "view:" + view.Key,
+                        DocumentName = "All " + view.Count() + " documents in this view",
+                        CapturedSegments = view.Sum(l => l.Rows),
+                        IsLive = true,
+                        IsView = true,
+                    });
+                }
+
                 _documents = captured
-                    .OrderBy(d => d.IsVisitedBucket ? 1 : 0)
+                    .OrderBy(d => d.IsView ? 0 : 1)
+                    .ThenBy(d => d.IsVisitedBucket ? 1 : 0)
                     .ToArray();
 
                 _document.Items.Clear();
                 foreach (var d in _documents)
                 {
                     string label;
-                    if (d.IsVisitedBucket)
+                    if (d.IsView)
+                        label = d.DocumentName;
+                    else if (d.IsVisitedBucket)
                         label = "Rows you have visited in the editor (any MT engine)";
                     else if (!string.IsNullOrWhiteSpace(d.DocumentName))
                     {

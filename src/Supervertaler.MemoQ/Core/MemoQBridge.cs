@@ -403,7 +403,8 @@ namespace Supervertaler.MemoQ.Core
                         DocumentName = d.DocumentName,
                         LangPair = (d.SourceLangCode ?? "?") + "-" + (d.TargetLangCode ?? "?"),
                         Rows = PreviewStore.Count(d.DocumentGuid),
-                        ImportPath = d.ImportPath
+                        ImportPath = d.ImportPath,
+                        ViewId = PreviewStore.ViewOf(d.PartId)
                     }).ToArray()
                     : null,
                 Note = docs.Count == 0
@@ -1165,6 +1166,36 @@ namespace Supervertaler.MemoQ.Core
             // The live document, when the preview tool is connected and holds more
             // than has been captured. Its rows are paragraphs, which is if anything
             // better for classification than a scattering of sentences.
+            // "view:<view guid>" - every document of one memoQ view, which is
+            // several files merged into one editor tab. Each keeps its own
+            // DocumentGuid, so without this a prompt drafted for such a tab would
+            // see one file of the three.
+            const string viewPrefix = "view:";
+            if (PreviewStore.ToolAlive
+                && (documentKey ?? "").StartsWith(viewPrefix, StringComparison.Ordinal))
+            {
+                var rows = PreviewStore.RowsOfView(documentKey.Substring(viewPrefix.Length));
+                if (rows.Count > 0)
+                {
+                    result.Sources = rows
+                        .Select(r => r.Source ?? string.Empty)
+                        .Where(t => !string.IsNullOrWhiteSpace(TagBridge.StripTagMarkers(t)))
+                        .ToList();
+                    result.Plain = result.Sources.Select(TagBridge.StripTagMarkers).ToList();
+
+                    var documents = rows.Select(r => r.DocumentGuid).Distinct().Count();
+                    result.DocumentName = documents + (documents == 1 ? " document" : " documents") + " in this view";
+                    result.Origin = "the live document (every document in the view)";
+                    result.Unit = "paragraphs";
+
+                    var head = rows[0];
+                    result.SourceLangCode = head.SourceLangCode ?? result.SourceLangCode;
+                    result.TargetLangCode = head.TargetLangCode ?? result.TargetLangCode;
+                }
+
+                return result;
+            }
+
             if (PreviewStore.ToolAlive)
             {
                 // The document the caller actually chose, when the key names one
@@ -2169,6 +2200,8 @@ namespace Supervertaler.MemoQ.Core
             [DataMember(Name = "langPair")] public string LangPair { get; set; }
             [DataMember(Name = "rows")] public int Rows { get; set; }
             [DataMember(Name = "importPath", EmitDefaultValue = false)] public string ImportPath { get; set; }
+            /// <summary>Which editor tab this document is showing in. Documents of one memoQ view share it.</summary>
+            [DataMember(Name = "viewId", EmitDefaultValue = false)] public string ViewId { get; set; }
         }
 
         [DataContract]
