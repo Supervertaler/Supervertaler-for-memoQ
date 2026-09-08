@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Collections.Generic;
 using System.Diagnostics;
 using System.Drawing;
@@ -6,6 +6,21 @@ using System.Windows.Forms;
 
 namespace Supervertaler.PromptEditor
 {
+    /// <summary>
+    /// One document as the list shows it: what it is called, and what was found
+    /// in it. Two fields rather than one sentence because they are two columns –
+    /// a name and a finding run together read as one long line, and the eye has
+    /// to hunt for where the name ends on every row.
+    /// </summary>
+    internal sealed class DocumentRow
+    {
+        public string Name;
+        public string Note;
+
+        public DocumentRow() { }
+        public DocumentRow(string name, string note) { Name = name; Note = note; }
+    }
+
     /// <summary>
     /// Everything the Images dialog shows, gathered once by the host. A plain
     /// bag so the dialog can be laid out and probed without memoQ, a bridge or
@@ -20,13 +35,13 @@ namespace Supervertaler.PromptEditor
         /// <summary>Why nothing is listed, when nothing is. Shown instead of a bare "no documents".</summary>
         public string WhyNoDocuments;
 
-        /// <summary>Documents with images, one line each, the way the list shows them.</summary>
-        public List<string> Documents = new List<string>();
+        /// <summary>Documents with images, one row each.</summary>
+        public List<DocumentRow> Documents = new List<DocumentRow>();
         public int DocumentCount;
-        public List<string> DocumentsWithoutImagesNames = new List<string>();
+        public List<DocumentRow> DocumentsWithoutImages = new List<DocumentRow>();
 
-        /// <summary>Documents memoQ named whose file is not on this disk: "name (recorded path)".</summary>
-        public List<string> DocumentsWithoutFile = new List<string>();
+        /// <summary>Documents memoQ named whose file is not on this disk.</summary>
+        public List<DocumentRow> DocumentsWithoutFile = new List<DocumentRow>();
 
         public int TotalImages;
         public int Labelled;
@@ -39,6 +54,8 @@ namespace Supervertaler.PromptEditor
         public string BankName;
         public bool BankIsShared;
         public string SuggestedBankName;
+        /// <summary>A bank of that name is already there – the offer reuses it rather than making one.</summary>
+        public bool SuggestedBankExists;
         public bool ProjectIsStale;
 
         public string FiguresPath;
@@ -82,7 +99,7 @@ namespace Supervertaler.PromptEditor
         private ImagesState _state;
 
         private readonly Label _lblDocs;
-        private readonly ListBox _lstDocs;
+        private readonly ListView _lstDocs;
         private readonly LinkLabel _lnkLocate, _lnkAddFile, _lnkCreateBank;
         private readonly TableLayoutPanel _root;
         private readonly Button _btnExtract;
@@ -103,15 +120,15 @@ namespace Supervertaler.PromptEditor
             ProjectName = "Acme PROJ-001 (application as filed, drawings as filed, sequence listing)",
             Folder = @"D:\Supervertaler\memory-banks\acme-proj-001-application-as-filed\figures",
             FolderImages = 14,
-            Documents = new List<string>
+            Documents = new List<DocumentRow>
             {
-                "20260713-PROJ-001 Figures as filed.docx: 14 images, 14 with a figure label, paired by position and checked",
-                "20260713-PROJ-001 Figures as filed, sheet 2 of a very long document title that wraps.docx: 9 images, 9 with a figure label, labels taken from nearby text",
-                "Annex A.docx: 2 images, 0 with a figure label",
+                new DocumentRow("20260713-PROJ-001 Figures as filed.docx", "14 images, 14 with a figure label, paired by position and checked"),
+                new DocumentRow("20260713-PROJ-001 Figures as filed, sheet 2 of a very long document title.docx", "9 images, 9 with a figure label, labels taken from nearby text"),
+                new DocumentRow("Annex A.docx", "2 images, 0 with a figure label"),
             },
             DocumentCount = 12,
-            DocumentsWithoutImagesNames = new List<string> { "Annex F.docx", "Annex G.docx" },
-            DocumentsWithoutFile = new List<string> { @"Annex H.docx (memoQ recorded C:\_In\source\eng\Annex H.docx, which is not on this computer)" },
+            DocumentsWithoutImages = new List<DocumentRow> { new DocumentRow("Annex F.docx", "no images"), new DocumentRow("Annex G.docx", "no images") },
+            DocumentsWithoutFile = new List<DocumentRow> { new DocumentRow("Annex H.docx", @"not on this computer - memoQ recorded C:\_In\source\eng\Annex H.docx") },
             BankIsShared = true, SuggestedBankName = "acme-proj-001-application-as-filed",
             TotalImages = 25, Labelled = 23,
             BankName = "_shared",
@@ -152,14 +169,21 @@ namespace Supervertaler.PromptEditor
             _lblDocs = Wrap("");
             root.Controls.Add(_lblDocs, 1, row); row++;
 
-            // A list, not a label: a project can hold sixty files, and every one
-            // of them should be findable here, the ones with images first.
-            _lstDocs = new ListBox
+            // A table, not a list of sentences: a project can hold sixty files,
+            // and a name run together with its finding makes the eye hunt for
+            // where the name ends on every row. Two columns line the names up
+            // under each other and the findings under each other.
+            _lstDocs = new ListView
             {
-                Dock = DockStyle.Fill, Height = 84, IntegralHeight = false,
-                HorizontalScrollbar = true, SelectionMode = SelectionMode.None,
+                Dock = DockStyle.Fill, Height = 96,
+                View = View.Details, FullRowSelect = true, MultiSelect = false,
+                HeaderStyle = ColumnHeaderStyle.Nonclickable, HideSelection = true,
+                ShowItemToolTips = true,
                 Margin = new Padding(0, 0, 0, 6)
             };
+            _lstDocs.Columns.Add("Document", 240);
+            _lstDocs.Columns.Add("Images", 420);
+            _lstDocs.SizeChanged += (s, e) => FitColumns();
             root.Controls.Add(_lstDocs, 1, row); row++;
 
             // Two ways to name a file memoQ has not. "Locate" is for a document
@@ -301,9 +325,11 @@ namespace Supervertaler.PromptEditor
             _lblDocs.Text = DocumentsText(st);
             _lstDocs.BeginUpdate();
             _lstDocs.Items.Clear();
-            foreach (var d in st.Documents) _lstDocs.Items.Add(d);
-            foreach (var d in st.DocumentsWithoutImagesNames) _lstDocs.Items.Add(d + ": no images");
-            foreach (var d in st.DocumentsWithoutFile) _lstDocs.Items.Add(d + " \u2013 not found; locate it below");
+            // The ones with images first: they are what the two steps act on.
+            foreach (var d in st.Documents) AddRow(d, SystemColors.ControlText);
+            foreach (var d in st.DocumentsWithoutImages) AddRow(d, SystemColors.GrayText);
+            foreach (var d in st.DocumentsWithoutFile) AddRow(d, Color.Firebrick);
+            FitColumns();
             _lstDocs.EndUpdate();
             _lstDocs.Visible = _lstDocs.Items.Count > 0;
 
@@ -333,7 +359,8 @@ namespace Supervertaler.PromptEditor
 
             // Result
             _lnkCreateBank.Visible = !haveBank && !string.IsNullOrEmpty(st.SuggestedBankName) && !st.ProjectIsStale && _actions.CreateProjectBank != null;
-            _lnkCreateBank.Text = "Create memory bank \u201c" + st.SuggestedBankName + "\u201d for this project and switch to it";
+            _lnkCreateBank.Text = (st.SuggestedBankExists ? "Use memory bank \u201c" : "Create memory bank \u201c")
+                                + st.SuggestedBankName + "\u201d for this project and switch to it";
             if (st.ProjectIsStale)
                 _lblResult.Text = "The project shown was last seen in an earlier memoQ session, so a bank made for it now could be filed against the wrong project. Click into a segment in memoQ, then reopen this window.";
             else if (st.BankIsShared)
@@ -365,8 +392,45 @@ namespace Supervertaler.PromptEditor
                      + (st.DocumentsWithoutFile.Count > 0 ? "; " + Plural(st.DocumentsWithoutFile.Count, "document") + " could not be read because the file is not on this computer." : ".");
             var withImages = st.Documents.Count;
             return Plural(st.TotalImages, "image") + " in " + withImages + " of " + Plural(st.DocumentCount, "document")
-                 + (st.DocumentsWithoutImagesNames.Count > 0 ? "; the rest have none." : ".")
+                 + (st.DocumentsWithoutImages.Count > 0 ? "; the rest have none." : ".")
                  + (st.DocumentsWithoutFile.Count > 0 ? " " + Plural(st.DocumentsWithoutFile.Count, "document") + " not on this computer." : "");
+        }
+
+        private void AddRow(DocumentRow row, Color colour)
+        {
+            var item = new ListViewItem(row?.Name ?? "") { ForeColor = colour };
+            item.SubItems.Add(row?.Note ?? "");
+            item.ToolTipText = (row?.Name ?? "") + "  \u2013  " + (row?.Note ?? "");
+            _lstDocs.Items.Add(item);
+        }
+
+        /// <summary>
+        /// The name column as wide as the longest name, up to a share of the
+        /// width; the findings take the rest. Auto-size alone gives a name
+        /// column that pushes the findings off the right edge on a project of
+        /// long file names, which is the case this table exists to serve.
+        /// </summary>
+        private bool _fitting;
+
+        private void FitColumns()
+        {
+            // Re-entrancy guard, and not a theoretical one: a column width set
+            // inside the ListView's own SizeChanged re-enters the layout and the
+            // handler fires again, which hung the harness outright rather than
+            // failing anything.
+            if (_fitting || _lstDocs.Items.Count == 0) return;
+            _fitting = true;
+            try { FitColumnsCore(); }
+            finally { _fitting = false; }
+        }
+
+        private void FitColumnsCore()
+        {
+            _lstDocs.Columns[0].Width = -1;
+            var available = _lstDocs.ClientSize.Width;
+            var cap = Math.Max(140, (int)(available * 0.42));
+            if (_lstDocs.Columns[0].Width > cap) _lstDocs.Columns[0].Width = cap;
+            _lstDocs.Columns[1].Width = Math.Max(140, available - _lstDocs.Columns[0].Width - 4);
         }
 
         internal static string Plural(int n, string noun) => n + " " + noun + (n == 1 ? "" : "s");

@@ -224,10 +224,21 @@ Put $st 'WhyNoDocuments' 'memoQ is not running.'
 Check ((Text $st) -eq 'memoQ is not running.') 'nothing known, with a reason: the reason, verbatim'
 $st = NewState; Put $st 'DocumentCount' 3
 Check ((Text $st) -eq 'No images in the 3 documents listed.') "documents but no images (got '$(Text $st)')"
+$rowT = $editor.GetType('Supervertaler.PromptEditor.DocumentRow')
+function Row($name, $note) { return [Activator]::CreateInstance($rowT, [object[]]@([string]$name, [string]$note)) }
+function AddRow($st, $field, $name, $note) { $st.GetType().GetField($field).GetValue($st).Add((Row $name $note)) }
+
+# The name and the finding are separate fields, which is the point of the
+# table: run together, the eye has to hunt for where the name ends on every row.
+$r = Row 'Annex A.docx' '2 images'
+Check ($r.Name -eq 'Annex A.docx' -and $r.Note -eq '2 images') 'a row keeps the name and the finding apart'
+
 $st = NewState; Put $st 'DocumentCount' 12; Put $st 'TotalImages' 25
-$st.GetType().GetField('Documents').GetValue($st).Add('a'); $st.GetType().GetField('Documents').GetValue($st).Add('b'); $st.GetType().GetField('Documents').GetValue($st).Add('c')
-$st.GetType().GetField('DocumentsWithoutImagesNames').GetValue($st).Add('d')
-$st.GetType().GetField('DocumentsWithoutFile').GetValue($st).Add('e')
+AddRow $st 'Documents' 'a.docx' '9 images'
+AddRow $st 'Documents' 'b.docx' '9 images'
+AddRow $st 'Documents' 'c.docx' '7 images'
+AddRow $st 'DocumentsWithoutImages' 'd.docx' 'no images'
+AddRow $st 'DocumentsWithoutFile' 'e.docx' 'not on this computer' 
 Check ((Text $st) -eq '25 images in 3 of 12 documents; the rest have none. 1 document not on this computer.') "the full summary (got '$(Text $st)')"
 
 # ---- 5. what the dialog enables, shown off-screen -----------------------------
@@ -258,8 +269,8 @@ $d.Close()
 $st = NewState
 Put $st 'ProjectKnown' $true; Put $st 'ProjectName' 'Acme PROJ-001'; Put $st 'SuggestedBankName' 'acme-proj-001'
 Put $st 'DocumentCount' 2; Put $st 'TotalImages' 3; Put $st 'Labelled' 3
-$st.GetType().GetField('Documents').GetValue($st).Add('PROJ-001 figures.docx: 3 images, 3 with a figure label')
-$st.GetType().GetField('DocumentsWithoutFile').GetValue($st).Add('Annex.docx (memoQ recorded C:\_In\source\eng\Annex.docx, which is not on this computer)')
+AddRow $st 'Documents' 'PROJ-001 figures.docx' '3 images, 3 with a figure label'
+AddRow $st 'DocumentsWithoutFile' 'Annex.docx' 'not on this computer - memoQ recorded C:\_In\source\eng\Annex.docx' 
 Put $st 'BankName' 'acme-proj-001'; Put $st 'BankIsShared' $false
 Put $st 'Folder' (Join-Path $work 'figures'); Put $st 'FolderImages' 3
 Put $st 'ProviderName' 'Anthropic / claude-opus-5'
@@ -272,8 +283,14 @@ Check ((Ctl $d '_lblAnalyseNote').Text -like '3 AI requests to Anthropic / claud
 Check ((Ctl $d '_btnWrite').Enabled) 'the free alternative is enabled'
 Check (-not (Ctl $d '_lnkCreateBank').Visible) 'a project bank is active: no offer to create one'
 Check ((Ctl $d '_lblResult').Text -like 'No descriptions yet*acme-proj-001*') "Result says where figures.md would go (got '$((Ctl $d '_lblResult').Text)')"
-Check ((Ctl $d '_lstDocs').Items.Count -eq 2) 'the list holds the readable document and the missing one'
-Check ([string](Ctl $d '_lstDocs').Items[1] -like '*not found; locate it below') 'the missing one says what to do'
+$lst = Ctl $d '_lstDocs'
+Check ($lst.Items.Count -eq 2) 'the list holds the readable document and the missing one'
+Check ($lst.Columns.Count -eq 2) 'two columns: the name and what was found in it'
+Check ($lst.Items[0].Text -eq 'PROJ-001 figures.docx') "the first column is the name alone (got '$($lst.Items[0].Text)')"
+Check ($lst.Items[0].SubItems[1].Text -eq '3 images, 3 with a figure label') 'and the second is the finding alone'
+Check ($lst.Items[1].Text -eq 'Annex.docx' -and $lst.Items[1].SubItems[1].Text -like 'not on this computer*') 'the missing one names the file in its own column'
+Check ($lst.Columns[0].Width + $lst.Columns[1].Width -le $lst.ClientSize.Width + 8) 'the columns fit the width rather than pushing the finding off the edge'
+Check ($lst.Columns[0].Width -le [Math]::Max(140, [int]($lst.ClientSize.Width * 0.42))) 'a long name cannot take more than its share of the width' 
 $d.Close()
 
 # Nothing extracted yet: the AI step waits for step 1.
@@ -306,6 +323,21 @@ $d = ShowDialog (Actions @('Extract', 'Analyse', 'WriteFigures')) $st
 Check (-not (Ctl $d '_btnAnalyse').Enabled -and -not (Ctl $d '_btnExtract').Enabled -and -not (Ctl $d '_btnWrite').Enabled) 'while a run is on, the three buttons are off'
 Check ((Ctl $d '_lblAnalyseNote').Text -eq 'Describing image 2 of 3 (PROJ-001 figures.docx)…') 'the note shows the progress line'
 $d.Close()
+
+# ---- 5b. the folder a new bank goes in ------------------------------------------
+# MemoryBanks.DirFor answers null for a bank that is not there - it exists to
+# say "no such bank", not to propose a path. Handing that null to
+# CreateDirectory was "Value cannot be null. Parameter name: path" on the one
+# case the Create link exists for: a project with no bank yet.
+$banksT = $editor.GetType('Supervertaler.Core.MemoryBanks')
+$dirFor = $banksT.GetMethod('DirFor', $Static)
+$rootProp = $banksT.GetProperty('Root', $Static)
+$sanitize = $banksT.GetMethod('Sanitize', $Static)
+$newName = [string]$sanitize.Invoke($null, [object[]]@('Example project (patent, en-nl)'))
+Check ($newName -eq 'Example project (patent, en-nl)') "a project name survives sanitising (got '$newName')"
+Check ($dirFor.Invoke($null, [object[]]@('bank-that-is-not-there-' + [Guid]::NewGuid().ToString('N'))) -eq $null) 'DirFor answers null for a bank that does not exist - the null that crashed it'
+$wouldBe = [IO.Path]::Combine([string]$rootProp.GetValue($null), $newName)
+Check (-not [string]::IsNullOrEmpty($wouldBe)) "so the folder to create is built from Root: $wouldBe"
 
 # ---- 6. structure context through a located file --------------------------------
 # The whole point of sharing the store: a server project's document, located

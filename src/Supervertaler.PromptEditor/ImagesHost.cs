@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Collections.Generic;
 using System.Diagnostics;
 using System.Drawing;
@@ -126,6 +126,7 @@ namespace Supervertaler.PromptEditor
             st.ProjectName = project.Length == 0 ? null : project;
             var suggested = st.ProjectName == null ? "" : MemoryBanks.Sanitize(st.ProjectName);
             st.SuggestedBankName = suggested.Length == 0 ? null : suggested;
+            st.SuggestedBankExists = suggested.Length > 0 && MemoryBanks.DirFor(suggested) != null;
 
             _docs = Gather(bank, out var why, out var connected);
             st.ProjectKnown = connected;
@@ -139,20 +140,21 @@ namespace Supervertaler.PromptEditor
             {
                 if (doc.Path == null)
                 {
-                    st.DocumentsWithoutFile.Add(doc.Name + (string.IsNullOrWhiteSpace(doc.RecordedPath)
-                        ? " (memoQ gave no file path)"
-                        : " (memoQ recorded " + doc.RecordedPath + ", which is not on this computer)"));
+                    st.DocumentsWithoutFile.Add(new DocumentRow(doc.Name, string.IsNullOrWhiteSpace(doc.RecordedPath)
+                        ? "not found - memoQ gave no file path; locate it below"
+                        : "not on this computer - memoQ recorded " + doc.RecordedPath));
                     continue;
                 }
 
                 var set = SetFor(doc.Path);
-                if (set.Images.Count == 0) { st.DocumentsWithoutImagesNames.Add(doc.Name); continue; }
+                if (set.Images.Count == 0) { st.DocumentsWithoutImages.Add(new DocumentRow(doc.Name, "no images")); continue; }
 
                 var labelled = set.Images.Count(i => !string.IsNullOrEmpty(i.Label));
                 st.TotalImages += set.Images.Count;
                 st.Labelled += labelled;
-                st.Documents.Add(doc.Name + ": " + ImagesDialog.Plural(set.Images.Count, "image") + ", "
-                                 + labelled + " with a figure label" + MethodNote(set));
+                st.Documents.Add(new DocumentRow(doc.Name,
+                    ImagesDialog.Plural(set.Images.Count, "image") + ", "
+                    + labelled + " with a figure label" + MethodNote(set)));
             }
 
             st.AnalysisRunning = Volatile.Read(ref _running) != 0;
@@ -683,16 +685,39 @@ namespace Supervertaler.PromptEditor
             var name = MemoryBanks.Sanitize(project);
             if (name.Length == 0) { Say("memoQ has not named a project yet."); return; }
 
-            var dir = MemoryBanks.DirFor(name);
-            if (!Directory.Exists(dir))
+            // DirFor resolves a name to a folder and answers null when there is
+            // none - it exists to say "no such bank", not to propose a path. So
+            // it is asked only whether one is already there, and the folder to
+            // create is built here. Handing its null to CreateDirectory was a
+            // "Value cannot be null. Parameter name: path" on the one case this
+            // link exists for: a project with no bank yet.
+            var existing = MemoryBanks.DirFor(name);
+            var dir = existing ?? Path.Combine(MemoryBanks.Root, name);
+
+            try
             {
                 Directory.CreateDirectory(dir);
                 Directory.CreateDirectory(Path.Combine(dir, "reference"));
+
+                // Only what is missing: reusing a bank must not overwrite the
+                // brief someone has already written in it.
                 foreach (var f in new[] { "brief.md", "terminology.md", "style.md" })
-                    File.WriteAllText(Path.Combine(dir, f), MemoryBanks.SkeletonBody(f, name), new UTF8Encoding(false));
+                {
+                    var file = Path.Combine(dir, f);
+                    if (!File.Exists(file))
+                        File.WriteAllText(file, MemoryBanks.SkeletonBody(f, name), new UTF8Encoding(false));
+                }
+            }
+            catch (Exception ex)
+            {
+                Say("Could not create the memory bank folder:" + Environment.NewLine + dir
+                    + Environment.NewLine + Environment.NewLine + ex.Message);
+                return;
             }
 
-            _activateBank?.Invoke(name);
+            // The folder's own name, which for a bank that already existed is
+            // however it was actually spelt.
+            _activateBank?.Invoke(Path.GetFileName(dir));
         }
 
         // ---- helpers -----------------------------------------------------------
