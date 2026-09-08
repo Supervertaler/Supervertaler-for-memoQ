@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Collections.Generic;
 using System.Diagnostics;
 using System.IO;
@@ -52,9 +52,17 @@ namespace Supervertaler.MemoQ.Preview
         /// <summary>
         /// The Supervertaler mark at the size the notification area wants.
         ///
-        /// Asking the .ico for SmallIconSize picks the frame Windows would
-        /// otherwise have to rescale, which matters here because the tray is
-        /// where this program lives: it has no window of its own.
+        /// Asking the .ico for a specific size picks a real frame rather than
+        /// leaving Windows to rescale one, which matters here because the tray
+        /// is where this program lives: it has no window of its own.
+        ///
+        /// <para>24 rather than SystemInformation.SmallIconSize (16 at 100%).
+        /// Windows 11 draws a notification-area icon into a cell larger than 16
+        /// and scales to fit, so a 16 handed over is a 16 enlarged. The .ico
+        /// carries a real 24 frame; giving the shell that leaves it either
+        /// exact or reducing, and reducing is the kinder of the two. Measured
+        /// first: the tray and the title bar were being handed byte-identical
+        /// images, so the softness was never in the file or in the loading.</para>
         /// </summary>
         private static System.Drawing.Icon TrayIcon()
         {
@@ -64,7 +72,7 @@ namespace Supervertaler.MemoQ.Preview
                     .GetManifestResourceStream("Supervertaler.MemoQ.Preview.Resources.sv-icon.ico"))
                 {
                     if (stream != null)
-                        return new System.Drawing.Icon(stream, SystemInformation.SmallIconSize);
+                        return new System.Drawing.Icon(stream, new System.Drawing.Size(24, 24));
                 }
             }
             catch (Exception ex)
