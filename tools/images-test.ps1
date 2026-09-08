@@ -181,6 +181,18 @@ $extract.Invoke($null, [object[]]@($docxPath, $false, [string]$flat)) | Out-Null
 $extract.Invoke($null, [object[]]@([string]$second, $false, [string]$flat)) | Out-Null
 Check ((Get-ChildItem -Path $flat -File).Count -eq 1) 'and the same two into one folder would have been one file - the bug this prevents'
 Check ((CountImgs (Join-Path $work 'no-such-folder')) -eq -1) 'a folder that does not exist counts -1, not 0'
+# The third state the dialog needs and core's count does not have: a folder
+# that exists and is empty is not the same as one that was never made - only
+# the first is worth an Open folder link.
+$empty = Join-Path $work 'empty-figures'
+New-Item -ItemType Directory -Path $empty | Out-Null
+Check ((CountImgs $empty) -eq 0) 'an empty folder counts 0, told apart from one that is not there'
+Check ((CountImgs '') -eq -1 -and (CountImgs $null) -eq -1) 'no folder at all counts -1'
+# One level and no deeper, matching what extraction writes.
+$deep = Join-Path (Join-Path $two 'PROJ-001 figures') 'deeper'
+New-Item -ItemType Directory -Path $deep -Force | Out-Null
+Copy-Item (Get-ChildItem -Path $two -Recurse -File | Select-Object -First 1).FullName (Join-Path $deep 'Figure 01.png')
+Check ((CountImgs $two) -eq 2) 'a file two levels down is not counted'
 
 # ---- 3. counting rows in figures.md ------------------------------------------
 $hostT = $editor.GetType('Supervertaler.PromptEditor.ImagesHost')

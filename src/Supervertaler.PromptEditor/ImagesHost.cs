@@ -198,18 +198,22 @@ namespace Supervertaler.PromptEditor
             && line.Trim('|', ' ', '\t').All(c => c == '-' || c == ':' || c == '|' || c == ' ');
 
         /// <summary>
-        /// Images in the figures folder, its per-document subfolders included.
-        /// -1 when the folder does not exist. One level deep, which is exactly
-        /// as deep as <see cref="TargetFolder"/> ever goes.
+        /// Images in the figures folder, its per-document subfolders included –
+        /// core's count, which goes one level deep because that is exactly as
+        /// deep as <see cref="TargetFolder"/> ever writes.
+        ///
+        /// <para>The one thing added here is <c>-1</c> for a folder that does not
+        /// exist. Core answers 0, which is right for a count; the dialog needs
+        /// the third state, because "not created yet" and "created and empty"
+        /// read differently on the folder line and only the second is worth an
+        /// Open folder link.</para>
         /// </summary>
         internal static int CountImages(string folder)
         {
             try
             {
                 if (string.IsNullOrEmpty(folder) || !Directory.Exists(folder)) return -1;
-                var n = ReferenceImages.List(folder).Count;
-                foreach (var sub in Directory.GetDirectories(folder)) n += ReferenceImages.List(sub).Count;
-                return n;
+                return ReferenceImages.CountImages(folder);
             }
             catch { return -1; }
         }
