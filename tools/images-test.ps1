@@ -143,6 +143,44 @@ $set2 = $extract.Invoke($null, [object[]]@($docxPath, $false, $folder))
 $saved = $set2.GetType().GetProperty('SavedFiles').GetValue($set2)
 Check ($saved.Count -eq 1) "extracting to a folder saves one file (got $($saved.Count))"
 Check ($saved.Count -eq 1 -and (Test-Path (Join-Path $folder $saved[0]))) "and it is there: $(if ($saved.Count) {$saved[0]})"
+$img0 = $set2.GetType().GetProperty('Images').GetValue($set2)[0]
+Check ($img0.GetType().GetProperty('SavedFileName').GetValue($img0) -eq $saved[0]) 'the image carries the file it was written to, so a failed save cannot shift the pairing'
+
+# ---- 2b. a folder per document, once there is more than one ---------------------
+# Every document numbers its figures from 1, so two of them in one folder means
+# the second's "Figure 01.png" silently replaces the first's - after the model
+# has already been shown the wrong picture.
+$hostT2 = $editor.GetType('Supervertaler.PromptEditor.ImagesHost')
+$targetFolder = $hostT2.GetMethod('TargetFolder', $Static)
+$safeName = $hostT2.GetMethod('SafeFolderName', $Static)
+$countImages = $hostT2.GetMethod('CountImages', $Static)
+function Target($f, $n, $c) { return [string]$targetFolder.Invoke($null, [object[]]@([string]$f, [string]$n, [int]$c)) }
+function Safe($n) { return [string]$safeName.Invoke($null, [object[]]@([string]$n)) }
+function CountImgs($f) { return [int]$countImages.Invoke($null, [object[]]@([string]$f)) }
+
+Check ((Target $folder 'PROJ-001 figures.docx' 1) -eq $folder) 'one document keeps the flat folder'
+Check ((Target $folder 'PROJ-001 figures.docx' 0) -eq $folder) 'and so does none'
+Check ((Target $folder 'PROJ-001 figures.docx' 2) -eq (Join-Path $folder 'PROJ-001 figures')) "two documents: a folder each (got '$(Target $folder 'PROJ-001 figures.docx' 2)')"
+Check ((Safe 'Annex A.docx') -eq 'Annex A') 'the extension is dropped from the folder name'
+Check ((Safe 'a/b:c*?.docx') -eq 'abc') 'characters a path cannot hold are dropped'
+Check ((Safe '') -eq 'document' -and (Safe $null) -eq 'document' -and (Safe '...') -eq 'document') 'a name that reduces to nothing still gives a folder'
+Check ((Safe '..\..\escape.docx') -eq 'escape') 'a name cannot climb out of the folder'
+
+# The collision itself: the same figure name written by two documents.
+$two = Join-Path $work 'two-docs'
+$second = Join-Path $work 'Annex A.docx'
+Copy-Item $docxPath $second
+$a = Target $two 'PROJ-001 figures.docx' 2
+$b = Target $two 'Annex A.docx' 2
+$extract.Invoke($null, [object[]]@($docxPath, $false, $a)) | Out-Null
+$extract.Invoke($null, [object[]]@([string]$second, $false, $b)) | Out-Null
+Check ((CountImgs $two) -eq 2) "both documents' images survive: $(CountImgs $two) files under the figures folder"
+Check ((Get-ChildItem -Path $two -Recurse -File).Count -eq 2) 'two files on disk, not one overwritten'
+$flat = Join-Path $work 'flat'
+$extract.Invoke($null, [object[]]@($docxPath, $false, [string]$flat)) | Out-Null
+$extract.Invoke($null, [object[]]@([string]$second, $false, [string]$flat)) | Out-Null
+Check ((Get-ChildItem -Path $flat -File).Count -eq 1) 'and the same two into one folder would have been one file - the bug this prevents'
+Check ((CountImgs (Join-Path $work 'no-such-folder')) -eq -1) 'a folder that does not exist counts -1, not 0'
 
 # ---- 3. counting rows in figures.md ------------------------------------------
 $hostT = $editor.GetType('Supervertaler.PromptEditor.ImagesHost')

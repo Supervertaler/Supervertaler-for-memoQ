@@ -106,7 +106,7 @@ namespace Supervertaler.PromptEditor
             if (bankDir != null)
             {
                 st.Folder = Path.Combine(bankDir, FiguresFolder);
-                st.FolderImages = Directory.Exists(st.Folder) ? ReferenceImages.List(st.Folder).Count : -1;
+                st.FolderImages = CountImages(st.Folder);
 
                 var figures = Path.Combine(bankDir, "figures.md");
                 if (File.Exists(figures))
@@ -196,6 +196,50 @@ namespace Supervertaler.PromptEditor
         private static bool IsSeparator(string line) =>
             line.StartsWith("|", StringComparison.Ordinal) && line.Trim('|', ' ', '\t').Length > 0
             && line.Trim('|', ' ', '\t').All(c => c == '-' || c == ':' || c == '|' || c == ' ');
+
+        /// <summary>
+        /// Images in the figures folder, its per-document subfolders included.
+        /// -1 when the folder does not exist. One level deep, which is exactly
+        /// as deep as <see cref="TargetFolder"/> ever goes.
+        /// </summary>
+        internal static int CountImages(string folder)
+        {
+            try
+            {
+                if (string.IsNullOrEmpty(folder) || !Directory.Exists(folder)) return -1;
+                var n = ReferenceImages.List(folder).Count;
+                foreach (var sub in Directory.GetDirectories(folder)) n += ReferenceImages.List(sub).Count;
+                return n;
+            }
+            catch { return -1; }
+        }
+
+        /// <summary>Documents whose file is on this disk and which hold at least one image.</summary>
+        private List<Doc> WithImages() =>
+            _docs.Where(d => d.Path != null && SetFor(d.Path).Images.Count > 0).ToList();
+
+        /// <summary>
+        /// Where one document's images are written. Every document numbers its
+        /// figures from 1, so two documents in one folder means the second one's
+        /// "Figure 01.png" replaces the first's – silently, and after the model
+        /// has already been shown the wrong picture. Several documents therefore
+        /// get a folder each; one document keeps the flat folder, which is what
+        /// nearly every job is and what the user sees when they click Open folder.
+        /// </summary>
+        internal static string TargetFolder(string figures, string documentName, int documentCount) =>
+            documentCount <= 1 ? figures : Path.Combine(figures, SafeFolderName(documentName));
+
+        /// <summary>A document name reduced to a folder name; never empty, never a path.</summary>
+        internal static string SafeFolderName(string documentName)
+        {
+            // Sanitise BEFORE dropping the extension: GetFileNameWithoutExtension
+            // throws on a name holding a character a path cannot, and would then
+            // have left the extension on.
+            var cleaned = MemoryBanks.Sanitize(documentName);
+            try { if (cleaned.Length > 0) cleaned = Path.GetFileNameWithoutExtension(cleaned); } catch { }
+            cleaned = cleaned.Trim('.', '_', ' ');
+            return cleaned.Length == 0 ? "document" : cleaned;
+        }
 
         private DocxImageSet SetFor(string path)
         {
@@ -333,18 +377,20 @@ namespace Supervertaler.PromptEditor
             var folder = Path.Combine(bankDir, FiguresFolder);
             Directory.CreateDirectory(folder);
 
+            var sources = WithImages();
             int images = 0, documents = 0;
-            foreach (var doc in _docs.Where(d => d.Path != null))
+            foreach (var doc in sources)
             {
-                var set = DocxImageExtractor.Extract(doc.Path, false, folder);
-                if (set.Images.Count == 0) continue;
+                var set = DocxImageExtractor.Extract(doc.Path, false, TargetFolder(folder, doc.Name, sources.Count));
+                if (set.SavedFiles.Count == 0) continue;
                 documents++;
                 images += set.SavedFiles.Count;
             }
 
             _status(images == 0
                 ? "No images to extract."
-                : "Extracted " + ImagesDialog.Plural(images, "image") + " from " + ImagesDialog.Plural(documents, "document") + " into " + folder);
+                : "Extracted " + ImagesDialog.Plural(images, "image") + " from " + ImagesDialog.Plural(documents, "document")
+                  + " into " + folder + (sources.Count > 1 ? ", a folder per document." : "."));
         }
 
         private void OpenFolder()
@@ -414,7 +460,7 @@ namespace Supervertaler.PromptEditor
             var bank = SharedSettings.MemoryBank.Trim();
             var folder = Path.Combine(bankDir, FiguresFolder);
 
-            var withImages = _docs.Where(d => d.Path != null && SetFor(d.Path).Images.Count > 0).ToList();
+            var withImages = WithImages();
             var total = withImages.Sum(d => SetFor(d.Path).Images.Count);
             if (total == 0) { Say("No images in the documents listed."); return; }
 
@@ -458,9 +504,11 @@ namespace Supervertaler.PromptEditor
             {
                 try
                 {
-                    var visions = new List<FigureVision>();
-                    DocxImageSet lastSet = null;
-                    string lastDoc = null;
+                    // One entry per document, each carrying only the images that
+                    // were actually shown to the model, with its vision beside it.
+                    // An image that could not be written is left out of both lists
+                    // rather than shifting every row after it.
+                    var documents = new List<FiguresFile.FigureDocument>();
                     var done = 0;
 
                     using (var client = new LlmClient(LlmProviders.CoreKey(provider), model, key.Key,
@@ -468,29 +516,35 @@ namespace Supervertaler.PromptEditor
                     {
                         foreach (var doc in withImages)
                         {
-                            var set = DocxImageExtractor.Extract(doc.Path, false, folder);
+                            var target = TargetFolder(folder, doc.Name, withImages.Count);
+                            var set = DocxImageExtractor.Extract(doc.Path, false, target);
                             if (set.Images.Count == 0) continue;
-                            lastSet = set; lastDoc = doc.Name;
 
-                            for (var i = 0; i < set.Images.Count; i++)
+                            var entry = new FiguresFile.FigureDocument { Name = doc.Name, Set = set };
+                            foreach (var img in set.Images)
                             {
-                                var img = set.Images[i];
-                                var file = i < set.SavedFiles.Count ? set.SavedFiles[i] : null;
-                                if (file == null) continue;
+                                // The file this image went to, from the image itself:
+                                // indexing SavedFiles pairs later images with the
+                                // wrong file as soon as one fails to save.
+                                if (string.IsNullOrEmpty(img.SavedFileName)) continue;
 
                                 done++;
                                 _progress = "Describing image " + done + " of " + total + " (" + doc.Name + ")…";
-                                var v = await FigureAnalyzer.AnalyseAsync(client, Path.Combine(folder, file),
+                                var v = await FigureAnalyzer.AnalyseAsync(client, Path.Combine(target, img.SavedFileName),
                                     img.Label ?? ("image " + img.Ordinal), img.Descriptions).ConfigureAwait(false);
-                                visions.Add(v);
+                                entry.Images.Add(img);
+                                entry.Visions.Add(v);
                             }
+
+                            if (entry.Visions.Count > 0) documents.Add(entry);
                         }
                     }
 
+                    var visions = documents.SelectMany(d => d.Visions).ToList();
                     if (visions.Count == 0) { Done("No images could be described."); return; }
 
                     var signs = FiguresFile.SignsNotInText(visions, textSigns, rawSourceText);
-                    var markdown = FiguresFile.RenderWithVision(lastDoc, lastSet, visions, signs,
+                    var markdown = FiguresFile.RenderWithVision(documents, signs,
                         "Images → Describe images with AI");
                     FiguresFile.Save(outPath, markdown);
 
