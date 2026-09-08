@@ -387,13 +387,26 @@ namespace Supervertaler.PromptEditor
                 return string.IsNullOrEmpty(st.WhyNoDocuments)
                     ? "No documents yet. Images are read from the documents memoQ has told Supervertaler about, or from a file you add below."
                     : st.WhyNoDocuments;
+            // A document whose file is not here was never opened, so nothing is
+            // known about what is in it. Counting it among documents found to
+            // have no images states a fact that was never established - and on a
+            // project checked out from a server that is EVERY document.
+            var missing = st.DocumentsWithoutFile.Count;
+            var readable = st.DocumentCount - missing;
+
+            if (readable <= 0)
+                return st.DocumentCount == 1
+                    ? "The document's file is not on this computer, so it could not be read. Locate it below, or add a document file."
+                    : "None of the " + Plural(st.DocumentCount, "document") + " could be read: their files are not on this computer. "
+                      + "Locate them below, or add a document file.";
+
             if (st.TotalImages == 0)
-                return "No images in the " + Plural(st.DocumentCount, "document") + " listed"
-                     + (st.DocumentsWithoutFile.Count > 0 ? "; " + Plural(st.DocumentsWithoutFile.Count, "document") + " could not be read because the file is not on this computer." : ".");
-            var withImages = st.Documents.Count;
-            return Plural(st.TotalImages, "image") + " in " + withImages + " of " + Plural(st.DocumentCount, "document")
+                return "No images in the " + Plural(readable, "document") + " that could be read"
+                     + (missing > 0 ? "; " + Plural(missing, "document") + " not on this computer." : ".");
+
+            return Plural(st.TotalImages, "image") + " in " + st.Documents.Count + " of " + Plural(readable, "document")
                  + (st.DocumentsWithoutImages.Count > 0 ? "; the rest have none." : ".")
-                 + (st.DocumentsWithoutFile.Count > 0 ? " " + Plural(st.DocumentsWithoutFile.Count, "document") + " not on this computer." : "");
+                 + (missing > 0 ? " " + Plural(missing, "document") + " not on this computer." : "");
         }
 
         private void AddRow(DocumentRow row, Color colour)

@@ -228,16 +228,34 @@ function Put($o, $name, $v) {
     $f.SetValue($o, $v)
 }
 function Text($st) { return [string]$docsText.Invoke($null, [object[]]@($st)) }
+$rowT = $editor.GetType('Supervertaler.PromptEditor.DocumentRow')
+function Row($name, $note) { return [Activator]::CreateInstance($rowT, [object[]]@([string]$name, [string]$note)) }
+function AddRow($st, $field, $name, $note) { $st.GetType().GetField($field).GetValue($st).Add((Row $name $note)) }
 
 $st = NewState
 Check ((Text $st) -like 'No documents yet*') 'nothing known, no reason: the plain "no documents yet"'
 Put $st 'WhyNoDocuments' 'memoQ is not running.'
 Check ((Text $st) -eq 'memoQ is not running.') 'nothing known, with a reason: the reason, verbatim'
 $st = NewState; Put $st 'DocumentCount' 3
-Check ((Text $st) -eq 'No images in the 3 documents listed.') "documents but no images (got '$(Text $st)')"
-$rowT = $editor.GetType('Supervertaler.PromptEditor.DocumentRow')
-function Row($name, $note) { return [Activator]::CreateInstance($rowT, [object[]]@([string]$name, [string]$note)) }
-function AddRow($st, $field, $name, $note) { $st.GetType().GetField($field).GetValue($st).Add((Row $name $note)) }
+Check ((Text $st) -eq 'No images in the 3 documents that could be read.') "documents but no images (got '$(Text $st)')"
+
+# His real case: a project checked out from a server, where NO document's
+# file is on this computer. Saying "no images in them" states a fact about
+# documents that were never opened.
+$st = NewState; Put $st 'DocumentCount' 3
+AddRow $st 'DocumentsWithoutFile' 'a.docx' 'not on this computer'
+AddRow $st 'DocumentsWithoutFile' 'b.docx' 'not on this computer'
+AddRow $st 'DocumentsWithoutFile' 'c.docx' 'not on this computer'
+Check ((Text $st) -like 'None of the 3 documents could be read*') "nothing readable: it says so rather than claiming they hold no images (got '$(Text $st)')"
+Check ((Text $st) -notlike '*No images*') 'and does not claim to know what is in them'
+$st = NewState; Put $st 'DocumentCount' 1
+AddRow $st 'DocumentsWithoutFile' 'only.docx' 'not on this computer'
+Check ((Text $st) -like "The document's file is not on this computer*") "one unreadable document reads as one (got '$(Text $st)')"
+$st = NewState; Put $st 'DocumentCount' 3
+AddRow $st 'DocumentsWithoutImages' 'x.docx' 'no images'
+AddRow $st 'DocumentsWithoutFile' 'y.docx' 'not on this computer'
+AddRow $st 'DocumentsWithoutFile' 'z.docx' 'not on this computer'
+Check ((Text $st) -eq 'No images in the 1 document that could be read; 2 documents not on this computer.') "the readable ones are counted apart from the missing (got '$(Text $st)')"
 
 # The name and the finding are separate fields, which is the point of the
 # table: run together, the eye has to hunt for where the name ends on every row.
@@ -250,7 +268,7 @@ AddRow $st 'Documents' 'b.docx' '9 images'
 AddRow $st 'Documents' 'c.docx' '7 images'
 AddRow $st 'DocumentsWithoutImages' 'd.docx' 'no images'
 AddRow $st 'DocumentsWithoutFile' 'e.docx' 'not on this computer' 
-Check ((Text $st) -eq '25 images in 3 of 12 documents; the rest have none. 1 document not on this computer.') "the full summary (got '$(Text $st)')"
+Check ((Text $st) -eq '25 images in 3 of 11 documents; the rest have none. 1 document not on this computer.') "the full summary counts only what could be read (got '$(Text $st)')"
 
 # ---- 5. what the dialog enables, shown off-screen -----------------------------
 function ShowDialog($actions, $state) {
