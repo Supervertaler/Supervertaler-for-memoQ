@@ -181,6 +181,17 @@ $extract.Invoke($null, [object[]]@($docxPath, $false, [string]$flat)) | Out-Null
 $extract.Invoke($null, [object[]]@([string]$second, $false, [string]$flat)) | Out-Null
 Check ((Get-ChildItem -Path $flat -File).Count -eq 1) 'and the same two into one folder would have been one file - the bug this prevents'
 Check ((CountImgs (Join-Path $work 'no-such-folder')) -eq -1) 'a folder that does not exist counts -1, not 0'
+
+# A patent's drawings usually come out of Word as EMF. Core rasterises those
+# while extracting; one that will not render is written out unchanged, and a
+# folder holding only those must not read as empty or the Describe button
+# switches itself off on exactly the documents it exists for.
+$vectors = Join-Path $work 'vector-figures'
+New-Item -ItemType Directory -Path $vectors | Out-Null
+[IO.File]::WriteAllBytes((Join-Path $vectors 'Figure 01.emf'), [byte[]]@(1,2,3))
+[IO.File]::WriteAllBytes((Join-Path $vectors 'Figure 02.wmf'), [byte[]]@(1,2,3))
+Check ((CountImgs $vectors) -eq 2) "a folder of metafiles counts them rather than reading as empty: $(CountImgs $vectors)"
+
 # The third state the dialog needs and core's count does not have: a folder
 # that exists and is empty is not the same as one that was never made - only
 # the first is worth an Open folder link.
