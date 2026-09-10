@@ -828,7 +828,27 @@ namespace Supervertaler.MemoQ.Core
                         maxTokens: 32768).GetAwaiter().GetResult();
                 }
 
-                var content = global::Supervertaler.Core.PromptGenerator.ParseGeneratedPrompt(raw) ?? raw;
+                var content = ExtractDraft(raw);
+
+                // The prompt is about to become the one every segment of this job
+                // is translated with, so it is checked before it is handed back
+                // rather than after somebody notices the output. A refusal costs
+                // one regeneration; a pass that should have been a refusal costs a
+                // document. Shared with Supervertaler for Trados.
+                var check = global::Supervertaler.Core.PromptValidator.Validate(content);
+                if (!check.Ok)
+                {
+                    PluginLog.Write("AutoPrompt: refused a draft of " + content.Length
+                        + " chars for " + doc.Key + " - " + string.Join(" | ", check.Failures));
+                    TryWrite(ctx, 502, Json(new ErrorBody
+                    {
+                        Error = "The model's answer came back incomplete, so nothing has been "
+                            + "saved." + Environment.NewLine + Environment.NewLine + check.Describe()
+                            + Environment.NewLine + Environment.NewLine
+                            + "Press Generate again - this usually succeeds on a second attempt."
+                    }));
+                    return;
+                }
 
                 // The memoQ project's own name, which is what its title bar shows
                 // and what the translator calls the job. Used as-is: the pair is
@@ -875,6 +895,28 @@ namespace Supervertaler.MemoQ.Core
             }
         }
 
+        /// <summary>
+        /// The generated prompt out of the model's answer.
+        ///
+        /// <para>A start delimiter with no end is the signature of a truncated
+        /// response, and used to fall through to the raw answer - which saved the
+        /// truncation, delimiter line and all, without a word. It is now an error.
+        /// No delimiters at all is a different thing: some models ignore the
+        /// instruction and return a bare prompt, which is complete and usable, so
+        /// that case still falls back. Either way the content is validated after.</para>
+        /// </summary>
+        private static string ExtractDraft(string raw)
+        {
+            var parsed = global::Supervertaler.Core.PromptGenerator.ParseGeneratedPrompt(raw);
+            if (parsed != null) return parsed;
+
+            if (raw != null && raw.IndexOf("===PROMPT_START===", StringComparison.Ordinal) >= 0)
+                throw new InvalidOperationException(
+                    "The model's answer begins the prompt but never ends it, which means it "
+                    + "was cut off. Nothing has been saved. Press Generate again.");
+
+            return raw;
+        }
         /// <summary>
         /// Everything AutoPrompt assembles before it says a word to the model: the
         /// source text, the glossary hits, the confirmed pairs, the project
