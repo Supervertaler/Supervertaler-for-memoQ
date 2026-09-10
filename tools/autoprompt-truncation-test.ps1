@@ -65,12 +65,15 @@ before or after the list.
 # ---- ExtractDraft ---------------------------------------------------------
 $bridge = $plugin.GetType('Supervertaler.MemoQ.Core.MemoQBridge')
 if ($null -eq $bridge) { throw 'MemoQBridge not found.' }
-$extract = $bridge.GetMethod('ExtractDraft', $NonPublicStatic, $null, [type[]]@([string]), $null)
+# (string raw, string stopped) - the provider's own stop reason, so a refusal
+# can say the model hit its output limit instead of guessing at a cause.
+$extract = $bridge.GetMethod('ExtractDraft', $NonPublicStatic, $null, [type[]]@([string], [string]), $null)
 if ($null -eq $extract) { throw 'ExtractDraft not found - has it been renamed?' }
 
-function Extract([string]$raw) {
-    $a = [object[]]::new(1)
+function Extract([string]$raw, [string]$stopped = $null) {
+    $a = [object[]]::new(2)
     $a[0] = $raw
+    $a[1] = $stopped
     return $extract.Invoke($null, $a)
 }
 
@@ -94,6 +97,23 @@ try { Extract $truncated | Out-Null } catch {
 }
 Check 'start with no end: refused, not saved' $threw
 Check 'the refusal says it was cut off' ($message -match 'cut off') $message
+
+$withReason = ''
+try { Extract $truncated 'max_tokens' | Out-Null } catch {
+    $inner = $_.Exception.InnerException
+    $withReason = if ($inner) { $inner.Message } else { $_.Exception.Message }
+}
+Check 'and names the cause when the provider gave one' `
+    ($withReason -match 'output limit' -and $withReason -match 'max_tokens') $withReason
+Check 'and invents no cause when it did not' ($message -notmatch 'output limit') $message
+
+$otherReason = ''
+try { Extract $truncated 'content_filter' | Out-Null } catch {
+    $inner = $_.Exception.InnerException
+    $otherReason = if ($inner) { $inner.Message } else { $_.Exception.Message }
+}
+Check 'a stop reason that is not a limit is not reported as one' `
+    ($otherReason -notmatch 'output limit') $otherReason
 
 # ---- PromptValidator ------------------------------------------------------
 $validator = $plugin.GetType('Supervertaler.Core.PromptValidator')
@@ -138,6 +158,60 @@ foreach ($fraction in 0.3, 0.5, 0.7, 0.9) {
             else { "a cut at $fraction is NOT refused - the known final-body gap" }
     Check $name ($refused -eq $expected[$fraction])
 }
+
+# ---- the section list the meta-prompt asked for ---------------------------
+# Validate(prompt, requestedSections) refuses a prompt that is missing a RUN of
+# sections off the end, and names them. A section renamed or merged in the
+# middle is tolerated: the model has lost nothing, and refusing a paraphrase
+# would cost a regeneration.
+#
+# Measured while wiring this up, because it bounds what the check buys here:
+# all seven domain templates end with OUTPUT FORMAT, so a plain tail cut
+# already trips the output-format check on its own. What this adds is a
+# refusal that says WHICH sections went missing, and a search of the text
+# rather than of the numbered run of headings.
+$sectionsFor = $plugin.GetType('Supervertaler.Core.PromptGenerator').GetMethod(
+    'SectionsFor', $PublicStatic, $null, [type[]]@([string]), $null)
+$a = [object[]]::new(1); $a[0] = 'general'
+$requested = $sectionsFor.Invoke($null, $a)
+Check 'the general profile asks for sections' ($requested.Count -gt 5)
+Check 'and OUTPUT FORMAT is the last of them' `
+    ($requested[$requested.Count - 1] -match 'OUTPUT FORMAT') $requested[$requested.Count - 1]
+
+$validateWith = $validator.GetMethod('Validate', $PublicStatic, $null,
+    [type[]]@([string], [System.Collections.Generic.IList[string]]), $null)
+function ValidateAgainst([string]$text, $sections) {
+    $a = [object[]]::new(2)
+    $a[0] = $text
+    $a[1] = $sections
+    return $validateWith.Invoke($null, $a)
+}
+
+# A prompt carrying every requested heading, in order, each with a body.
+function Compose($sections, [int]$howMany) {
+    $sb = New-Object System.Text.StringBuilder
+    for ($i = 0; $i -lt $howMany; $i++) {
+        [void]$sb.AppendLine("## $($i + 1). $($sections[$i])")
+        [void]$sb.AppendLine()
+        [void]$sb.AppendLine("Body text for this section, long enough to count as a body rather than a bare heading.")
+        [void]$sb.AppendLine()
+    }
+    return $sb.ToString()
+}
+
+$whole = Compose $requested $requested.Count
+Check 'a prompt with every requested section passes' (ValidateAgainst $whole $requested).Ok `
+    ((ValidateAgainst $whole $requested).Describe())
+
+$lostTail = Compose $requested ($requested.Count - 3)
+$r = ValidateAgainst $lostTail $requested
+Check 'a prompt missing the last three sections is refused' (-not $r.Ok)
+Check 'and the refusal names them' ($r.Describe() -match 'never arrived') ($r.Describe())
+
+# A middle section renamed: everything still arrived as far as the tail goes.
+$renamed = $whole -replace [regex]::Escape($requested[3]), 'SOMETHING THE MODEL CALLED IT INSTEAD'
+$r = ValidateAgainst $renamed $requested
+Check 'a section renamed in the middle is tolerated' $r.Ok ($r.Describe())
 
 Write-Host ''
 Write-Host ("AUTOPROMPT TRUNCATION TEST COMPLETE - {0} passed, {1} failed" -f $pass, $fail)

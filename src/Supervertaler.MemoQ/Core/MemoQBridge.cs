@@ -821,21 +821,40 @@ namespace Supervertaler.MemoQ.Core
 
                 // Phase 2: the generation itself.
                 string raw;
+                string stopped;          // the provider's own word for why it stopped
+                bool ranOutOfRoom;
                 using (var client = new global::Supervertaler.Core.LlmClient(provider, general.Model, apiKey, endpoint))
                 {
                     raw = client.SendPromptAsync(
                         global::Supervertaler.Core.PromptGenerator.BuildMetaPrompt(plan.Context),
                         maxTokens: 32768).GetAwaiter().GetResult();
+
+                    // Read before the using ends: these belong to the client.
+                    stopped = client.LastFinishReason;
+                    ranOutOfRoom = client.WasTruncated;
                 }
 
-                var content = ExtractDraft(raw);
+                var content = ExtractDraft(raw, stopped);
 
                 // The prompt is about to become the one every segment of this job
                 // is translated with, so it is checked before it is handed back
                 // rather than after somebody notices the output. A refusal costs
                 // one regeneration; a pass that should have been a refusal costs a
                 // document. Shared with Supervertaler for Trados.
-                var check = global::Supervertaler.Core.PromptValidator.Validate(content);
+                // Checked against the section list the meta-prompt asked for, not
+                // only for internal damage: a response cut off part-way loses a run
+                // of sections off the end, and nothing else in the file has to look
+                // wrong for that to be true.
+                //
+                // Measured, since it bounds the value: all seven domain templates
+                // end with OUTPUT FORMAT, so a plain tail cut already trips the
+                // output-format check on its own. What this adds is a refusal that
+                // NAMES the sections that never arrived, and a search of the text
+                // rather than of the numbered run - the older check reads the run
+                // of headings starting at 1, so a model that misnumbers one heading
+                // can hide the sections after it from that check but not from this.
+                var check = global::Supervertaler.Core.PromptValidator.Validate(
+                    content, global::Supervertaler.Core.PromptGenerator.SectionsFor(plan.Domain));
                 if (!check.Ok)
                 {
                     PluginLog.Write("AutoPrompt: refused a draft of " + content.Length
@@ -846,6 +865,7 @@ namespace Supervertaler.MemoQ.Core
                             + "saved." + Environment.NewLine + Environment.NewLine + check.Describe()
                             + Environment.NewLine + Environment.NewLine
                             + "Press Generate again - this usually succeeds on a second attempt."
+                            + Because(stopped)
                     }));
                     return;
                 }
@@ -896,6 +916,27 @@ namespace Supervertaler.MemoQ.Core
         }
 
         /// <summary>
+        /// The provider's own stop reason, as a sentence, or nothing.
+        ///
+        /// <para>Only the values that actually mean "ran out of room" are turned
+        /// into a cause. Anything else - a normal stop, a content filter, silence -
+        /// is left unsaid rather than guessed at, because the wrong cause sends the
+        /// user to the wrong setting. Before this was captured all four causes left
+        /// identical wreckage and the message could only describe the symptom.</para>
+        /// </summary>
+        private static string Because(string stopped)
+        {
+            if (string.IsNullOrWhiteSpace(stopped)) return "";
+            var r = stopped.Trim().ToLowerInvariant();
+            if (r != "max_tokens" && r != "length") return "";
+
+            return Environment.NewLine + Environment.NewLine
+                + "The provider reported that the model hit its output limit "
+                + "(" + stopped.Trim() + "), so the answer stopped where it did "
+                + "rather than being finished.";
+        }
+
+        /// <summary>
         /// The generated prompt out of the model's answer.
         ///
         /// <para>A start delimiter with no end is the signature of a truncated
@@ -905,7 +946,7 @@ namespace Supervertaler.MemoQ.Core
         /// instruction and return a bare prompt, which is complete and usable, so
         /// that case still falls back. Either way the content is validated after.</para>
         /// </summary>
-        private static string ExtractDraft(string raw)
+        private static string ExtractDraft(string raw, string stopped)
         {
             var parsed = global::Supervertaler.Core.PromptGenerator.ParseGeneratedPrompt(raw);
             if (parsed != null) return parsed;
@@ -913,7 +954,8 @@ namespace Supervertaler.MemoQ.Core
             if (raw != null && raw.IndexOf("===PROMPT_START===", StringComparison.Ordinal) >= 0)
                 throw new InvalidOperationException(
                     "The model's answer begins the prompt but never ends it, which means it "
-                    + "was cut off. Nothing has been saved. Press Generate again.");
+                    + "was cut off. Nothing has been saved. Press Generate again."
+                    + Because(stopped));
 
             return raw;
         }
