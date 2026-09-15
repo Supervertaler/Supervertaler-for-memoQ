@@ -66,17 +66,6 @@ namespace Supervertaler.PromptEditor
         private ToolStripButton _mcpMode;
         private int _iconSize = 16;
 
-        /// <summary>
-        /// The one colour on the toolbar. AutoPrompt is the only button there
-        /// that spends money and takes a minute; everything else is monochrome so
-        /// that this reads as different rather than as decoration.
-        /// </summary>
-        // Was #0B5CAD, a blue, when this window had one coloured glyph. Blue is
-        // Trados's colour in the product's own scheme, and this is the memoQ
-        // editor, so the accent is Ui.Accent - memoQ's vermillion, darkened to
-        // stay readable. One accent, one colour, named in one place.
-        private static Color AccentColour => Ui.Accent;
-
         private JobPanel _job;
         private JobPanel.Field _glossary;
         private JobPanel.Field _prompt;
@@ -354,16 +343,16 @@ namespace Supervertaler.PromptEditor
             };
             BuildInsertMenu();
 
-            // The two buttons that go away, spend money and take a minute, and so
-            // the two that are allowed a colour. Colouring all eight was tried and
-            // dropped: it made colour mean "this is a button", which being a button
-            // already said, and left nothing for the accent to mark.
+            // Monochrome, like the rest of the strip. These two were the coloured
+            // ones while the accent meant "spends money"; it now means "in force"
+            // in the library, and one colour cannot mean two things in one window.
+            // The ellipsis in the label is what says they go away and do something.
             var draft = Button("AutoPrompt…", Glyphs.AutoPrompt,
                 "AutoPrompt: have the AI write a prompt tailored to the document open in memoQ",
-                (s, e) => DraftForProject(), AccentColour);
+                (s, e) => DraftForProject());
             var images = Button("FigureLens\u2026", Glyphs.Images,
                 "FigureLens: get the pictures out of the documents and have them described, so the AI knows what each figure shows",
-                (s, e) => ShowImages(), AccentColour);
+                (s, e) => ShowImages());
 
             // Right-aligned items are laid out from the right edge inwards, so
             // this list reads right to left on screen: settings, activity, MCP.
@@ -917,7 +906,7 @@ namespace Supervertaler.PromptEditor
                     var isShared = Supervertaler.Core.MemoryBanks.IsSharedName(name);
                     var label = name + (isShared ? "   \u00b7 always sent" : "");
 
-                    var node = new TreeNode(Marked(label, IsActiveBank(name)))
+                    var node = new TreeNode(label)
                     {
                         Tag = new BankNode { Name = name, Dir = dir, Articles = articles.Count },
                         NodeFont = IsActiveBank(name) ? ActiveFont : null,
@@ -981,7 +970,7 @@ namespace Supervertaler.PromptEditor
                     var active = !string.IsNullOrWhiteSpace(current)
                         && string.Equals(g.Path, current, StringComparison.OrdinalIgnoreCase);
 
-                    section.Nodes.Add(new TreeNode(Marked(g.Name, active))
+                    section.Nodes.Add(new TreeNode(g.Name)
                     {
                         Tag = new GlossaryNode { Path = g.Path, Name = g.Name },
                         NodeFont = active ? ActiveFont : null,
@@ -1016,8 +1005,6 @@ namespace Supervertaler.PromptEditor
         /// product". Bold survives greyscale and a screenshot; the bullet survives
         /// any column width.</para>
         /// </summary>
-        private static string Marked(string label, bool active) => active ? "\u25cf  " + label : label;
-
         private TreeNode BuildNode(PromptFolderNode folder)
         {
             var node = new TreeNode(folder.Name) { Tag = folder };
@@ -1073,7 +1060,7 @@ namespace Supervertaler.PromptEditor
             // Dimmed rather than coloured: this is one binary fact, and dimming
             // already carries "does not apply here" without asking anyone to learn
             // a colour code or to be able to tell two colours apart.
-            return new TreeNode(Marked(label, IsActivePrompt(p)))
+            return new TreeNode(label)
             {
                 Tag = p,
                 NodeFont = IsActivePrompt(p) ? ActiveFont : null,
@@ -2028,12 +2015,14 @@ namespace Supervertaler.PromptEditor
                     var marked = node.NodeFont != null;
                     if (active == marked) continue;
 
+                    // Only how it is drawn, never the text. The bullet this added
+                    // and stripped was a third marker beside the bold and the
+                    // colour, and editing a label to record state is a poor way to
+                    // hold it - a prompt whose own name began with that character
+                    // would have lost it.
                     node.NodeFont = active ? ActiveFont : null;
                     node.ForeColor = active ? Ui.Accent
                         : p.IsReadOnly ? SystemColors.GrayText : SystemColors.WindowText;
-                    node.Text = active
-                        ? Marked(node.Text, true)
-                        : node.Text.Replace("●  ", "");
                 }
             }
             finally { _tree.EndUpdate(); }
