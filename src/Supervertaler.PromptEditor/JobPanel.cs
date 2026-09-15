@@ -40,6 +40,12 @@ namespace Supervertaler.PromptEditor
             AutoSizeMode = AutoSizeMode.GrowAndShrink;
             Padding = new Padding(8, 6, 8, 8);
 
+            // A band with a ground and an edge, rather than the grey the form
+            // gives it by default. This is the part of the window that says what
+            // the next segment will be translated with, so it earns being a
+            // surface of its own instead of text floating above a list.
+            BackColor = Ui.Chrome;
+
             _rows.AutoSize = true;
             _rows.AutoSizeMode = AutoSizeMode.GrowAndShrink;
             _rows.Dock = DockStyle.Top;
@@ -294,6 +300,14 @@ namespace Supervertaler.PromptEditor
             var height = Font.Height + 10;
             foreach (var box in _boxes) box.Height = height;
         }
+        /// <summary>One line along the bottom, so the band ends somewhere.</summary>
+        protected override void OnPaint(PaintEventArgs e)
+        {
+            base.OnPaint(e);
+            using (var pen = new Pen(Ui.FieldEdge))
+                e.Graphics.DrawLine(pen, 0, Height - 1, Width, Height - 1);
+        }
+
         protected override void OnResize(EventArgs e)
         {
             base.OnResize(e);

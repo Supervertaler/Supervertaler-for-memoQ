@@ -39,6 +39,30 @@ namespace Supervertaler.PromptEditor
         /// </summary>
         internal static Color Accent { get; } = Color.FromArgb(0xC9, 0x3A, 0x25);
 
+        /// <summary>
+        /// The chrome: the toolbar, the menu, the band at the top and the window
+        /// ground behind them. The tree and the editor stay white.
+        ///
+        /// <para>The cue is memoQ itself, which paints its frame a pale blue-grey,
+        /// puts white panels on it and holds its orange back for the brand. That is
+        /// why its dashboard does not read as grey although nearly all of it is
+        /// neutral, and it is a better answer than tinting the chrome orange - which
+        /// spends the accent on surfaces that mean nothing.</para>
+        ///
+        /// <para>Conditional, not hardcoded: the strip palette this joins is
+        /// deliberately derived from the system colours so that a high-contrast or
+        /// dark theme still gets readable chrome. Under one of those this returns
+        /// the system colour and the tint never appears.</para>
+        /// </summary>
+        internal static Color Chrome
+        {
+            get
+            {
+                var w = SystemColors.Window;
+                var light = w.R + w.G + w.B > 700;
+                return light ? Color.FromArgb(0xED, 0xF1, 0xF8) : SystemColors.Control;
+            }
+        }
         /// <summary>The border of a job-panel field at rest.</summary>
         internal static Color FieldEdge { get; } = Color.FromArgb(0xD4, 0xD4, 0xD4);
 

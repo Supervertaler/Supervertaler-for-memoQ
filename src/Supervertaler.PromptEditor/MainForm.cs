@@ -71,7 +71,11 @@ namespace Supervertaler.PromptEditor
         /// that spends money and takes a minute; everything else is monochrome so
         /// that this reads as different rather than as decoration.
         /// </summary>
-        private static readonly Color AccentColour = Color.FromArgb(0x0B, 0x5C, 0xAD);
+        // Was #0B5CAD, a blue, when this window had one coloured glyph. Blue is
+        // Trados's colour in the product's own scheme, and this is the memoQ
+        // editor, so the accent is Ui.Accent - memoQ's vermillion, darkened to
+        // stay readable. One accent, one colour, named in one place.
+        private static Color AccentColour => Ui.Accent;
 
         private JobPanel _job;
         private JobPanel.Field _glossary;
@@ -113,6 +117,10 @@ namespace Supervertaler.PromptEditor
             // The shell's own dialog font, before anything else is built: every
             // control created below inherits it. See Ui.Default.
             Font = Ui.Default;
+
+            // The ground behind the strips and in every gap between panels. The
+            // tree and the editor paint themselves white on top of it.
+            BackColor = Ui.Chrome;
             _openAtRelativePath = openAtRelativePath;
             BuildUi();
             RetagPromptFiles();
@@ -346,15 +354,16 @@ namespace Supervertaler.PromptEditor
             };
             BuildInsertMenu();
 
-            // The one button on the strip that spends money and takes a minute,
-            // so the one that is allowed a colour. Everything else is monochrome
-            // and stays out of the way.
+            // The two buttons that go away, spend money and take a minute, and so
+            // the two that are allowed a colour. Colouring all eight was tried and
+            // dropped: it made colour mean "this is a button", which being a button
+            // already said, and left nothing for the accent to mark.
             var draft = Button("AutoPrompt…", Glyphs.AutoPrompt,
                 "AutoPrompt: have the AI write a prompt tailored to the document open in memoQ",
                 (s, e) => DraftForProject(), AccentColour);
             var images = Button("FigureLens\u2026", Glyphs.Images,
                 "FigureLens: get the pictures out of the documents and have them described, so the AI knows what each figure shows",
-                (s, e) => ShowImages());
+                (s, e) => ShowImages(), AccentColour);
 
             // Right-aligned items are laid out from the right edge inwards, so
             // this list reads right to left on screen: settings, activity, MCP.

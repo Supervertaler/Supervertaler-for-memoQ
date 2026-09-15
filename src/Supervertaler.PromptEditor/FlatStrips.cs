@@ -53,7 +53,11 @@ namespace Supervertaler.PromptEditor
         /// </summary>
         private sealed class FlatColours : ProfessionalColorTable
         {
-            internal static Color Surface => SystemColors.Control;
+            /// <summary>
+            /// The tinted chrome, or the system colour under a theme where a tint
+            /// would be wrong. See <see cref="Ui.Chrome"/>.
+            /// </summary>
+            internal static Color Surface => Ui.Chrome;
 
             internal static Color Hairline => Blend(SystemColors.ControlDark, SystemColors.Control, 0.45);
 
