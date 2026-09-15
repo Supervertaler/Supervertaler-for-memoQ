@@ -214,6 +214,28 @@ namespace Supervertaler.PromptEditor
             _bridgeMode.Text = "Pre-translate via Claude Desktop (MCP) instead of the API key";
             _bridgeMode.Left = fieldX; _bridgeMode.Top = y; _bridgeMode.Width = fieldW;
             Controls.Add(_bridgeMode);
+
+            // These three lines are longer than the column they were given, and the
+            // dialog is laid out in fixed pixels against a font it no longer uses:
+            // Segoe UI is wider than the Microsoft Sans Serif this was measured
+            // against, and two of the three were clipped mid-sentence by it.
+            //
+            // Measured rather than widened by a guess, so that a larger UI font or a
+            // higher DPI cannot clip them again. The dialog grows if it has to; the
+            // buttons are placed off ClientSize.Width further down and follow.
+            var boxes = new[] { _useTerminology, _useDocumentContext, _bridgeMode };
+            var widest = 0;
+            foreach (var box in boxes)
+            {
+                // + 24 for the tick and the gap between it and the text.
+                var needed = TextRenderer.MeasureText(box.Text, box.Font).Width + 24;
+                if (needed > widest) widest = needed;
+            }
+
+            if (fieldX + widest + 16 > ClientSize.Width)
+                ClientSize = new Size(fieldX + widest + 16, ClientSize.Height);
+
+            foreach (var box in boxes) box.Width = widest;
             y += 24;
             Hint("Pre-translate then only hands the segments to the chat and inserts the translations it "
                 + "sends back. Suggestions as you move through segments still use the API key.", fieldX, fieldW);
