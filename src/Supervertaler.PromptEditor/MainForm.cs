@@ -443,7 +443,14 @@ namespace Supervertaler.PromptEditor
                 // properties: set TreeLines back to true and the control
                 // returns exactly to what it was.
                 ShowLines = TreeLines,
-                ShowRootLines = TreeLines,
+
+                // NOT tied to TreeLines, though it reads as if it should be:
+                // ShowRootLines governs the expander buttons at root level as
+                // well as the lines, so switching it off took the +/- boxes off
+                // Proofread, QuickLauncher and Translate - the three groups a
+                // library this long most wants to fold away. With ShowLines
+                // off, no line is drawn here either way.
+                ShowRootLines = true,
 
                 // Ignored by the control while ShowLines is on, which is why
                 // it is tied to the same switch rather than set outright.
