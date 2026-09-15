@@ -14,6 +14,9 @@ namespace Supervertaler.PromptEditor
 
         public TextInputDialog(string title, string label, string initial)
         {
+            // The shell's own dialog font, before anything else is built: every
+            // control created below inherits it. See Ui.Default.
+            Font = Ui.Default;
             AutoScaleDimensions = new SizeF(96F, 96F);
             AutoScaleMode = AutoScaleMode.Dpi;
 
@@ -74,6 +77,9 @@ namespace Supervertaler.PromptEditor
 
         public FolderPickerDialog(List<string> folders, string current)
         {
+            // The shell's own dialog font, before anything else is built: every
+            // control created below inherits it. See Ui.Default.
+            Font = Ui.Default;
             _folders = folders;
 
             AutoScaleDimensions = new SizeF(96F, 96F);

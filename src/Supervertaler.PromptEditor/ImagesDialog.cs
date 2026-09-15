@@ -140,6 +140,9 @@ namespace Supervertaler.PromptEditor
 
         public ImagesDialog(ImagesActions actions, ImagesState initial)
         {
+            // The shell's own dialog font, before anything else is built: every
+            // control created below inherits it. See Ui.Default.
+            Font = Ui.Default;
             _actions = actions ?? new ImagesActions();
             _state = initial ?? new ImagesState();
 

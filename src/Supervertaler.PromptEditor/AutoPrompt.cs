@@ -350,6 +350,9 @@ namespace Supervertaler.PromptEditor
 
         public AutoPromptDialog(MemoQBridgeClient bridge)
         {
+            // The shell's own dialog font, before anything else is built: every
+            // control created below inherits it. See Ui.Default.
+            Font = Ui.Default;
             _bridge = bridge;
 
             AutoScaleDimensions = new SizeF(96F, 96F);
@@ -706,6 +709,9 @@ namespace Supervertaler.PromptEditor
     {
         public ContextPreviewForm(MemoQBridgeClient.AutoPromptPreviewResult p)
         {
+            // The shell's own dialog font, before anything else is built: every
+            // control created below inherits it. See Ui.Default.
+            Font = Ui.Default;
             AutoScaleDimensions = new SizeF(96F, 96F);
             AutoScaleMode = AutoScaleMode.Dpi;
             Text = "What AutoPrompt will send";

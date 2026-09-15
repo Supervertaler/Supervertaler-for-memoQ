@@ -25,6 +25,17 @@ namespace Supervertaler.PromptEditor
     {
         private readonly PromptLibrary _library = new PromptLibrary();
 
+        /// <summary>
+        /// Whether the library tree draws the dotted connector lines.
+        ///
+        /// <para>Tentatively false. They are clear about what contains what,
+        /// which is worth something in a tree this deep, and they are also the
+        /// single most dated thing in the window. Flip to true to have them
+        /// back: the indent and the full-row selection follow this, so nothing
+        /// else has to change.</para>
+        /// </summary>
+        private const bool TreeLines = false;
+
         private TreeView _tree;
         private TextBox _name;
         private TextBox _description;
@@ -96,6 +107,9 @@ namespace Supervertaler.PromptEditor
 
         public MainForm(string openAtRelativePath)
         {
+            // The shell's own dialog font, before anything else is built: every
+            // control created below inherits it. See Ui.Default.
+            Font = Ui.Default;
             _openAtRelativePath = openAtRelativePath;
             BuildUi();
             RetagPromptFiles();
@@ -422,8 +436,27 @@ namespace Supervertaler.PromptEditor
                 Dock = DockStyle.Fill,
                 HideSelection = false,
                 PathSeparator = "/",
-                ShowLines = true
+
+                // The dotted connectors are the oldest-looking thing in the
+                // window, but they are also how the nesting reads, so this is
+                // deliberately one switch rather than a scattering of
+                // properties: set TreeLines back to true and the control
+                // returns exactly to what it was.
+                ShowLines = TreeLines,
+                ShowRootLines = TreeLines,
+
+                // Ignored by the control while ShowLines is on, which is why
+                // it is tied to the same switch rather than set outright.
+                FullRowSelect = !TreeLines,
+                HotTracking = true,
             };
+
+            // What the lines were doing has to come from somewhere. Without
+            // them the indent carries the nesting alone, so it is widened; and
+            // the rows are given room to breathe, measured off the font rather
+            // than fixed, because this window has to hold up at 150% DPI.
+            if (!TreeLines) _tree.Indent = (int)Math.Round(_tree.Font.Height * 1.15);
+            _tree.ItemHeight = (int)Math.Round(_tree.Font.Height * 1.45);
             _tree.BeforeSelect += TreeBeforeSelect;
             _tree.AfterSelect += TreeAfterSelect;
 

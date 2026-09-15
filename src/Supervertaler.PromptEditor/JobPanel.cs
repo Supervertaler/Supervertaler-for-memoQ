@@ -43,10 +43,12 @@ namespace Supervertaler.PromptEditor
             _rows.AutoSize = true;
             _rows.AutoSizeMode = AutoSizeMode.GrowAndShrink;
             _rows.Dock = DockStyle.Top;
-            _rows.ColumnCount = 3;
+            // Two columns now, not three: the chevron used to be a column of
+            // its own at the far right, which is what put a hand's width of
+            // nothing between a value and the control that changes it.
+            _rows.ColumnCount = 2;
             _rows.ColumnStyles.Add(new ColumnStyle(SizeType.AutoSize));
             _rows.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100));
-            _rows.ColumnStyles.Add(new ColumnStyle(SizeType.AutoSize));
             _rows.Margin = new Padding(0);
 
             Model = AddRow("Model", chooseModel);
@@ -166,13 +168,90 @@ namespace Supervertaler.PromptEditor
 
         private string _projectName = "";
 
+        /// <summary>The bordered boxes, so they can be re-sized when the font changes.</summary>
+        private readonly System.Collections.Generic.List<FieldBox> _boxes =
+            new System.Collections.Generic.List<FieldBox>();
+
+        /// <summary>
+        /// The value and its chevron, in one bordered box that fills the column.
+        ///
+        /// <para>The border is the whole point: without it the row is a label, some
+        /// text and an arrow, and nothing says they are one control. It lights up
+        /// under the pointer for the same reason.</para>
+        ///
+        /// <para>The labels inside swallow the mouse, so hover has to be wired on
+        /// them as well as on the box - a MouseLeave on the box fires as the pointer
+        /// crosses onto its own child, and without this the border would flicker.</para>
+        /// </summary>
+        private sealed class FieldBox : Panel
+        {
+            private bool _hot;
+
+            internal FieldBox()
+            {
+                SetStyle(ControlStyles.ResizeRedraw, true);
+                BackColor = SystemColors.Window;
+                Cursor = Cursors.Hand;
+            }
+
+            internal void Track(Control child)
+            {
+                child.MouseEnter += (s, e) => Hot = true;
+                child.MouseLeave += (s, e) => Hot = ClientRectangle.Contains(PointToClient(MousePosition));
+            }
+
+            internal bool Hot
+            {
+                get => _hot;
+                set { if (_hot == value) return; _hot = value; Invalidate(); }
+            }
+
+            protected override void OnMouseEnter(EventArgs e) { base.OnMouseEnter(e); Hot = true; }
+
+            protected override void OnMouseLeave(EventArgs e)
+            {
+                base.OnMouseLeave(e);
+                Hot = ClientRectangle.Contains(PointToClient(MousePosition));
+            }
+
+            protected override void OnPaint(PaintEventArgs e)
+            {
+                base.OnPaint(e);
+                using (var pen = new Pen(_hot ? Ui.FieldEdgeHot : Ui.FieldEdge))
+                {
+                    var r = ClientRectangle;
+                    r.Width -= 1;
+                    r.Height -= 1;
+                    e.Graphics.DrawRectangle(pen, r);
+                }
+            }
+        }
+
         private Field AddRow(string caption, Action onClick)
         {
             var captionLabel = new Label
             {
                 Text = caption,
                 AutoSize = true,
-                Margin = new Padding(0, 3, 8, 3)
+                // The caption is the chrome and the value is the answer, so the
+                // caption is the grey one. It was the other way round, which said
+                // the value was the unavailable half.
+                ForeColor = SystemColors.GrayText,
+                TextAlign = ContentAlignment.MiddleLeft,
+                Margin = new Padding(0, 6, 8, 6)
+            };
+
+            var box = new FieldBox { Dock = DockStyle.Fill, Margin = new Padding(0, 2, 0, 2) };
+
+            var arrow = new Label
+            {
+                Text = "˅",
+                AutoSize = false,
+                Width = 18,
+                Dock = DockStyle.Right,
+                TextAlign = ContentAlignment.MiddleCenter,
+                ForeColor = SystemColors.GrayText,
+                Cursor = Cursors.Hand
             };
 
             var valueLabel = new Label
@@ -181,18 +260,16 @@ namespace Supervertaler.PromptEditor
                 Dock = DockStyle.Fill,
                 TextAlign = ContentAlignment.MiddleLeft,
                 Cursor = Cursors.Hand,
-                Margin = new Padding(0, 3, 4, 3)
+                Padding = new Padding(6, 0, 0, 0)
             };
 
-            var arrow = new Label
-            {
-                Text = "˅",
-                AutoSize = true,
-                ForeColor = SystemColors.GrayText,
-                Cursor = Cursors.Hand,
-                Margin = new Padding(0, 3, 0, 3)
-            };
+            // Added in this order so Fill takes what Right has not claimed.
+            box.Controls.Add(valueLabel);
+            box.Controls.Add(arrow);
+            box.Track(valueLabel);
+            box.Track(arrow);
 
+            box.Click += (s, e) => onClick();
             valueLabel.Click += (s, e) => onClick();
             arrow.Click += (s, e) => onClick();
             captionLabel.Click += (s, e) => onClick();
@@ -201,12 +278,22 @@ namespace Supervertaler.PromptEditor
             var line = _rows.RowCount++;
             _rows.RowStyles.Add(new RowStyle(SizeType.AutoSize));
             _rows.Controls.Add(captionLabel, 0, line);
-            _rows.Controls.Add(valueLabel, 1, line);
-            _rows.Controls.Add(arrow, 2, line);
+            _rows.Controls.Add(box, 1, line);
+            _boxes.Add(box);
+            SizeBoxes();
 
             return new Field(this, captionLabel, valueLabel, arrow);
         }
 
+        /// <summary>
+        /// Field height off the font rather than a constant, so the panel holds up
+        /// at 150% DPI and when the user has chosen a larger UI font.
+        /// </summary>
+        private void SizeBoxes()
+        {
+            var height = Font.Height + 10;
+            foreach (var box in _boxes) box.Height = height;
+        }
         protected override void OnResize(EventArgs e)
         {
             base.OnResize(e);
@@ -217,6 +304,7 @@ namespace Supervertaler.PromptEditor
         {
             base.OnFontChanged(e);
             if (Project != null) Project.Value.Font = new Font(Font, FontStyle.Bold);
+            SizeBoxes();
             Refit();
         }
 
