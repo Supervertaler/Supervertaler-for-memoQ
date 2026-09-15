@@ -47,6 +47,9 @@ namespace Supervertaler.PromptEditor
         private GlossaryGrid _glossaryGrid;
         private TableLayoutPanel _promptFields;
 
+        /// <summary>Shown in the editing pane when nothing is open in it.</summary>
+        private Label _empty;
+
         /// <summary>
         /// The bank article open in the editor, or null when a prompt is. Only one
         /// of the three can be open, and which one decides what Save writes -
@@ -622,8 +625,23 @@ namespace Supervertaler.PromptEditor
 
             _promptFields = fields;
 
+            // Nothing open: the pane says so rather than showing an empty editor
+            // under an empty Name box. The window opens on a folder, so this is
+            // the first thing most sessions see.
+            _empty = new Label
+            {
+                Dock = DockStyle.Fill,
+                TextAlign = ContentAlignment.MiddleCenter,
+                ForeColor = SystemColors.GrayText,
+                Visible = false,
+                Text = "Select a prompt, an article or a glossary on the left."
+                     + Environment.NewLine + Environment.NewLine
+                     + "Or press New to write one."
+            };
+
             var right = new Panel { Dock = DockStyle.Fill };
             right.Controls.Add(_glossaryGrid);
+            right.Controls.Add(_empty);
             right.Controls.Add(_editor);
             right.Controls.Add(_warnings);
             right.Controls.Add(fields);
@@ -1091,6 +1109,7 @@ namespace Supervertaler.PromptEditor
                 _current = null;
                 SetEditingEnabled(false);
                 Clear();
+                ShowEmptyPane(true);
                 _status.Text = (e.Node?.Tag as PromptFolderNode)?.RelativePath ?? SupervertalerPaths.PromptLibraryDir;
                 return;
             }
@@ -1131,6 +1150,7 @@ namespace Supervertaler.PromptEditor
             try
             {
                 _current = p;
+                ShowEmptyPane(false);
 
                 // Coming back from an article or a glossary: the prompt fields and
                 // the prose editor have to return, or the pane keeps whichever
@@ -1199,6 +1219,7 @@ namespace Supervertaler.PromptEditor
             _loading = true;
             try
             {
+                ShowEmptyPane(false);
                 ShowGlossary(false);
                 _current = null;
                 _glossaryDoc = null;
@@ -1239,6 +1260,7 @@ namespace Supervertaler.PromptEditor
             _loading = true;
             try
             {
+                ShowEmptyPane(false);
                 _current = null;
                 _articlePath = null;
 
@@ -1310,6 +1332,27 @@ namespace Supervertaler.PromptEditor
             }
 
             return Saved();
+        }
+
+        /// <summary>
+        /// Show, or stop showing, the "nothing open" line.
+        ///
+        /// <para>The fields and the editor are hidden rather than left empty: an
+        /// empty Name box invites typing, and typing into it does nothing when no
+        /// prompt is loaded. The glossary grid goes too, or it would sit behind
+        /// the message after a glossary had been open.</para>
+        /// </summary>
+        private void ShowEmptyPane(bool on)
+        {
+            if (_empty == null) return;
+
+            _empty.Visible = on;
+            if (on) _empty.BringToFront();
+
+            if (_promptFields != null) _promptFields.Visible = !on && !_glossaryGrid.Visible;
+            _editor.Visible = !on && !_glossaryGrid.Visible;
+            _warnings.Visible = !on;
+            if (on) _glossaryGrid.Visible = false;
         }
 
         private void Clear()
