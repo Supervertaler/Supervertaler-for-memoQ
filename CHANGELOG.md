@@ -11,6 +11,8 @@ any release tooling that buckets on these headings works for both.
 
 ### Added
 
+- **The thing in use is the one thing with colour.** The prompt, glossary and memory bank currently in force are drawn in memoQ's vermillion in the library tree, so “which one is live?” is answered by looking rather than by reading. It is the only colour in the window and it means only that. The shade is the brand colour darkened to 5.1:1 on white – memoQ's own #F05137 is 3.5:1 and fails as text.
+
 - **The editing pane says when nothing is open in it.** Selecting a folder – which is what the window opens on – left the largest surface in the program blank white, under an empty Name and Description. It now says what to do instead, and the fields and the editor are hidden rather than shown empty: an empty Name box invites you to type into it, and typing there does nothing when no prompt is loaded.
 
 - **The prompt editor stops looking like it was built in 1998.** Nothing in it ever set a font, so it inherited WinForms' own default – Microsoft Sans Serif 8.25pt – while everything around it used Segoe UI. Every window now takes the font the shell uses for its own dialogs, which also means it follows a larger UI font if you have set one. The library tree loses the dotted connector lines, gains room between rows and highlights the row under the pointer. And the four rows that say what memoQ will use next – model, prompt, glossary, bank – are each one bordered field with the chevron inside it, instead of a label, some loose text and an arrow pushed to the far side of the panel with nothing in between. The caption is now the grey one: captions were black and values grey, which said the value was the unavailable half.

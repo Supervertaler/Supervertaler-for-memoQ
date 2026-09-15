@@ -912,7 +912,8 @@ namespace Supervertaler.PromptEditor
                     {
                         Tag = new BankNode { Name = name, Dir = dir, Articles = articles.Count },
                         NodeFont = IsActiveBank(name) ? ActiveFont : null,
-                        ForeColor = dir == null ? Color.Firebrick : SystemColors.WindowText,
+                        ForeColor = dir == null ? Color.Firebrick
+                            : IsActiveBank(name) ? Ui.Accent : SystemColors.WindowText,
                         ToolTipText = dir == null
                             ? "There is no folder of this name under " + Supervertaler.Core.MemoryBanks.Root
                             : dir
@@ -975,6 +976,7 @@ namespace Supervertaler.PromptEditor
                     {
                         Tag = new GlossaryNode { Path = g.Path, Name = g.Name },
                         NodeFont = active ? ActiveFont : null,
+                        ForeColor = active ? Ui.Accent : SystemColors.WindowText,
                         ToolTipText = g.Path
                     });
                 }
@@ -1066,7 +1068,12 @@ namespace Supervertaler.PromptEditor
             {
                 Tag = p,
                 NodeFont = IsActivePrompt(p) ? ActiveFont : null,
-                ForeColor = p.IsReadOnly || !forThisApp ? SystemColors.GrayText : SystemColors.WindowText,
+                // The accent marks the live one. It is a third signal on top of the
+                // bullet and the bold, which would be too many if this list were
+                // short - in a library of three hundred rows it is the only one
+                // that answers "where is it?" without reading.
+                ForeColor = IsActivePrompt(p) ? Ui.Accent
+                    : p.IsReadOnly || !forThisApp ? SystemColors.GrayText : SystemColors.WindowText,
                 ToolTipText = forThisApp ? null
                     : "This prompt is marked for " + Describe(app) + ". memoQ will not offer it, "
                       + "and will fall back to the instructions in its own settings if it is somehow selected."
@@ -2013,6 +2020,8 @@ namespace Supervertaler.PromptEditor
                     if (active == marked) continue;
 
                     node.NodeFont = active ? ActiveFont : null;
+                    node.ForeColor = active ? Ui.Accent
+                        : p.IsReadOnly ? SystemColors.GrayText : SystemColors.WindowText;
                     node.Text = active
                         ? Marked(node.Text, true)
                         : node.Text.Replace("●  ", "");

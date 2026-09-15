@@ -28,6 +28,17 @@ namespace Supervertaler.PromptEditor
         /// </summary>
         internal static Font Default { get; } = SystemFonts.MessageBoxFont ?? Control.DefaultFont;
 
+        /// <summary>
+        /// The one colour in the window, and it means one thing: this is the item
+        /// in use right now.
+        ///
+        /// <para>memoQ's own vermillion is #F05137, which is 3.5:1 on white and
+        /// fails as text. This is the same colour darkened to 5.1:1 - the tint the
+        /// product site uses for memoQ wherever the brand colour has to be read
+        /// rather than just seen.</para>
+        /// </summary>
+        internal static Color Accent { get; } = Color.FromArgb(0xC9, 0x3A, 0x25);
+
         /// <summary>The border of a job-panel field at rest.</summary>
         internal static Color FieldEdge { get; } = Color.FromArgb(0xD4, 0xD4, 0xD4);
 
