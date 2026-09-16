@@ -1,8 +1,9 @@
 using System;
 using System.Collections.Generic;
 using System.Data;
-using System.Data.SQLite;
 using System.IO;
+using System.Runtime.InteropServices;
+using Microsoft.Data.Sqlite;
 
 namespace Supervertaler.MemoQ.Core
 {
@@ -18,18 +19,35 @@ namespace Supervertaler.MemoQ.Core
     /// add-in adds no assembly to memoQ's Addins folder, because memoQ probes
     /// that folder for its own dependencies and a second copy of a library it
     /// already loads is how the Trados plugin earned an
-    /// EntryPointNotFoundException. memoQ ships System.Data.SQLite itself
-    /// (1.0.119.0 in memoQ 12), so the reference is Private=false and we use
-    /// theirs. The native half, SQLite.Interop.dll, sits beside it and is found
-    /// through <see cref="EnsureNativeOnPath"/>.</para>
+    /// EntryPointNotFoundException. memoQ ships this stack itself -
+    /// Microsoft.Data.Sqlite 9.0.3.0, SQLitePCLRaw 2.1.10.2445 and
+    /// e_sqlite3.dll - so every reference is Private=false and we use theirs.
+    /// memoQ is not a bystander here: its own termbase engine, MemoQ.NGTB.dll,
+    /// is built on the same stack.</para>
+    ///
+    /// <para><b>Why not System.Data.SQLite, which memoQ also ships.</b> It was
+    /// the first choice and it was wrong. Measured 2026-09-16: memoQ's build of
+    /// System.Data.SQLite 1.0.119.0 <i>has no FTS5 module</i> - it cannot read
+    /// the six full-text indexes already in this file, and
+    /// <c>create virtual table ... using fts5</c> fails outright, so it could
+    /// never create this schema from scratch. That alone rules it out, because a
+    /// translator who uses neither Trados nor Workbench has no database until
+    /// this product makes one. It is also the slower of the two: a full scan of
+    /// all 36,091 terms took 101 ms here against 217 ms there. Supervertaler for
+    /// Trados is on Microsoft.Data.Sqlite as well, so both products now reach
+    /// this file through one library rather than two.</para>
     ///
     /// <para><b>Measured, 2026-09-16:</b> the file is 2.25 GB - overwhelmingly
-    /// translation memories and their indexes, not terms. Opening it costs
-    /// nothing, the 84 termbases list in milliseconds, and the largest single
-    /// termbase (10,339 terms) reads fully into memory in 32 ms. Loading a whole
-    /// selection up front is therefore fine; what needs watching is the
-    /// per-segment matching, which is <see cref="TermIndex"/>'s problem and not
-    /// this class's.</para>
+    /// translation memories (1,553,875 rows) and their indexes, not terms.
+    /// Opening it costs nothing, the 84 termbases list in milliseconds, and
+    /// every term in the file - all 36,091 of them - scans in 101 ms. Loading a
+    /// whole selection up front is therefore fine.</para>
+    ///
+    /// <para><b>The scale assumption, stated out loud:</b> tested at 36,000
+    /// terms, designed for that order. Nobody has measured ten times it, and a
+    /// design that reads everything into memory is the one that stops being free
+    /// first. What needs watching either way is the per-segment matching, which
+    /// is <see cref="TermIndex"/>'s problem and not this class's.</para>
     /// </summary>
     internal static class TermbaseDb
     {
@@ -63,44 +81,77 @@ namespace Supervertaler.MemoQ.Core
 
         internal static bool Exists => File.Exists(Path);
 
-        private static bool _nativeReady;
+        private static bool _providerReady;
         private static readonly object _lock = new object();
 
+        [DllImport("kernel32", EntryPoint = "LoadLibraryW", SetLastError = true,
+                   CharSet = CharSet.Unicode)]
+        private static extern IntPtr LoadNativeLibrary(string path);
+
         /// <summary>
-        /// Put memoQ's directory on PATH so System.Data.SQLite can find
-        /// SQLite.Interop.dll, which it loads by name rather than by full path.
+        /// Settle which native SQLite this process uses, then initialise the
+        /// provider.
         ///
-        /// <para>Done once, and additively: replacing PATH in a process that is
-        /// memoQ would be a fine way to break something far from here.</para>
+        /// <para><b>The load by absolute path is the point.</b> SQLitePCLRaw's
+        /// dynamic_cdecl provider asks the operating system for "e_sqlite3" by
+        /// name, and the answer depends on the search order of whichever process
+        /// we are in - memoQ, or the prompt editor, or a harness. Taking memoQ's
+        /// own copy by full path first means the module is already loaded when
+        /// the provider asks, so there is nothing left to get wrong. This is the
+        /// trick Supervertaler for Trados uses inside Studio, for the same
+        /// reason and to the same end.</para>
+        ///
+        /// <para><b>Initialising twice is safe.</b> memoQ's own termbase engine
+        /// uses this stack, so the provider may well be initialised before we
+        /// ever run. Measured 2026-09-16: a second Init is a no-op rather than a
+        /// throw, an Init after another component has set a provider is fine,
+        /// and the connection works afterwards either way.</para>
         /// </summary>
-        private static void EnsureNativeOnPath()
+        private static void EnsureProvider()
         {
             lock (_lock)
             {
-                if (_nativeReady) return;
+                if (_providerReady) return;
 
-                var dir = System.IO.Path.GetDirectoryName(
-                    typeof(SQLiteConnection).Assembly.Location);
-
-                if (!string.IsNullOrEmpty(dir))
+                // Guarded as a whole: a translator whose memoQ is laid out in
+                // some way we did not foresee should lose the termbase list, not
+                // have the editor fail to open.
+                try
                 {
-                    var path = Environment.GetEnvironmentVariable("PATH") ?? "";
-                    if (path.IndexOf(dir, StringComparison.OrdinalIgnoreCase) < 0)
-                        Environment.SetEnvironmentVariable("PATH", dir + ";" + path);
+                    var dir = System.IO.Path.GetDirectoryName(
+                        typeof(SqliteConnection).Assembly.Location);
+
+                    if (!string.IsNullOrEmpty(dir))
+                    {
+                        var native = System.IO.Path.Combine(dir, "e_sqlite3.dll");
+                        if (File.Exists(native)) LoadNativeLibrary(native);
+                    }
+
+                    SQLitePCL.Batteries_V2.Init();
+                }
+                catch (Exception ex)
+                {
+                    ErrorSink("SQLite provider could not be initialised", ex);
                 }
 
-                _nativeReady = true;
+                _providerReady = true;
             }
         }
 
-        private static SQLiteConnection Open()
+        private static SqliteConnection Open()
         {
-            EnsureNativeOnPath();
+            EnsureProvider();
 
-            // Read Only, and no write-ahead journal of our own: Trados or
-            // Workbench may have this file open while we read it.
-            var connection = new SQLiteConnection(
-                "Data Source=" + Path + ";Version=3;Read Only=True;");
+            // Read-only, and built rather than concatenated so that a data
+            // folder with a semicolon or a quote in its path cannot change the
+            // meaning of the string.
+            var builder = new SqliteConnectionStringBuilder
+            {
+                DataSource = Path,
+                Mode = SqliteOpenMode.ReadOnly
+            };
+
+            var connection = new SqliteConnection(builder.ToString());
             connection.Open();
             return connection;
         }

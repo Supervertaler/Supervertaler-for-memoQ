@@ -43,8 +43,22 @@
     right frame per window and per DPI.
   -->
   <ItemGroup>
-    <Reference Include="System.Data.SQLite">
-      <HintPath>$(MemoQPath)\System.Data.SQLite.dll</HintPath>
+    <!-- The SQLite stack memoQ already loads. Private=false throughout: these
+         are memoQ's copies, used in place, never copied into Addins. Its own
+         termbase engine (MemoQ.NGTB.dll) is built on the same three.
+         SQLitePCLRaw.provider.dynamic_cdecl is not referenced because no type
+         of ours names it - Batteries_V2 reaches it at runtime, out of memoQ's
+         own directory. -->
+    <Reference Include="Microsoft.Data.Sqlite">
+      <HintPath>$(MemoQPath)\Microsoft.Data.Sqlite.dll</HintPath>
+      <Private>false</Private>
+    </Reference>
+    <Reference Include="SQLitePCLRaw.core">
+      <HintPath>$(MemoQPath)\SQLitePCLRaw.core.dll</HintPath>
+      <Private>false</Private>
+    </Reference>
+    <Reference Include="SQLitePCLRaw.batteries_v2">
+      <HintPath>$(MemoQPath)\SQLitePCLRaw.batteries_v2.dll</HintPath>
       <Private>false</Private>
     </Reference>
     <EmbeddedResource Include="..\Supervertaler.MemoQ\Resources\sv-icon.ico">

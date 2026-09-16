@@ -88,6 +88,41 @@ $a2 = [object[]]::new(1); $a2[0] = $empty.PSObject.BaseObject
 $none = $termsIn.Invoke($null, $a2)
 Check 'no termbases selected means no terms' ($none.Count -eq 0)
 
+# -- the provider, and the reason we chose it -------------------------------
+# TermbaseDb moved from System.Data.SQLite to Microsoft.Data.Sqlite for one
+# reason: memoQ's build of the former has NO fts5 module, so it cannot read the
+# six full-text indexes already in this file and could never create the schema
+# for a translator who has no database yet. Assert both halves, because a
+# revert to the old provider would otherwise pass every test above.
+$loaded = [AppDomain]::CurrentDomain.GetAssemblies() | ForEach-Object { $_.GetName().Name }
+Check 'the reader is on Microsoft.Data.Sqlite' ($loaded -contains 'Microsoft.Data.Sqlite') ("$($loaded -join ', ')")
+Check 'System.Data.SQLite was not dragged in' (-not ($loaded -contains 'System.Data.SQLite'))
+
+# fts5 through the very provider the plugin just used, not a fresh one.
+$mds = [AppDomain]::CurrentDomain.GetAssemblies() | Where-Object { $_.GetName().Name -eq 'Microsoft.Data.Sqlite' }
+if ($mds) {
+    $con = $mds.CreateInstance('Microsoft.Data.Sqlite.SqliteConnection')
+    $con.ConnectionString = "Data Source=$path;Mode=ReadOnly"
+    try {
+        $con.Open()
+        $c = $con.CreateCommand()
+        $c.CommandText = 'select count(*) from termbase_terms_fts'
+        $n = $c.ExecuteScalar()
+        Check "fts5 is reachable ($n rows in the term index)" ($n -gt 0)
+
+        $c = $con.CreateCommand()
+        $c.CommandText = 'create virtual table temp.probe using fts5(x)'
+        [void]$c.ExecuteNonQuery()
+        Check 'fts5 tables can be CREATED, which is what a memoQ-only user needs' $true
+    } catch {
+        Check 'fts5 is reachable' $false $_.Exception.Message
+    } finally {
+        $con.Close()
+    }
+} else {
+    Check 'fts5 is reachable' $false 'Microsoft.Data.Sqlite never loaded'
+}
+
 Write-Host ''
 Write-Host ("TERMBASE READER TEST COMPLETE - {0} passed, {1} failed" -f $pass, $fail)
 if ($fail -gt 0) { exit 1 }

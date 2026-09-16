@@ -34,8 +34,9 @@ namespace Supervertaler.MemoQ.Core
     /// column containing "forbidden" (or "!") marks a target that must not be
     /// used. Deliberately a text file rather than a Supervertaler SQLite termbase:
     /// that reader lives in the Trados plugin and comes across with
-    /// Supervertaler.Core, and adding Microsoft.Data.Sqlite to the Addins folder
-    /// before then would put us in a fight with memoQ's own SQLite for no reason
+    /// Supervertaler.Core. The fight with memoQ's own SQLite that this once
+    /// worried about does not arise: memoQ ships Microsoft.Data.Sqlite itself
+    /// and TermbaseDb uses memoQ's copy in place, adding nothing to Addins
     /// yet.</para>
     /// </summary>
     internal static class TermIndex

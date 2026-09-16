@@ -11,6 +11,8 @@ any release tooling that buckets on these headings works for both.
 
 ### Fixed
 
+- **Termbases are read through the same SQLite library Supervertaler for Trados uses.** memoQ ships two, and the one this used until now cannot handle full-text search at all – it could not read the search indexes already in the shared file, and could not have built that file from scratch for someone who has never installed Supervertaler for Trados or Workbench. Nothing extra is installed either way: both libraries are memoQ's own copies, used where they lie, and memoQ's own termbase engine is built on the one now in use. Reading every term in the file went from 217 ms to 101 ms in passing.
+
 - **Termbases… opened on an error instead of a list.** The prompt editor is a separate program from the plugin, and it borrows its SQLite library from memoQ rather than carrying one of its own – but it is installed one directory below the library, in memoQ's Addins folder, and a program does not look for a library above itself. So every other pane worked and that one dialog could not open. The editor now looks for what it borrows in memoQ's own directory. The plugin inside memoQ was never affected, which is why the test harnesses did not catch it: each one installs a search path of its own before loading anything, so they were testing a condition the real program never runs in.
 
 ### Added
