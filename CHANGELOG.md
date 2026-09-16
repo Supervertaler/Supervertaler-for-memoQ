@@ -7,7 +7,7 @@ matches the Supervertaler for Trados changelog – one bold headline per bullet,
 a ★ on the things a release would be announced for – so the two read alike and
 any release tooling that buckets on these headings works for both.
 
-## [Unreleased] – 2026-09-06
+## [Unreleased] – 2026-09-16
 
 ### Fixed
 
@@ -27,7 +27,7 @@ any release tooling that buckets on these headings works for both.
 
 - **One termbase is the project’s; the rest are background.** That is the whole distinction, and it is the one Supervertaler for Trados makes: a small, deliberate termbase for the job in hand, against any number of standing ones. Its hits are shaded darker in the source and the pane names it as the project termbase, so a project term is recognisable without reading anything. Only one termbase can hold it – ticking a second releases the first – and whichever one Supervertaler for Trados already treats as the project termbase is the starting answer here, so it need not be nominated twice. Sending a termbase to the AI stays a separate tick, because the two decisions are separate.
 
-- **The termbases you already keep in Supervertaler for Trados are visible to memoQ.** **memoQ › Termbases…** in the prompt editor lists every termbase in the database that Supervertaler for Trados and Supervertaler Workbench share – 84 of them here, 36,000 terms – with four things memoQ decides for itself: whether to consult it in this project, its rank, whether to match case-sensitively, and whether its terms reach the model. The database is opened read-only and is never written to, so Trados's and Workbench's own settings are untouched; memoQ's answers live in their own file beside the glossaries. Rank takes the place of the Project column Trados has, because memoQ shades a term hit by the rank of the termbase it came from. Nothing is selected until you select it.
+- **The termbases you already keep in Supervertaler for Trados are visible to memoQ.** **memoQ › Termbases…** in the prompt editor lists every termbase in the database that Supervertaler for Trados and Supervertaler Workbench share – 84 of them here, 36,000 terms – with four things memoQ decides for itself: whether to consult it in this project, whether it is the project termbase, whether to match case-sensitively, and whether its terms reach the model. The database is opened read-only and is never written to, so Trados's and Workbench's own settings are untouched; memoQ's answers live in their own file beside the glossaries. Nothing is selected until you select it.
 
 - **The window takes memoQ's own scheme.** The toolbar, the menu, the band at the top and the ground behind them are a pale blue-grey rather than Windows' default control grey, while the library tree and the editor stay white. That is what memoQ does with its own frame, and it is why its dashboard does not read as grey although almost all of it is neutral. Under a high-contrast or dark Windows theme the tint is not used and the system colour is, so the chrome stays readable.
 
