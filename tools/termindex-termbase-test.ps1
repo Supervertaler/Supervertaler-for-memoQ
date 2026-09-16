@@ -207,6 +207,41 @@ if ($null -eq $reversed) {
           ($unflipped.Count -ge 1 -and $unflipped[0].Entry.Source -eq $term.Source) ("got $($unflipped.Count)")
 }
 
+# -- a termbase in an UNRELATED pair must not be turned -----------------------
+# The third case, and the one that would be loud rather than quiet: if the
+# direction test were binary - backwards or not - a de->en termbase on an
+# nl->en job would fall into the backwards branch, and German would be matched
+# against Dutch text and presented as this job's terminology. With 84
+# termbases in one database, an nl->en job WILL meet pairs that are neither
+# nl->en nor en->nl. Raised by the Trados session; asserted here because the
+# code was right and nothing proved it.
+# Sorted so a genuinely foreign source language is preferred: en-US->en-GB also
+# qualifies as "unrelated" to an nl->en job, but both its sides normalise to en,
+# which is a much weaker test than a German termbase.
+$unrelated = $all | Sort-Object -Property @{ Expression = { $_.SourceLang -in @('en', 'en-US', 'en-GB') } } | Where-Object {
+    $_.Terms -gt 5 -and $_.SourceLang -ne $null -and $_.TargetLang -ne $null -and
+    -not ($_.SourceLang -eq 'nl' -and $_.TargetLang -eq 'en') -and
+    -not ($_.SourceLang -eq 'en' -and $_.TargetLang -eq 'nl')
+} | Select-Object -First 1
+
+if ($null -eq $unrelated) {
+    Write-Host '   (no unrelated-pair termbase in this database; test skipped)'
+} else {
+    Write-Host ('using an unrelated pair: {0}->{1}' -f $unrelated.SourceLang, $unrelated.TargetLang)
+    $uIds = New-Object 'System.Collections.Generic.List[long]'
+    $uIds.Add([long]$unrelated.Id)
+    $ua = [object[]]::new(1); $ua[0] = $uIds.PSObject.BaseObject
+    $stored = $TermsInMethod.Invoke($null, $ua)
+
+    $turner = $db.GetMethods($NPS) | Where-Object { $_.Name -eq 'TermsIn' -and $_.GetParameters().Count -eq 3 }
+    $ta = [object[]]::new(3); $ta[0] = $uIds.PSObject.BaseObject; $ta[1] = 'dut-NL'; $ta[2] = 'eng-GB'
+    $asked = $turner.Invoke($null, $ta)
+
+    $sameCount = $asked.Count -eq $stored.Count
+    $sameFirst = $asked[0].Source -eq $stored[0].Source
+    Check 'an unrelated pair is read as stored, not inverted' ($sameCount -and $sameFirst) ("stored=$($stored[0].Source) asked=$($asked[0].Source)")
+}
+
 # -- scale: how long does a lookup take with a big selection? ----------------
 $big = $all | Sort-Object Terms -Descending | Select-Object -First 8
 $bigIds = @(); $bigFlags = @()
