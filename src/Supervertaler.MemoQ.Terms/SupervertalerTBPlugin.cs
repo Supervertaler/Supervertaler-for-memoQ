@@ -197,13 +197,22 @@ namespace Supervertaler.MemoQ
         /// <para>The soft green this used before was Trados's language. A
         /// translator reading two products side by side should not have to hold
         /// two colour schemes.</para>
+        ///
+        /// <para>The first set of four sat about 8 per cent apart in lightness
+        /// and was, in use, indistinguishable - which made the Rank column in
+        /// the editor decoration rather than information. These are roughly
+        /// three times further apart at the top end, where it counts: with two
+        /// termbases hitting the same segment, rank 1 has to read as the
+        /// project's own at a glance. Still light enough for black text to sit
+        /// comfortably on, because memoQ paints this BEHIND the source words
+        /// rather than using it as their colour.</para>
         /// </summary>
         private static readonly Color[] RankColors =
         {
-            ColorTranslator.FromHtml("#EAF3FC"),   // unranked, and the glossary file
-            ColorTranslator.FromHtml("#B3D4F2"),   // rank 1, darkest
-            ColorTranslator.FromHtml("#C6E0F7"),   // rank 2
-            ColorTranslator.FromHtml("#D8EAFB")    // rank 3 and beyond
+            ColorTranslator.FromHtml("#E8F2FC"),   // unranked, and the glossary file
+            ColorTranslator.FromHtml("#7FB3E3"),   // rank 1, darkest
+            ColorTranslator.FromHtml("#A8CDF0"),   // rank 2
+            ColorTranslator.FromHtml("#CCE3F8")    // rank 3 and beyond
         };
 
         /// <summary>
