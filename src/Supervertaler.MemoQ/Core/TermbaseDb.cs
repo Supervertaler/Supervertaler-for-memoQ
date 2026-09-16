@@ -213,6 +213,30 @@ namespace Supervertaler.MemoQ.Core
         /// </summary>
         internal static IList<TermIndex.Entry> TermsIn(IEnumerable<long> termbaseIds)
         {
+            return TermsIn(termbaseIds, null, null);
+        }
+
+        /// <summary>
+        /// Every term in the given termbases, turned the way this job needs them.
+        ///
+        /// <para><b>Why direction matters here.</b> A termbase is stored one way
+        /// round. Of the 84 in this database, 61 are nl-to-en and 19 are en-to-nl,
+        /// and the 19 are just as useful on a Dutch-to-English job - read
+        /// backwards. Until this existed they were silently dead: we matched the
+        /// source column against the source segment, so an en-to-nl termbase was
+        /// asked to find English words in Dutch text and answered almost nothing.
+        /// The exception that made it look half-working was a word spelled the
+        /// same in both languages - "water" - which appears in both columns and
+        /// so matched by accident.</para>
+        ///
+        /// <para>Supervertaler for Trados turns them round; this now does too.
+        /// A termbase whose pair matches neither way round is loaded as it is
+        /// stored rather than dropped: the user ticked it deliberately, and
+        /// language labels in this database are not always populated.</para>
+        /// </summary>
+        internal static IList<TermIndex.Entry> TermsIn(IEnumerable<long> termbaseIds,
+                                                      string jobSource, string jobTarget)
+        {
             var entries = new List<TermIndex.Entry>();
             if (!Exists || termbaseIds == null) return entries;
 
@@ -231,7 +255,7 @@ namespace Supervertaler.MemoQ.Core
                     // that ever came from outside.
                     command.CommandText =
                         "select tt.source_term, tt.target_term, tt.forbidden, " +
-                        "       tt.termbase_id, t.name " +
+                        "       tt.termbase_id, t.name, t.source_lang, t.target_lang " +
                         "from termbase_terms tt " +
                         "join termbases t on t.id = tt.termbase_id " +
                         "where tt.termbase_id in (" + string.Join(",", ids.ConvertAll(i => i.ToString())) + ") " +
@@ -243,6 +267,14 @@ namespace Supervertaler.MemoQ.Core
                         {
                             var source = Text(reader, 0);
                             var target = Text(reader, 1);
+
+                            if (Reversed(Text(reader, 5), Text(reader, 6), jobSource, jobTarget))
+                            {
+                                var swap = source;
+                                source = target;
+                                target = swap;
+                            }
+
                             if (source.Length == 0) continue;
 
                             entries.Add(new TermIndex.Entry
@@ -268,6 +300,84 @@ namespace Supervertaler.MemoQ.Core
             }
 
             return entries;
+        }
+
+        /// <summary>
+        /// Is this termbase stored the opposite way round from the job?
+        ///
+        /// <para>Answers false whenever it cannot tell - an unlabelled termbase,
+        /// or a job whose languages we were not given. Getting this wrong in the
+        /// false direction costs the hits we already were not getting; getting it
+        /// wrong in the true direction would show every translation backwards.</para>
+        /// </summary>
+        private static bool Reversed(string tbSource, string tbTarget,
+                                     string jobSource, string jobTarget)
+        {
+            var ts = Lang(tbSource);
+            var tt = Lang(tbTarget);
+            var js = Lang(jobSource);
+            var jt = Lang(jobTarget);
+
+            if (ts.Length == 0 || tt.Length == 0 || js.Length == 0) return false;
+            if (ts == js) return false;          // already the right way round
+            if (tt != js) return false;          // neither side is our source: leave it alone
+
+            // Its target is our source. If its source is also our target this is
+            // plainly the same pair backwards; if we were told no target, that is
+            // still the best reading available.
+            return jt.Length == 0 || ts == jt;
+        }
+
+        /// <summary>
+        /// A language to compare by. memoQ names a language "eng" or "dut" while
+        /// this database holds "en", "nl" and occasionally "en-GB", so neither
+        /// side can be compared as it stands.
+        /// </summary>
+        private static string Lang(string code)
+        {
+            var value = (code ?? string.Empty).Trim().ToLowerInvariant();
+            if (value.Length == 0) return string.Empty;
+
+            var dash = value.IndexOfAny(new[] { '-', '_' });
+            if (dash > 0) value = value.Substring(0, dash);
+
+            switch (value)
+            {
+                case "eng": return "en";
+                case "dut": case "nld": return "nl";
+                case "ger": case "deu": return "de";
+                case "fre": case "fra": return "fr";
+                case "spa": return "es";
+                case "ita": return "it";
+                case "por": return "pt";
+                case "swe": return "sv";
+                case "dan": return "da";
+                case "nor": case "nob": return "no";
+                case "fin": return "fi";
+                case "pol": return "pl";
+                case "cze": case "ces": return "cs";
+                case "rus": return "ru";
+                case "jpn": return "ja";
+                case "chi": case "zho": return "zh";
+                case "gre": case "ell": return "el";
+                case "hun": return "hu";
+                case "tur": return "tr";
+                case "ara": return "ar";
+                case "heb": return "he";
+                case "kor": return "ko";
+                case "rum": case "ron": return "ro";
+                case "slo": case "slk": return "sk";
+                case "slv": return "sl";
+                case "bul": return "bg";
+                case "hrv": return "hr";
+                case "srp": return "sr";
+                case "ukr": return "uk";
+                case "est": return "et";
+                case "lav": return "lv";
+                case "lit": return "lt";
+                case "ice": case "isl": return "is";
+                default: return value.Length > 2 ? value.Substring(0, 2) : value;
+            }
         }
 
         private static string Text(IDataRecord row, int i) =>

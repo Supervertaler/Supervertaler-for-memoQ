@@ -88,6 +88,19 @@ namespace Supervertaler.MemoQ.Core
         private static List<Entry> _termbaseEntries = new List<Entry>();
         private static string _selectionKey;
 
+        // The job's own languages, which decide whether a termbase stored the
+        // other way round is turned before use.
+        //
+        // State rather than a parameter, deliberately and narrowly: five of the
+        // seven callers of Find - the bridge, the QA checks, the index warm-up -
+        // genuinely do not know the pair, while the two that do (memoQ's
+        // terminology session and the batch translator) are told it by memoQ and
+        // set it immediately before they look anything up. So it behaves as a
+        // parameter would, without four call sites inventing a language pair
+        // they have no way of knowing.
+        private static string _jobSource;
+        private static string _jobTarget;
+
         /// <summary>
         /// Entries bucketed by the first word of their source term, so a segment
         /// only ever compares against terms that could possibly start in it.
@@ -344,7 +357,7 @@ namespace Supervertaler.MemoQ.Core
 
             try
             {
-                var loaded = TermbaseDb.TermsIn(ids);
+                var loaded = TermbaseDb.TermsIn(ids, _jobSource, _jobTarget);
                 foreach (var e in loaded)
                 {
                     TermbaseSelection.Flags f;
@@ -356,7 +369,9 @@ namespace Supervertaler.MemoQ.Core
 
                 ErrorSink($"TermIndex: loaded {_termbaseEntries.Count} term(s) "
                     + $"({_termbaseEntries.Count(e => e.Forbidden)} forbidden) "
-                    + $"from {ids.Count} termbase(s)", null);
+                    + $"from {ids.Count} termbase(s)"
+                    + (string.IsNullOrEmpty(_jobSource) ? " [no job languages, nothing reversed]"
+                                                        : $" [for {_jobSource}->{_jobTarget}]"), null);
             }
             catch (Exception ex)
             {
@@ -380,6 +395,28 @@ namespace Supervertaler.MemoQ.Core
             all.AddRange(_glossaryEntries);
             _entries = all;
             Rebuild();
+        }
+
+        /// <summary>
+        /// Tell the index which languages this job runs in, before looking
+        /// anything up. A change re-reads the selected termbases at once, since
+        /// which way round they are read depends on this.
+        /// </summary>
+        public static void UseLanguages(string source, string target)
+        {
+            lock (_lock)
+            {
+                if (string.Equals(_jobSource, source, StringComparison.OrdinalIgnoreCase)
+                 && string.Equals(_jobTarget, target, StringComparison.OrdinalIgnoreCase)) return;
+
+                _jobSource = source;
+                _jobTarget = target;
+
+                // Not merely stale - possibly backwards. Drop the key so the next
+                // lookup reloads, and clear the throttle so "next" means now.
+                _selectionKey = null;
+                _lastCheck = DateTime.MinValue;
+            }
         }
 
         /// <summary>Buckets by first word and pre-sorts each bucket longest-first.</summary>

@@ -236,6 +236,12 @@ namespace Supervertaler.MemoQ
                 // visited row at a time. Costs a dictionary insert.
                 CaptureStore.RecordVisited(_sourceLangName, _targetLangName, TagBridge.ToTaggedText(segment));
 
+                // Set immediately before the lookup, never once at startup:
+                // memoQ builds one session per language pair, and a plugin that
+                // remembered "the last pair" would read a termbase backwards on
+                // the second of two documents.
+                TermIndex.UseLanguages(_sourceLangName, _targetLangName);
+
                 var matches = TermIndex.Find(SharedSettings.GlossaryPath,
                                              SupervertalerTBPluginDirector.CurrentProject, plain);
                 if (matches.Count == 0) return new TerminologyResult[0];

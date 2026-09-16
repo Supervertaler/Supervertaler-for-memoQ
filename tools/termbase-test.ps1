@@ -1,4 +1,4 @@
-# TermbaseDb against the real database.
+﻿# TermbaseDb against the real database.
 #
 # The spike (termbase-spike.ps1) proved memoQ's SQLite can open the file. This
 # proves our reader does, through the plugin assembly memoQ actually loads, with
@@ -34,6 +34,12 @@ function Check([string]$name, [bool]$ok, [string]$detail = '') {
 }
 
 $db = $plugin.GetType('Supervertaler.MemoQ.Core.TermbaseDb')
+
+# TermsIn has two overloads now - one that turns a reversed termbase round for
+# the job, one that does not. Pick the plain one by its parameter count; by name
+# alone reflection cannot tell them apart.
+$TermsInMethod = $db.GetMethods([Reflection.BindingFlags]'NonPublic,Static') |
+    Where-Object { $_.Name -eq 'TermsIn' -and $_.GetParameters().Count -eq 1 }
 if ($null -eq $db) { throw 'TermbaseDb not found in the assembly.' }
 
 # Errors must not be swallowed while testing: point the sink at the console, or a
@@ -63,7 +69,8 @@ Check 'names are not blank' (-not [string]::IsNullOrWhiteSpace($biggest.Name))
 Check 'a language pair comes back' (-not [string]::IsNullOrWhiteSpace($biggest.SourceLang))
 
 # The load the plugin would do for a selection.
-$termsIn = $db.GetMethod('TermsIn', $NonPublicStatic)
+$termsIn = $db.GetMethods($NonPublicStatic) |
+    Where-Object { $_.Name -eq 'TermsIn' -and $_.GetParameters().Count -eq 1 }
 # .PSObject.BaseObject, not the variable: New-Object hands back a PSObject
 # wrapper, and Invoke refuses to convert that to IEnumerable<long>. The same
 # trap as passing a List<T> straight into a reflected call.

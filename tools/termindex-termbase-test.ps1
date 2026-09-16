@@ -40,6 +40,12 @@ function Check([string]$name, [bool]$ok, [string]$detail = '') {
 }
 
 $db    = $plugin.GetType('Supervertaler.MemoQ.Core.TermbaseDb')
+
+# TermsIn has two overloads now - one that turns a reversed termbase round for
+# the job, one that does not. Pick the plain one by its parameter count; by name
+# alone reflection cannot tell them apart.
+$TermsInMethod = $db.GetMethods([Reflection.BindingFlags]'NonPublic,Static') |
+    Where-Object { $_.Name -eq 'TermsIn' -and $_.GetParameters().Count -eq 1 }
 $sel   = $plugin.GetType('Supervertaler.MemoQ.Core.TermbaseSelection')
 $index = $plugin.GetType('Supervertaler.MemoQ.Core.TermIndex')
 $flagsType = $plugin.GetType('Supervertaler.MemoQ.Core.TermbaseSelection+Flags')
@@ -75,18 +81,27 @@ function Find($project, $text) {
     $a = [object[]]::new(3); $a[0] = $null; $a[1] = $project; $a[2] = $text
     return $m.Invoke($null, $a)
 }
+function UseLanguages($src, $tgt) {
+    $a = [object[]]::new(2); $a[0] = $src; $a[1] = $tgt
+    $index.GetMethod('UseLanguages', $PS).Invoke($null, $a)
+}
 
 $project = [Guid]'33333333-3333-3333-3333-333333333333'
 
 # -- pick a real term out of a real termbase --------------------------------
 $all = $db.GetMethod('All', $NPS).Invoke($null, @())
-$candidate = $all | Where-Object { $_.Terms -gt 20 -and $_.Terms -lt 4000 } | Select-Object -First 1
+# Explicitly one stored the SAME way round as the job used below, or the
+# direction test at the end would pick the same termbase for both roles and ask
+# a reversed termbase to behave as an unreversed one.
+$candidate = $all | Where-Object {
+    $_.Terms -gt 20 -and $_.Terms -lt 4000 -and $_.SourceLang -eq 'nl' -and $_.TargetLang -eq 'en'
+} | Select-Object -First 1
 if ($null -eq $candidate) { $candidate = $all | Sort-Object Terms -Descending | Select-Object -First 1 }
 
 $ids = New-Object 'System.Collections.Generic.List[long]'
 $ids.Add([long]$candidate.Id)
 $a = [object[]]::new(1); $a[0] = $ids.PSObject.BaseObject
-$terms = $db.GetMethod('TermsIn', $NPS).Invoke($null, $a)
+$terms = $TermsInMethod.Invoke($null, $a)
 
 # A single word, long enough not to collide with ordinary prose.
 $term = $terms | Where-Object { $_.Source -notmatch '\s' -and $_.Source.Length -ge 6 } | Select-Object -First 1
@@ -137,6 +152,60 @@ $mine = Find $project $sentence
 Unthrottle
 $theirs = Find $other $sentence
 Check 'the selection is per project on the lookup path too' ($mine.Count -ge 1 -and $theirs.Count -eq 0) ("mine=$($mine.Count) theirs=$($theirs.Count)")
+
+# -- a termbase stored the other way round ----------------------------------
+# The bug this guards: 19 of the 84 termbases here are en->nl while the work is
+# nl->en, and we matched the source column against the source segment. So those
+# 19 were asked to find English words in Dutch text and answered almost nothing
+# - silently, and looking exactly like a termbase with no relevant terms. The
+# one thing that did match was a word spelled the same in both languages.
+$reversed = $all | Where-Object { $_.SourceLang -eq 'en' -and $_.TargetLang -eq 'nl' -and $_.Terms -gt 50 } |
+            Select-Object -First 1
+
+if ($null -eq $reversed) {
+    Write-Host '   (no en->nl termbase in this database; direction test skipped)'
+} else {
+    Write-Host ("using a reversed termbase: {0}->{1}, {2:N0} terms" -f $reversed.SourceLang, $reversed.TargetLang, $reversed.Terms)
+
+    # Its Dutch side lives in target_term. Take one, and ask for it in a Dutch
+    # sentence on a Dutch-to-English job.
+    $rIds = New-Object 'System.Collections.Generic.List[long]'
+    $rIds.Add([long]$reversed.Id)
+    $ra = [object[]]::new(1); $ra[0] = $rIds.PSObject.BaseObject
+    $rTerms = $TermsInMethod.Invoke($null, $ra)      # unflipped: one-arg overload
+    $dutch = $rTerms | Where-Object { $_.Target -notmatch '\s' -and $_.Target.Length -ge 8 } | Select-Object -First 1
+    $dutchSentence = "De " + $dutch.Target + " werd gemeten."
+
+    $rf = [Activator]::CreateInstance($flagsType)
+    $rf.Id = [long]$reversed.Id; $rf.Rank = 1; $rf.Name = $reversed.Name
+    Save $project @($reversed.Id) @($rf)
+
+    # As stored: English source terms against Dutch text finds nothing.
+    UseLanguages 'eng' 'dut'
+    Unthrottle
+    $wrongWay = Find $project $dutchSentence
+    Check 'read as stored, a reversed termbase cannot match the source text' ($wrongWay.Count -eq 0) ("got $($wrongWay.Count)")
+
+    # Turned round for this job, the same word is found.
+    UseLanguages 'dut' 'eng'
+    Unthrottle
+    $rightWay = Find $project $dutchSentence
+    Check "turned round for the job, it answers ($($rightWay.Count) hit(s))" ($rightWay.Count -ge 1)
+
+    if ($rightWay.Count -ge 1) {
+        Check 'and the hit reads in the job direction, not the stored one' `
+              ($rightWay[0].Entry.Source -eq $dutch.Target -and $rightWay[0].Entry.Target -eq $dutch.Source) `
+              ("source=$($rightWay[0].Entry.Source) target=$($rightWay[0].Entry.Target)")
+    }
+
+    # A termbase already the right way round must NOT be turned.
+    UseLanguages 'dut' 'eng'
+    Save $project @($candidate.Id) @($f)
+    Unthrottle
+    $unflipped = Find $project $sentence
+    Check 'a termbase already the right way round is left alone' `
+          ($unflipped.Count -ge 1 -and $unflipped[0].Entry.Source -eq $term.Source) ("got $($unflipped.Count)")
+}
 
 # -- scale: how long does a lookup take with a big selection? ----------------
 $big = $all | Sort-Object Terms -Descending | Select-Object -First 8
