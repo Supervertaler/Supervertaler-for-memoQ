@@ -230,11 +230,13 @@ namespace Supervertaler.MemoQ.Core
                     // but the list is built from them rather than from any string
                     // that ever came from outside.
                     command.CommandText =
-                        "select source_term, target_term, forbidden " +
-                        "from termbase_terms " +
-                        "where termbase_id in (" + string.Join(",", ids.ConvertAll(i => i.ToString())) + ") " +
-                        "  and coalesce(is_nontranslatable, 0) = 0 " +
-                        "  and source_term is not null and source_term <> ''";
+                        "select tt.source_term, tt.target_term, tt.forbidden, " +
+                        "       tt.termbase_id, t.name " +
+                        "from termbase_terms tt " +
+                        "join termbases t on t.id = tt.termbase_id " +
+                        "where tt.termbase_id in (" + string.Join(",", ids.ConvertAll(i => i.ToString())) + ") " +
+                        "  and coalesce(tt.is_nontranslatable, 0) = 0 " +
+                        "  and tt.source_term is not null and tt.source_term <> ''";
 
                     using (var reader = command.ExecuteReader())
                         while (reader.Read())
@@ -247,7 +249,14 @@ namespace Supervertaler.MemoQ.Core
                             {
                                 Source = source,
                                 Target = target,
-                                Forbidden = Flag(reader, 2)
+                                Forbidden = Flag(reader, 2),
+                                TermbaseId = reader.IsDBNull(3) ? 0 : reader.GetInt64(3),
+
+                                // Carried so the terminology pane can say which
+                                // termbase answered. With several selected, "a
+                                // term matched" is much less useful than "this
+                                // termbase says this".
+                                Origin = Text(reader, 4)
                             });
                         }
                 }

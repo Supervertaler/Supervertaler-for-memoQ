@@ -63,9 +63,50 @@ namespace Supervertaler.MemoQ
 
         /// <summary>
         /// memoQ hides an unconfigured provider rather than offering something that
-        /// cannot work, so this is tied to whether a glossary has actually been set.
+        /// cannot work - so this must be true whenever there is any terminology at
+        /// all to offer, from either source.
+        ///
+        /// <para>It used to ask only about the glossary file, which meant that
+        /// selecting termbases and nothing else left the provider invisible in
+        /// memoQ: the terms were loaded and ready and the plugin was never
+        /// offered to the project. Termbases now count.</para>
         /// </summary>
-        public override bool PluginConfigured => !string.IsNullOrWhiteSpace(SharedSettings.GlossaryPath);
+        public override bool PluginConfigured =>
+            !string.IsNullOrWhiteSpace(SharedSettings.GlossaryPath) || AnyTermbaseSelected;
+
+        /// <summary>
+        /// Whether this project has termbases ticked. Never throws: this is asked
+        /// while memoQ builds its list of providers.
+        /// </summary>
+        private static bool AnyTermbaseSelected
+        {
+            get
+            {
+                try
+                {
+                    return TermbaseSelection.ReadFor(CurrentProject).Count > 0;
+                }
+                catch
+                {
+                    return false;
+                }
+            }
+        }
+
+        /// <summary>
+        /// The memoQ project in force, as the MT engine last recorded it. The TB
+        /// SDK tells a terminology plugin nothing about projects, so this is the
+        /// only way it can know which selection applies.
+        /// </summary>
+        internal static Guid CurrentProject
+        {
+            get
+            {
+                Guid project;
+                return Guid.TryParse((SharedSettings.MemoryBankProject ?? string.Empty).Trim(), out project)
+                    ? project : Guid.Empty;
+            }
+        }
 
         public override bool PluginEnabled
         {
@@ -148,11 +189,38 @@ namespace Supervertaler.MemoQ
             _targetLangName = targetLangName;
         }
 
-        /// <summary>Approved term: the same soft green TermLens uses in Trados.</summary>
-        private static readonly Color ApprovedColor = ColorTranslator.FromHtml("#D4EDDA");
+        /// <summary>
+        /// Term hits shaded by the rank of the termbase behind them, darker for
+        /// higher - which is memoQ's own visual language for terminology, not an
+        /// invention of ours. Index 0 is unranked, and also every glossary term.
+        ///
+        /// <para>The soft green this used before was Trados's language. A
+        /// translator reading two products side by side should not have to hold
+        /// two colour schemes.</para>
+        /// </summary>
+        private static readonly Color[] RankColors =
+        {
+            ColorTranslator.FromHtml("#EAF3FC"),   // unranked, and the glossary file
+            ColorTranslator.FromHtml("#B3D4F2"),   // rank 1, darkest
+            ColorTranslator.FromHtml("#C6E0F7"),   // rank 2
+            ColorTranslator.FromHtml("#D8EAFB")    // rank 3 and beyond
+        };
 
-        /// <summary>Forbidden term: red, because it is a warning and not a suggestion.</summary>
+        /// <summary>
+        /// Forbidden: a warning tint rather than memoQ's black. memoQ writes a
+        /// forbidden term in black TEXT in its own pane, and this colour is a
+        /// HIGHLIGHT painted behind the words in the source cell - black there
+        /// would be black on black. The black belongs in the pane markup we
+        /// author ourselves, which is where it now is.
+        /// </summary>
         private static readonly Color ForbiddenColor = ColorTranslator.FromHtml("#F8D7DA");
+
+        private static Color ColorFor(TermIndex.Entry entry)
+        {
+            if (entry.Forbidden) return ForbiddenColor;
+            if (entry.Rank <= 0) return RankColors[0];
+            return RankColors[Math.Min(entry.Rank, RankColors.Length - 1)];
+        }
 
         public override TerminologyResult[] Lookup(Segment segment)
         {
@@ -168,7 +236,8 @@ namespace Supervertaler.MemoQ
                 // visited row at a time. Costs a dictionary insert.
                 CaptureStore.RecordVisited(_sourceLangName, _targetLangName, TagBridge.ToTaggedText(segment));
 
-                var matches = TermIndex.Find(SharedSettings.GlossaryPath, plain);
+                var matches = TermIndex.Find(SharedSettings.GlossaryPath,
+                                             SupervertalerTBPluginDirector.CurrentProject, plain);
                 if (matches.Count == 0) return new TerminologyResult[0];
 
                 var results = new List<TerminologyResult>(matches.Count);
@@ -214,7 +283,7 @@ namespace Supervertaler.MemoQ
                         // memoQ uses it to decide which target column a hit belongs
                         // to when several languages are in play.
                         TargetLanguage = _targetLangName,
-                        Color = m.Entry.Forbidden ? ForbiddenColor : ApprovedColor,
+                        Color = ColorFor(m.Entry),
 
                         // memoQ shows this as the match quality. A glossary hit is
                         // exact by construction — it either occurs in the text or it
@@ -249,7 +318,8 @@ namespace Supervertaler.MemoQ
 
             if (entry.Forbidden)
             {
-                sb.Append("<div style=\"color:#842029;font-weight:bold\">Do not use: ")
+                // Black, because that is what black means in memoQ: forbidden.
+                sb.Append("<div style=\"color:#000000;font-weight:bold\">Do not use: ")
                   .Append("<span style=\"text-decoration:line-through\">").Append(Escape(entry.Target)).Append("</span>")
                   .Append("</div>");
             }
@@ -259,13 +329,19 @@ namespace Supervertaler.MemoQ
             }
 
             sb.Append("<div style=\"color:#6c757d\">").Append(Escape(entry.Source)).Append("</div>");
-            // Name the glossary the hit came from. A translator who has just
-            // exported a new one from the prompt editor otherwise has no way of
-            // telling, from the pane, whether it is this glossary or the old one
-            // that is answering.
-            var glossaryName = System.IO.Path.GetFileName(SharedSettings.GlossaryPath ?? string.Empty);
+
+            // Name what answered. With a glossary file and several termbases all
+            // live at once, "a term matched" is much less use than knowing which
+            // termbase said so - and it is the only way to tell, from the pane,
+            // whether a freshly exported glossary or a standing termbase is the
+            // one talking.
+            var origin = (entry.Origin ?? string.Empty).Trim();
+            if (origin.Length == 0)
+                origin = System.IO.Path.GetFileName(SharedSettings.GlossaryPath ?? string.Empty);
+
             sb.Append("<div style=\"color:#adb5bd;font-size:8pt\">Supervertaler")
-              .Append(glossaryName.Length > 0 ? " · " + Escape(glossaryName) : string.Empty)
+              .Append(origin.Length > 0 ? " · " + Escape(origin) : string.Empty)
+              .Append(entry.Rank > 0 ? " · rank " + entry.Rank : string.Empty)
               .Append("</div>");
             sb.Append("</div>");
             return sb.ToString();

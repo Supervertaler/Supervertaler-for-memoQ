@@ -46,6 +46,19 @@ namespace Supervertaler.MemoQ.Core
             public string Source { get; set; }
             public string Target { get; set; }
             public bool Forbidden { get; set; }
+
+            /// <summary>0 for a term from the glossary file.</summary>
+            public long TermbaseId { get; set; }
+
+            /// <summary>
+            /// The rank of the termbase this came from: 1 is highest, 0 unranked
+            /// or from the glossary file. memoQ shades a term hit by the rank of
+            /// the termbase behind it, so this decides the colour.
+            /// </summary>
+            public int Rank { get; set; }
+
+            /// <summary>Termbase or glossary name, for the terminology pane.</summary>
+            public string Origin { get; set; }
         }
 
         internal sealed class Match
@@ -67,6 +80,13 @@ namespace Supervertaler.MemoQ.Core
 
         private static readonly object _lock = new object();
         private static List<Entry> _entries = new List<Entry>();
+
+        // Kept apart so that a change to one source does not cost a reload of the
+        // other: the glossary file is re-parsed when it is touched, the termbases
+        // when the selection changes, and neither triggers the other.
+        private static List<Entry> _glossaryEntries = new List<Entry>();
+        private static List<Entry> _termbaseEntries = new List<Entry>();
+        private static string _selectionKey;
 
         /// <summary>
         /// Entries bucketed by the first word of their source term, so a segment
@@ -100,7 +120,22 @@ namespace Supervertaler.MemoQ.Core
         /// </summary>
         public static IReadOnlyList<Match> Find(string glossaryPath, string plainText)
         {
-            EnsureLoaded(glossaryPath);
+            return Find(glossaryPath, Guid.Empty, plainText);
+        }
+
+        /// <summary>
+        /// Terms found in this segment, from the glossary file AND from whichever
+        /// termbases are selected for this memoQ project.
+        ///
+        /// <para>The two sources are merged rather than one replacing the other:
+        /// a translator may have a job-specific glossary exported from a prompt
+        /// and a standing termbase, and both are true at once. Where they collide
+        /// the longest match wins, which is what already decided between two
+        /// glossary entries.</para>
+        /// </summary>
+        public static IReadOnlyList<Match> Find(string glossaryPath, Guid project, string plainText)
+        {
+            EnsureLoaded(glossaryPath, project);
 
             if (string.IsNullOrWhiteSpace(plainText)) return Array.Empty<Match>();
 
@@ -197,30 +232,44 @@ namespace Supervertaler.MemoQ.Core
 
         // ---- loading ----------------------------------------------------------
 
-        private static void EnsureLoaded(string path)
+        private static void EnsureLoaded(string path, Guid project)
         {
             lock (_lock)
             {
-                if (string.IsNullOrWhiteSpace(path))
-                {
-                    if (_entries.Count > 0) { _entries = new List<Entry>(); _loadedPath = null; }
-                    return;
-                }
-
                 var now = DateTime.UtcNow;
                 var samePath = string.Equals(path, _loadedPath, StringComparison.OrdinalIgnoreCase);
+
+                // Both sources are checked on the same throttle. memoQ asks per
+                // segment, so this runs constantly; a stat every three seconds is
+                // affordable and a reload on every keystroke is not.
                 if (samePath && now - _lastCheck < CheckInterval) return;
                 _lastCheck = now;
+
+                ReloadTermbasesIfChanged(project);
+
+                if (string.IsNullOrWhiteSpace(path))
+                {
+                    // No glossary file is not "no terminology" any more: the
+                    // termbases stand on their own.
+                    if (_glossaryEntries.Count > 0)
+                    {
+                        _glossaryEntries = new List<Entry>();
+                        _loadedPath = null;
+                        Combine();
+                    }
+                    return;
+                }
 
                 DateTime stamp;
                 try
                 {
                     if (!File.Exists(path))
                     {
-                        if (_entries.Count > 0)
+                        if (_glossaryEntries.Count > 0)
                             ErrorSink($"TermIndex: glossary no longer found at {path}", null);
-                        _entries = new List<Entry>();
+                        _glossaryEntries = new List<Entry>();
                         _loadedPath = path;
+                        Combine();
                         return;
                     }
                     stamp = File.GetLastWriteTimeUtc(path);
@@ -234,17 +283,103 @@ namespace Supervertaler.MemoQ.Core
                 // Edit the file while memoQ is open and the next segment sees it.
                 if (samePath && stamp == _loadedStamp) return;
 
-                _entries = Parse(path);
+                _glossaryEntries = Parse(path);
+                foreach (var e in _glossaryEntries) e.Origin = Path.GetFileName(path);
                 ReadHeader(path);
-                Rebuild();
                 _loadedPath = path;
                 _loadedStamp = stamp;
+                Combine();
 
-                ErrorSink($"TermIndex: loaded {_entries.Count} term(s) "
-                    + $"({_entries.Count(e => e.Forbidden)} forbidden, "
-                    + $"{_byFirstWord.Count} bucket(s)) from {Path.GetFileName(path)}"
+                ErrorSink($"TermIndex: loaded {_glossaryEntries.Count} term(s) "
+                    + $"({_glossaryEntries.Count(e => e.Forbidden)} forbidden) "
+                    + $"from {Path.GetFileName(path)}"
                     + (DeclaredPair == null ? " [no language declared]" : $" [{DeclaredPair}]"), null);
             }
+        }
+
+        /// <summary>
+        /// Load the terms of the termbases selected for this project, when the
+        /// selection has changed since last time.
+        ///
+        /// <para>Keyed on the selection itself - the ids and their ranks - rather
+        /// than on a file timestamp, so a change made in the prompt editor lands
+        /// within one check interval however it was made, and a save that changed
+        /// nothing costs nothing.</para>
+        ///
+        /// <para><b>Scale, stated rather than assumed:</b> the whole selection is
+        /// read into memory at once. Measured on the real database - 84 termbases,
+        /// 36,091 terms - a full read of every term in the file is around 100 ms,
+        /// and a typical selection is far smaller. It is loaded once per change,
+        /// not per segment. Selecting every termbase at once is therefore about a
+        /// tenth of a second and some tens of megabytes; ten times that data would
+        /// want a different design.</para>
+        /// </summary>
+        private static void ReloadTermbasesIfChanged(Guid project)
+        {
+            string key;
+            IList<long> ids;
+            IDictionary<long, TermbaseSelection.Flags> flags;
+
+            try
+            {
+                ids = TermbaseSelection.ReadFor(project);
+                flags = TermbaseSelection.All();
+                key = project.ToString("N") + "|" + string.Join(",",
+                    ids.Select(id => id + ":" + (flags.ContainsKey(id) ? flags[id].Rank : 0)));
+            }
+            catch (Exception ex)
+            {
+                ErrorSink("TermIndex: could not read the termbase selection", ex);
+                return;
+            }
+
+            if (string.Equals(key, _selectionKey, StringComparison.Ordinal)) return;
+            _selectionKey = key;
+
+            if (ids.Count == 0)
+            {
+                if (_termbaseEntries.Count > 0) { _termbaseEntries = new List<Entry>(); Combine(); }
+                return;
+            }
+
+            try
+            {
+                var loaded = TermbaseDb.TermsIn(ids);
+                foreach (var e in loaded)
+                {
+                    TermbaseSelection.Flags f;
+                    e.Rank = flags.TryGetValue(e.TermbaseId, out f) ? f.Rank : 0;
+                }
+
+                _termbaseEntries = new List<Entry>(loaded);
+                Combine();
+
+                ErrorSink($"TermIndex: loaded {_termbaseEntries.Count} term(s) "
+                    + $"({_termbaseEntries.Count(e => e.Forbidden)} forbidden) "
+                    + $"from {ids.Count} termbase(s)", null);
+            }
+            catch (Exception ex)
+            {
+                // Terminology degrades to whatever the glossary file holds; it
+                // does not take the grid down with it.
+                ErrorSink("TermIndex: could not load terms from the termbase database", ex);
+                _termbaseEntries = new List<Entry>();
+                Combine();
+            }
+        }
+
+        /// <summary>
+        /// The two sources become one index. Ranked termbase terms first, so that
+        /// where two sources carry the same source term of the same length, the
+        /// better-ranked one is the entry that matches.
+        /// </summary>
+        private static void Combine()
+        {
+            var all = new List<Entry>(_termbaseEntries.Count + _glossaryEntries.Count);
+            all.AddRange(_termbaseEntries.OrderBy(e => e.Rank == 0 ? int.MaxValue : e.Rank));
+            all.AddRange(_glossaryEntries);
+            _entries = all;
+            Rebuild();
         }
 
         /// <summary>Buckets by first word and pre-sorts each bucket longest-first.</summary>
