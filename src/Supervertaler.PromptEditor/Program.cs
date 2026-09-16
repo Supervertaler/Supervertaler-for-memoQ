@@ -13,6 +13,11 @@ namespace Supervertaler.PromptEditor
         [STAThread]
         private static void Main(string[] args)
         {
+            // Before anything else: this editor borrows System.Data.SQLite
+            // from memoQ, which lives one directory up from our own and is
+            // therefore not on any probing path of ours.
+            MemoQAssemblies.Resolve();
+
             Application.EnableVisualStyles();
             Application.SetCompatibleTextRenderingDefault(false);
 

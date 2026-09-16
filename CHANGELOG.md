@@ -9,6 +9,10 @@ any release tooling that buckets on these headings works for both.
 
 ## [Unreleased] – 2026-09-06
 
+### Fixed
+
+- **Termbases… opened on an error instead of a list.** The prompt editor is a separate program from the plugin, and it borrows its SQLite library from memoQ rather than carrying one of its own – but it is installed one directory below the library, in memoQ's Addins folder, and a program does not look for a library above itself. So every other pane worked and that one dialog could not open. The editor now looks for what it borrows in memoQ's own directory. The plugin inside memoQ was never affected, which is why the test harnesses did not catch it: each one installs a search path of its own before loading anything, so they were testing a condition the real program never runs in.
+
 ### Added
 
 - **The termbases you already keep in Supervertaler for Trados are visible to memoQ.** **memoQ › Termbases…** in the prompt editor lists every termbase in the database that Supervertaler for Trados and Supervertaler Workbench share – 84 of them here, 36,000 terms – with four things memoQ decides for itself: whether to consult it in this project, its rank, whether to match case-sensitively, and whether its terms reach the model. The database is opened read-only and is never written to, so Trados's and Workbench's own settings are untouched; memoQ's answers live in their own file beside the glossaries. Rank takes the place of the Project column Trados has, because memoQ shades a term hit by the rank of the termbase it came from. Nothing is selected until you select it.
