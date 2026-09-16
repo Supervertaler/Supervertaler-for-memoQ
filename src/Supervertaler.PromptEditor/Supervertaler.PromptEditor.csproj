@@ -43,6 +43,10 @@
     right frame per window and per DPI.
   -->
   <ItemGroup>
+    <Reference Include="System.Data.SQLite">
+      <HintPath>$(MemoQPath)\System.Data.SQLite.dll</HintPath>
+      <Private>false</Private>
+    </Reference>
     <EmbeddedResource Include="..\Supervertaler.MemoQ\Resources\sv-icon.ico">
       <LogicalName>Supervertaler.PromptEditor.Resources.sv-icon.ico</LogicalName>
     </EmbeddedResource>
@@ -66,6 +70,12 @@
       glossary is one setting in one file that both processes write, so both
       must agree on its format down to the line endings.
     -->
+    <Compile Include="..\Supervertaler.MemoQ\Core\TermbaseDb.cs">
+      <Link>Core\TermbaseDb.cs</Link>
+    </Compile>
+    <Compile Include="..\Supervertaler.MemoQ\Core\TermIndex.cs">
+      <Link>Core\TermIndex.cs</Link>
+    </Compile>
     <Compile Include="..\Supervertaler.MemoQ\Core\SharedSettings.cs">
       <Link>Shared\SharedSettings.cs</Link>
     </Compile>

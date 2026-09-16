@@ -57,6 +57,13 @@ namespace Supervertaler.MemoQ.Core
             public int Length { get; set; }
         }
 
+        /// <summary>
+        /// Where this reports. The plugin points it at its log; the prompt editor
+        /// compiles this same file to read termbases and has no log, so it leaves
+        /// it silent. The arrangement SharedSettings uses, for the same reason.
+        /// </summary>
+        internal static Action<string, Exception> ErrorSink = (message, ex) => { };
+
         private static readonly object _lock = new object();
         private static List<Entry> _entries = new List<Entry>();
 
@@ -210,7 +217,7 @@ namespace Supervertaler.MemoQ.Core
                     if (!File.Exists(path))
                     {
                         if (_entries.Count > 0)
-                            PluginLog.Write($"TermIndex: glossary no longer found at {path}");
+                            ErrorSink($"TermIndex: glossary no longer found at {path}", null);
                         _entries = new List<Entry>();
                         _loadedPath = path;
                         return;
@@ -219,7 +226,7 @@ namespace Supervertaler.MemoQ.Core
                 }
                 catch (Exception ex)
                 {
-                    PluginLog.Write("TermIndex: could not stat glossary", ex);
+                    ErrorSink("TermIndex: could not stat glossary", ex);
                     return;
                 }
 
@@ -232,10 +239,10 @@ namespace Supervertaler.MemoQ.Core
                 _loadedPath = path;
                 _loadedStamp = stamp;
 
-                PluginLog.Write($"TermIndex: loaded {_entries.Count} term(s) "
+                ErrorSink($"TermIndex: loaded {_entries.Count} term(s) "
                     + $"({_entries.Count(e => e.Forbidden)} forbidden, "
                     + $"{_byFirstWord.Count} bucket(s)) from {Path.GetFileName(path)}"
-                    + (DeclaredPair == null ? " [no language declared]" : $" [{DeclaredPair}]"));
+                    + (DeclaredPair == null ? " [no language declared]" : $" [{DeclaredPair}]"), null);
             }
         }
 
@@ -309,7 +316,7 @@ namespace Supervertaler.MemoQ.Core
             }
             catch (Exception ex)
             {
-                PluginLog.Write("TermIndex: could not read the glossary header", ex);
+                ErrorSink("TermIndex: could not read the glossary header", ex);
             }
         }
 
@@ -340,7 +347,7 @@ namespace Supervertaler.MemoQ.Core
             }
             catch (Exception ex)
             {
-                PluginLog.Write("TermIndex: could not read glossary", ex);
+                ErrorSink("TermIndex: could not read glossary", ex);
             }
 
             return entries;

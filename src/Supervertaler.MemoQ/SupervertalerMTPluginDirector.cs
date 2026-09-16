@@ -48,6 +48,8 @@ namespace Supervertaler.MemoQ
             // SharedSettings is compiled into the prompt editor as well, so it
             // cannot reference the plugin log directly. Inside memoQ it should.
             SharedSettings.ErrorSink = PluginLog.Write;
+            Core.TermIndex.ErrorSink = PluginLog.Write;
+            Core.TermbaseDb.ErrorSink = PluginLog.Write;
 
             _moduleEnvironment = environment;
             _activated = true;

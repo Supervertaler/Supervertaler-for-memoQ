@@ -39,6 +39,10 @@
     the Trados plugin hit with SQLite.Interop.dll.
   -->
   <ItemGroup>
+    <Reference Include="System.Data.SQLite">
+      <HintPath>$(MemoQPath)\System.Data.SQLite.dll</HintPath>
+      <Private>false</Private>
+    </Reference>
     <Reference Include="MemoQ.MTInterfaces">
       <HintPath>$(MemoQPath)\MemoQ.MTInterfaces.dll</HintPath>
       <Private>false</Private>
