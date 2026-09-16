@@ -313,6 +313,12 @@ namespace Supervertaler.MemoQ.Core
         /// <summary>
         /// Is this termbase stored the opposite way round from the job?
         ///
+        /// <para>The comparison goes through Core's LanguageCodes, because memoQ
+        /// says "dut-NL" where the database says "nl" and neither can be compared
+        /// as it stands. That table is shared with Supervertaler for Trados: two
+        /// copies of a language table is how two products come to disagree about
+        /// what language something is in.</para>
+        ///
         /// <para>Answers false whenever it cannot tell - an unlabelled termbase,
         /// or a job whose languages we were not given. Getting this wrong in the
         /// false direction costs the hits we already were not getting; getting it
@@ -321,10 +327,10 @@ namespace Supervertaler.MemoQ.Core
         private static bool Reversed(string tbSource, string tbTarget,
                                      string jobSource, string jobTarget)
         {
-            var ts = Lang(tbSource);
-            var tt = Lang(tbTarget);
-            var js = Lang(jobSource);
-            var jt = Lang(jobTarget);
+            var ts = global::Supervertaler.Core.LanguageCodes.Normalise(tbSource);
+            var tt = global::Supervertaler.Core.LanguageCodes.Normalise(tbTarget);
+            var js = global::Supervertaler.Core.LanguageCodes.Normalise(jobSource);
+            var jt = global::Supervertaler.Core.LanguageCodes.Normalise(jobTarget);
 
             if (ts.Length == 0 || tt.Length == 0 || js.Length == 0) return false;
             if (ts == js) return false;          // already the right way round
@@ -334,58 +340,6 @@ namespace Supervertaler.MemoQ.Core
             // plainly the same pair backwards; if we were told no target, that is
             // still the best reading available.
             return jt.Length == 0 || ts == jt;
-        }
-
-        /// <summary>
-        /// A language to compare by. memoQ names a language "eng" or "dut" while
-        /// this database holds "en", "nl" and occasionally "en-GB", so neither
-        /// side can be compared as it stands.
-        /// </summary>
-        private static string Lang(string code)
-        {
-            var value = (code ?? string.Empty).Trim().ToLowerInvariant();
-            if (value.Length == 0) return string.Empty;
-
-            var dash = value.IndexOfAny(new[] { '-', '_' });
-            if (dash > 0) value = value.Substring(0, dash);
-
-            switch (value)
-            {
-                case "eng": return "en";
-                case "dut": case "nld": return "nl";
-                case "ger": case "deu": return "de";
-                case "fre": case "fra": return "fr";
-                case "spa": return "es";
-                case "ita": return "it";
-                case "por": return "pt";
-                case "swe": return "sv";
-                case "dan": return "da";
-                case "nor": case "nob": return "no";
-                case "fin": return "fi";
-                case "pol": return "pl";
-                case "cze": case "ces": return "cs";
-                case "rus": return "ru";
-                case "jpn": return "ja";
-                case "chi": case "zho": return "zh";
-                case "gre": case "ell": return "el";
-                case "hun": return "hu";
-                case "tur": return "tr";
-                case "ara": return "ar";
-                case "heb": return "he";
-                case "kor": return "ko";
-                case "rum": case "ron": return "ro";
-                case "slo": case "slk": return "sk";
-                case "slv": return "sl";
-                case "bul": return "bg";
-                case "hrv": return "hr";
-                case "srp": return "sr";
-                case "ukr": return "uk";
-                case "est": return "et";
-                case "lav": return "lv";
-                case "lit": return "lt";
-                case "ice": case "isl": return "is";
-                default: return value.Length > 2 ? value.Substring(0, 2) : value;
-            }
         }
 
         private static string Text(IDataRecord row, int i) =>
