@@ -96,6 +96,30 @@ if tasklist.exe //FI "IMAGENAME eq Supervertaler.PromptEditor.exe" 2>/dev/null |
     exit 1
 fi
 
+# --- core on its own --------------------------------------------------------
+# core/ is compiled into both plugins rather than referenced, so a core file
+# that omits a using compiles in whichever host happens to supply the name and
+# fails in the other. That is not hypothetical: the Trados plugin declares
+# `global using Supervertaler.Core.Models;` for its own assembly, which silently
+# covers core's sources too, and GlossaryRepair.cs reached this repo on
+# 2026-09-16 unable to compile at all.
+#
+# This project compiles the shared sources alone, with no host's global usings
+# in scope, which is the only place that class of break is visible. Under three
+# seconds, and it fails where the fault is instead of a hundred lines into a
+# plugin build.
+echo
+echo "core (on its own):"
+if ! dotnet build "$(cygpath -w "$ROOT/core/build/Supervertaler.Core.Build.csproj")" \
+        -v quiet --nologo >/dev/null 2>&1; then
+    echo "ERROR: core does not compile on its own. Full output:" >&2
+    dotnet build "$(cygpath -w "$ROOT/core/build/Supervertaler.Core.Build.csproj")" -v quiet --nologo >&2
+    echo >&2
+    echo "A core file probably relies on a using the Trados plugin declares globally." >&2
+    exit 1
+fi
+echo "  OK"
+
 # --- build ------------------------------------------------------------------
 echo
 # Two Git Bash quirks in one line:
