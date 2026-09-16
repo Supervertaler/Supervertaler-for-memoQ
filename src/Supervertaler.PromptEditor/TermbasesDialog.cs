@@ -125,7 +125,15 @@ namespace Supervertaler.PromptEditor
             _grid.SelectionMode = DataGridViewSelectionMode.FullRowSelect;
             _grid.EditMode = DataGridViewEditMode.EditOnEnter;
             _grid.AutoSizeColumnsMode = DataGridViewAutoSizeColumnsMode.None;
-            _grid.ColumnHeadersHeightSizeMode = DataGridViewColumnHeadersHeightSizeMode.DisableResizing;
+
+            // Measured, not guessed. The header row and the cells were left at
+            // WinForms' defaults, which are sized for the 8.25pt font nothing in
+            // this program uses any more - so every header sat a pixel or two
+            // short and clipped its own descenders.
+            var line = TextRenderer.MeasureText("Termbase", Font).Height;
+            _grid.ColumnHeadersHeightSizeMode = DataGridViewColumnHeadersHeightSizeMode.EnableResizing;
+            _grid.ColumnHeadersHeight = line + 10;
+            _grid.RowTemplate.Height = line + 8;
 
             _grid.Columns.Add(new DataGridViewCheckBoxColumn
             {
@@ -168,7 +176,12 @@ namespace Supervertaler.PromptEditor
                 Name = "name",
                 HeaderText = "Termbase",
                 Width = 470,
-                ReadOnly = true
+                ReadOnly = true,
+
+                // The one column that should absorb the slack, so the table
+                // reaches the right-hand edge at any window size instead of
+                // leaving a band of empty grid beside Languages.
+                AutoSizeMode = DataGridViewAutoSizeColumnMode.Fill
             });
 
             _grid.Columns.Add(new DataGridViewTextBoxColumn

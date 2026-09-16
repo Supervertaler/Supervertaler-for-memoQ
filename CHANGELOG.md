@@ -11,6 +11,8 @@ any release tooling that buckets on these headings works for both.
 
 ### Fixed
 
+- **The Termbases table clipped its own column headings.** The header row and the rows below it were left at the sizes WinForms chooses for a font this program stopped using, so every heading sat a pixel or two short. They are now measured from the font actually in use, and the Termbase column stretches to the right-hand edge instead of leaving a band of empty grid beside Languages.
+
 - **A termbase stored the other way round was silently dead.** Nineteen of the eighty-four termbases here are stored English to Dutch while the work is Dutch to English, and memoQ was searching only the source side of each one – so those nineteen were being asked to find English words in Dutch text, and found almost nothing. It was the quietest possible failure: a termbase with no matches looks exactly like a termbase with nothing relevant in it. The one word that did come through was “water”, which is spelled the same in both languages and so appears on both sides. A termbase whose languages are the reverse of the job is now turned round as it is read, as Supervertaler for Trados does; one already the right way round is untouched, and one in an unrelated language pair is read as stored rather than quietly dropped.
 
 - **The terminology provider hid itself unless a glossary file was set.** It reported itself to memoQ as unconfigured whenever the Glossary box said none – so a project with termbases selected and no glossary was never even offered **Supervertaler terms** in its list of term bases, and the terms sat loaded and ready with no way to reach the grid. Termbases now count as configuration in their own right.
