@@ -50,6 +50,7 @@ namespace Supervertaler.MemoQ
             SharedSettings.ErrorSink = PluginLog.Write;
             Core.TermIndex.ErrorSink = PluginLog.Write;
             Core.TermbaseDb.ErrorSink = PluginLog.Write;
+            Core.TermbaseSelection.ErrorSink = PluginLog.Write;
 
             _moduleEnvironment = environment;
             _activated = true;

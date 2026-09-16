@@ -32,6 +32,11 @@ $protected = @(
 # that is running perfectly well. Measured, not hypothetical - it happened.
 $protected += 'D:\Supervertaler\memoq\runtime\bridge.json'
 
+# Which shared termbases memoQ uses. A harness that exercises the selection
+# writes this for real, and it is the user's own choice of terminology - the
+# same reason shared.txt is on this list.
+$protected += 'D:\Supervertaler\memoq\termbases.txt'
+
 $modelDir = Join-Path $dir 'models'
 if (Test-Path $modelDir) {
     $protected += (Get-ChildItem -Path $modelDir -Filter *.txt -File | ForEach-Object { $_.FullName })

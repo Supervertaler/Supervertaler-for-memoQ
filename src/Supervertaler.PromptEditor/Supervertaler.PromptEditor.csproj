@@ -70,6 +70,9 @@
       glossary is one setting in one file that both processes write, so both
       must agree on its format down to the line endings.
     -->
+    <Compile Include="..\Supervertaler.MemoQ\Core\TermbaseSelection.cs">
+      <Link>Core\TermbaseSelection.cs</Link>
+    </Compile>
     <Compile Include="..\Supervertaler.MemoQ\Core\TermbaseDb.cs">
       <Link>Core\TermbaseDb.cs</Link>
     </Compile>
