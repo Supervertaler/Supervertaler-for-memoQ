@@ -44,8 +44,23 @@ namespace Supervertaler.MemoQ.Core
         {
             public long Id { get; set; }
 
-            /// <summary>1 is highest. 0 means unranked, and unranked sorts last.</summary>
+            /// <summary>
+            /// 1 for the project termbase, 0 for a background one.
+            ///
+            /// <para>Kept as a number rather than a bool because that is what is
+            /// already written in <c>termbases.txt</c>, and because the ordering
+            /// code below wants one. There is no rank 2: Michael's terminology is
+            /// one project termbase against any number of background ones, and a
+            /// scale of ten was a problem nobody had.</para>
+            /// </summary>
             public int Rank { get; set; }
+
+            /// <summary>The project termbase - at most one, enforced by the dialog.</summary>
+            public bool IsProject
+            {
+                get { return Rank == 1; }
+                set { Rank = value ? 1 : 0; }
+            }
 
             public bool CaseSensitive { get; set; }
 

@@ -190,30 +190,26 @@ namespace Supervertaler.MemoQ
         }
 
         /// <summary>
-        /// Term hits shaded by the rank of the termbase behind them, darker for
-        /// higher - which is memoQ's own visual language for terminology, not an
-        /// invention of ours. Index 0 is unranked, and also every glossary term.
+        /// Two shades, because there are two kinds of termbase: the one project
+        /// termbase and everything else.
         ///
-        /// <para>The soft green this used before was Trados's language. A
-        /// translator reading two products side by side should not have to hold
-        /// two colour schemes.</para>
+        /// <para>This was briefly a four-step ramp, on the reasoning that memoQ
+        /// shades its own term hits by termbase rank. That was a misreading -
+        /// those shades are memoQ ranking ITS OWN termbases, which is not what
+        /// this is. The distinction a translator actually works with is binary:
+        /// the small, deliberate project termbase against any number of
+        /// background ones. Four shades were an answer to a question nobody had
+        /// asked.</para>
         ///
-        /// <para>The first set of four sat about 8 per cent apart in lightness
-        /// and was, in use, indistinguishable - which made the Rank column in
-        /// the editor decoration rather than information. These are roughly
-        /// three times further apart at the top end, where it counts: with two
-        /// termbases hitting the same segment, rank 1 has to read as the
-        /// project's own at a glance. Still light enough for black text to sit
-        /// comfortably on, because memoQ paints this BEHIND the source words
-        /// rather than using it as their colour.</para>
+        /// <para>Blue rather than the soft green this started with, which was
+        /// Trados's language: someone working in both products should not have
+        /// to hold two colour schemes. Light enough for black text either way,
+        /// because memoQ paints this BEHIND the source words rather than using
+        /// it as their colour.</para>
         /// </summary>
-        private static readonly Color[] RankColors =
-        {
-            ColorTranslator.FromHtml("#E8F2FC"),   // unranked, and the glossary file
-            ColorTranslator.FromHtml("#7FB3E3"),   // rank 1, darkest
-            ColorTranslator.FromHtml("#A8CDF0"),   // rank 2
-            ColorTranslator.FromHtml("#CCE3F8")    // rank 3 and beyond
-        };
+        private static readonly Color ProjectColor = ColorTranslator.FromHtml("#7FB3E3");
+
+        private static readonly Color BackgroundColor = ColorTranslator.FromHtml("#CCE3F8");
 
         /// <summary>
         /// Forbidden: a warning tint rather than memoQ's black. memoQ writes a
@@ -227,8 +223,7 @@ namespace Supervertaler.MemoQ
         private static Color ColorFor(TermIndex.Entry entry)
         {
             if (entry.Forbidden) return ForbiddenColor;
-            if (entry.Rank <= 0) return RankColors[0];
-            return RankColors[Math.Min(entry.Rank, RankColors.Length - 1)];
+            return entry.Rank == 1 ? ProjectColor : BackgroundColor;
         }
 
         public override TerminologyResult[] Lookup(Segment segment)
@@ -356,7 +351,7 @@ namespace Supervertaler.MemoQ
 
             sb.Append("<div style=\"color:#adb5bd;font-size:8pt\">Supervertaler")
               .Append(origin.Length > 0 ? " · " + Escape(origin) : string.Empty)
-              .Append(entry.Rank > 0 ? " · rank " + entry.Rank : string.Empty)
+              .Append(entry.Rank == 1 ? " · project termbase" : string.Empty)
               .Append("</div>");
             sb.Append("</div>");
             return sb.ToString();

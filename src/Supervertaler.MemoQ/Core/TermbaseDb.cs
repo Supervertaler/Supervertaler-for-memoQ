@@ -71,6 +71,13 @@ namespace Supervertaler.MemoQ.Core
             /// <summary>Trados's own flags, shown for information. memoQ keeps its own.</summary>
             public bool IsGlobal { get; set; }
 
+            /// <summary>
+            /// Trados's project termbase. Used as memoQ's default until memoQ has
+            /// an opinion of its own, so a translator who has already nominated
+            /// one there does not nominate it twice.
+            /// </summary>
+            public bool IsProjectTermbase { get; set; }
+
             public override string ToString() => Name;
         }
 
@@ -176,7 +183,7 @@ namespace Supervertaler.MemoQ.Core
                 {
                     command.CommandText =
                         "select t.id, t.name, t.source_lang, t.target_lang, t.is_global, " +
-                        "       count(tt.id) as terms " +
+                        "       count(tt.id) as terms, t.is_project_termbase " +
                         "from termbases t " +
                         "left join termbase_terms tt on tt.termbase_id = t.id " +
                         "group by t.id " +
@@ -191,7 +198,8 @@ namespace Supervertaler.MemoQ.Core
                                 SourceLang = Text(reader, 2),
                                 TargetLang = Text(reader, 3),
                                 IsGlobal = Flag(reader, 4),
-                                Terms = reader.IsDBNull(5) ? 0 : Convert.ToInt32(reader.GetValue(5))
+                                Terms = reader.IsDBNull(5) ? 0 : Convert.ToInt32(reader.GetValue(5)),
+                                IsProjectTermbase = Flag(reader, 6)
                             });
                 }
             }

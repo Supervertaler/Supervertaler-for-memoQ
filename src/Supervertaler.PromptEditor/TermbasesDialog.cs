@@ -15,12 +15,18 @@ namespace Supervertaler.PromptEditor
     /// tick columns - because it is the same library seen from a second product
     /// and a translator should not have to learn a second layout for it.</para>
     ///
-    /// <para>The columns are NOT Trados's five. Read and CS and AI mean the same
-    /// thing, Write is absent because memoQ never writes to that database, and
-    /// Trados's Project column is replaced by Rank: Trados paints a project
-    /// termbase red because it has no ranking, while memoQ shades a term hit by
-    /// the rank of the termbase it came from, so here "the project's termbase"
-    /// is simply the one ranked 1.</para>
+    /// <para>The columns are Trados's, less the one that cannot apply: Read, CS
+    /// and AI mean the same thing, Project means the same thing, and Write is
+    /// absent because memoQ never writes to that database.</para>
+    ///
+    /// <para><b>Project was briefly a Rank, and that was wrong.</b> The
+    /// reasoning was that memoQ shades a term hit by the rank of the termbase it
+    /// came from, so a project termbase is just rank 1 - but those shades are
+    /// memoQ ranking its OWN termbases, a different thing. The distinction a
+    /// translator works with here is binary: one small, deliberate project
+    /// termbase against any number of background ones. A scale of ten was an
+    /// answer to a question nobody had asked, and it made the user invent
+    /// numbers that meant nothing.</para>
     ///
     /// <para>Read is per memoQ project and the other three belong to the
     /// termbase, which is why the project is named at the top: the ticks in one
@@ -34,7 +40,7 @@ namespace Supervertaler.PromptEditor
         private readonly Guid _projectGuid;
 
         private const string ColRead = "read";
-        private const string ColRank = "rank";
+        private const string ColProject = "project";
         private const string ColCase = "cs";
         private const string ColAi = "ai";
 
@@ -104,7 +110,7 @@ namespace Supervertaler.PromptEditor
                      + "Open a project in memoQ, then press Sync in the main window.";
 
             return "Read applies to: " + (name.Length > 0 ? name : _projectGuid.ToString("D"))
-                 + "     ·     Rank, CS and AI belong to the termbase and apply everywhere.";
+                 + "     ·     Project, CS and AI belong to the termbase and apply everywhere.";
         }
 
         private void BuildGrid()
@@ -130,14 +136,14 @@ namespace Supervertaler.PromptEditor
                             + "and appear in memoQ's Translation results."
             });
 
-            _grid.Columns.Add(new DataGridViewTextBoxColumn
+            _grid.Columns.Add(new DataGridViewCheckBoxColumn
             {
-                Name = ColRank,
-                HeaderText = "Rank",
-                Width = 54,
-                ToolTipText = "1 is highest, and decides the shade of a term hit - darker for higher, "
-                            + "as memoQ shades its own. Leave empty for unranked.",
-                DefaultCellStyle = new DataGridViewCellStyle { Alignment = DataGridViewContentAlignment.MiddleCenter }
+                Name = ColProject,
+                HeaderText = "Project",
+                Width = 58,
+                ToolTipText = "The one termbase for this job's own terminology. Its hits are shaded "
+                            + "darker than the rest, so a project term is recognisable at a glance. "
+                            + "Only one termbase can hold this at a time."
             });
 
             _grid.Columns.Add(new DataGridViewCheckBoxColumn
@@ -182,6 +188,29 @@ namespace Supervertaler.PromptEditor
                 ReadOnly = true
             });
 
+            // Exactly one project termbase: ticking a second clears the first,
+            // the way a radio button would. Doing it here rather than refusing
+            // the second tick, because a translator changing which termbase is
+            // the project one should not have to untick the old one first.
+            _grid.CellValueChanged += (s, e) =>
+            {
+                if (_updating) return;
+                if (e.RowIndex < 0 || e.ColumnIndex != _grid.Columns[ColProject].Index) return;
+                if (!Ticked(_grid.Rows[e.RowIndex], ColProject)) return;
+
+                _updating = true;
+                try
+                {
+                    foreach (DataGridViewRow row in _grid.Rows)
+                        if (row.Index != e.RowIndex && Ticked(row, ColProject))
+                            row.Cells[ColProject].Value = false;
+                }
+                finally
+                {
+                    _updating = false;
+                }
+            };
+
             // A tick registers on the click rather than when the cell loses focus,
             // which is what a checkbox in a grid otherwise does - and is how a
             // dialog comes to be saved without the last tick the user made.
@@ -192,6 +221,10 @@ namespace Supervertaler.PromptEditor
 
             _grid.CellValueChanged += (s, e) => UpdateSummary();
         }
+
+        // Guards the single-project rule against its own side effects: clearing
+        // the other rows raises CellValueChanged again, once per row.
+        private bool _updating;
 
         private void Fill()
         {
@@ -211,10 +244,10 @@ namespace Supervertaler.PromptEditor
             var flags = TermbaseSelection.All();
             var read = new HashSet<long>(TermbaseSelection.ReadFor(_projectGuid));
 
-            // Ranked first, then by name: the same order the plugin will consult
-            // them in, so the table reads as the priority list it is.
+            // The project termbase first, then by name: the table opens on the
+            // one row that is different from all the others.
             foreach (var tb in termbases
-                .OrderBy(t => Rank(flags, t.Id) == 0 ? int.MaxValue : Rank(flags, t.Id))
+                .OrderByDescending(t => IsProject(flags, t))
                 .ThenBy(t => t.Name, StringComparer.OrdinalIgnoreCase))
             {
                 TermbaseSelection.Flags f;
@@ -222,7 +255,7 @@ namespace Supervertaler.PromptEditor
 
                 var row = _grid.Rows[_grid.Rows.Add(
                     read.Contains(tb.Id),
-                    f != null && f.Rank > 0 ? f.Rank.ToString() : "",
+                    IsProject(flags, tb),
                     f != null && f.CaseSensitive,
                     f != null && f.Ai,
                     tb.Name,
@@ -235,10 +268,20 @@ namespace Supervertaler.PromptEditor
             UpdateSummary();
         }
 
-        private static int Rank(IDictionary<long, TermbaseSelection.Flags> flags, long id)
+        /// <summary>
+        /// Whether this is the project termbase - memoQ's own answer where it has
+        /// one, and Trados's where it does not.
+        ///
+        /// <para>Inheriting the default saves nominating the same termbase twice
+        /// in two products. It applies only until memoQ has been told otherwise:
+        /// once anything is saved here, every termbase has a memoQ answer and the
+        /// database is no longer consulted for it.</para>
+        /// </summary>
+        private static bool IsProject(IDictionary<long, TermbaseSelection.Flags> flags,
+                                      TermbaseDb.Termbase termbase)
         {
             TermbaseSelection.Flags f;
-            return flags.TryGetValue(id, out f) ? f.Rank : 0;
+            return flags.TryGetValue(termbase.Id, out f) ? f.IsProject : termbase.IsProjectTermbase;
         }
 
         /// <summary>
@@ -265,13 +308,18 @@ namespace Supervertaler.PromptEditor
                 if (Ticked(row, ColAi)) ai++;
             }
 
+            var project = 0;
+            foreach (DataGridViewRow row in _grid.Rows)
+                if (Ticked(row, ColRead) && Ticked(row, ColProject)) project++;
+
             _summary.Text = ticked == 0
                 ? "No termbases selected for this project, so terminology is off."
-                : string.Format("{0} termbase{1} selected, {2:N0} terms in all{3}.",
+                : string.Format("{0} termbase{1} selected, {2:N0} terms in all{3}{4}.",
                     ticked, ticked == 1 ? "" : "s", terms,
-                    ai == 0 ? "; none of them reaching the model" :
-                    ai == 1 ? "; one of them reaching the model" :
-                    "; " + ai + " of them reaching the model");
+                    project == 0 ? "; none of them the project termbase" : "; one of them the project termbase",
+                    ai == 0 ? "; none reaching the model" :
+                    ai == 1 ? "; one reaching the model" :
+                    "; " + ai + " reaching the model");
         }
 
         private static bool Ticked(DataGridViewRow row, string column)
@@ -292,14 +340,10 @@ namespace Supervertaler.PromptEditor
 
                 if (Ticked(row, ColRead)) readIds.Add(tb.Id);
 
-                int rank;
-                int.TryParse((row.Cells[ColRank].Value ?? "").ToString().Trim(), out rank);
-                if (rank < 0) rank = 0;
-
                 flags.Add(new TermbaseSelection.Flags
                 {
                     Id = tb.Id,
-                    Rank = rank,
+                    IsProject = Ticked(row, ColProject),
                     CaseSensitive = Ticked(row, ColCase),
                     Ai = Ticked(row, ColAi),
                     Name = tb.Name
