@@ -248,6 +248,11 @@ namespace Supervertaler.PromptEditor
                 ToolTipText = "AutoPrompt: have the AI write a prompt tailored to the document open in memoQ"
             });
             memoqMenu.DropDownItems.Add(new ToolStripSeparator());
+            memoqMenu.DropDownItems.Add(new ToolStripMenuItem("&Termbases…", null, (s, e) => ShowTermbases())
+            {
+                ToolTipText = "The termbases shared with Supervertaler for Trados: which ones memoQ "
+                            + "consults in this project, their rank, and which reach the model"
+            });
             memoqMenu.DropDownItems.Add(new ToolStripMenuItem("&Export this prompt's terms as a glossary…", null, (s, e) => ExportGlossary()));
             memoqMenu.DropDownItems.Add(new ToolStripMenuItem("&Choose the active glossary…", null, (s, e) => ChooseGlossary()));
             memoqMenu.DropDownItems.Add(new ToolStripMenuItem("Choose the active &prompt…", null, (s, e) => ChoosePrompt()));
@@ -1452,6 +1457,19 @@ namespace Supervertaler.PromptEditor
         /// Ctrl+L twice should not give you two of them drifting apart.
         /// </summary>
         private ActivityForm _activity;
+
+        /// <summary>
+        /// The shared termbases, and what memoQ does with each.
+        ///
+        /// <para>Modal: the plugin reads the selection while translating, so a
+        /// half-made change should not be visible to it. It is written once, on
+        /// OK.</para>
+        /// </summary>
+        private void ShowTermbases()
+        {
+            using (var dialog = new TermbasesDialog())
+                dialog.ShowDialog(this);
+        }
 
         private void ShowActivity()
         {
