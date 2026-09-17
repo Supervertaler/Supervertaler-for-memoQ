@@ -22,20 +22,27 @@ namespace Supervertaler.MemoQ.Core
     /// harness), and it writes only what the other two write - the same
     /// defaults, the same date format, the same full-text index maintenance.</para>
     ///
-    /// <para><b>The full-text index is ours to keep.</b> <c>termbase_terms_fts</c>
-    /// is external-content FTS5 and the live database has no triggers on
-    /// <c>termbase_terms</c>, so a row inserted here and not told to the index is
-    /// a row the Workbench's search never finds. Every insert below is paired
-    /// with an index insert; a delete rebuilds the index outright, which is
-    /// simpler than replaying the deleted rows into it and is checked by the
-    /// harness to leave the two counts equal.</para>
+    /// <para><b>The full-text index is kept by triggers, and this writer must
+    /// never touch it.</b> <c>termbase_terms_fts</c> is external-content FTS5.
+    /// For one day this writer maintained it by hand - an index insert paired
+    /// with each row, a rebuild after a delete - because the live database had
+    /// no triggers and Trados's writer never touched the index at all. Then the
+    /// Trados side moved the maintenance into triggers on <c>termbase_terms</c>,
+    /// installed by every writer's schema step (<see cref="TermbaseSchema"/>),
+    /// so that all three products keep the index without any of them remembering
+    /// to. With those in place a manual index insert is a double insert, and on
+    /// an external-content table that is a corrupted index, not a duplicate row.
+    /// So: nothing here writes to the index. The harness proves the triggers
+    /// fire by MATCH, and runs FTS5's own integrity check after every
+    /// operation - never by count, which reads the content table and proves
+    /// nothing.</para>
     ///
-    /// <para><b>Scale, stated:</b> an import inserts one row and one index entry
-    /// per term inside one transaction. Measured in the harness at 12,000 rows;
-    /// designed for a termbase, not a translation memory. The rebuild on delete
-    /// is proportional to every term in the file, not to the termbase deleted -
-    /// tens of milliseconds at 36,000 terms, and the one thing here that grows
-    /// with the whole database rather than with the operation.</para>
+    /// <para><b>Scale, stated:</b> an import inserts one row per term inside one
+    /// transaction, and the insert trigger indexes each as it lands. Measured in
+    /// the harness at 12,000 rows; designed for a termbase, not a translation
+    /// memory. A delete is proportional to the termbase deleted. The one thing
+    /// that grows with the whole file is the one-off rebuild when the triggers
+    /// are first installed on a file that already has terms.</para>
     /// </summary>
     internal static class TermbaseWriter
     {
@@ -243,19 +250,12 @@ namespace Supervertaler.MemoQ.Core
                             id = Convert.ToInt64(command.ExecuteScalar());
                         }
 
-                        // The index does not watch the table. Tell it.
-                        using (var command = connection.CreateCommand())
-                        {
-                            command.Transaction = transaction;
-                            command.CommandText =
-                                "insert into termbase_terms_fts (rowid, source_term, target_term, definition) " +
-                                "values (@id, @source, @target, NULL)";
-                            command.Parameters.AddWithValue("@id", id);
-                            command.Parameters.AddWithValue("@source", source);
-                            command.Parameters.AddWithValue("@target", target);
-                            command.ExecuteNonQuery();
-                        }
-
+                        // The search index is NOT touched here. The triggers
+                        // TermbaseSchema installs on open keep it current, and a
+                        // manual insert on top of a trigger corrupts an
+                        // external-content FTS5 index rather than duplicating a
+                        // row. This writer did maintain it by hand for one day;
+                        // see the class remarks for why that stopped.
                         result.Added++;
                     }
 
@@ -300,9 +300,11 @@ namespace Supervertaler.MemoQ.Core
 
                 Exec(connection, transaction, "delete from termbases where id = @id", termbaseId);
 
-                // Rebuild rather than replay: correct by construction, and the
-                // harness checks the counts match afterwards.
-                Exec(connection, transaction, "insert into termbase_terms_fts(termbase_terms_fts) values('rebuild')", null);
+                // The index follows through its delete trigger, one row at a
+                // time, with the old values it needs. No rebuild: on a file the
+                // size of Michael's that would re-index 36,000 terms to forget a
+                // dozen, and with the triggers in place it would also be the
+                // second writer to the index in one transaction.
 
                 transaction.Commit();
             }

@@ -74,12 +74,23 @@ foreach ($d in @('System.Memory','System.Runtime.CompilerServices.Unsafe','SQLit
 }
 [SQLitePCL.Batteries_V2]::Init()
 function OpenDb([string]$path, [bool]$readOnly) {
-    $mode = if ($readOnly) { 'ReadOnly' } else { 'ReadWrite' }
-    $c = New-Object Microsoft.Data.Sqlite.SqliteConnection("Data Source=$path;Mode=$mode")
+    # A writable handle also CREATES: the field-file fixtures below start from nothing.
+    $mode = if ($readOnly) { 'ReadOnly' } else { 'ReadWriteCreate' }
+    $c = New-Object Microsoft.Data.Sqlite.SqliteConnection("Data Source=$path;Mode=$mode;Foreign Keys=False")
     $c.Open()
     return $c
 }
 function Scalar($con, [string]$sql) { $c = $con.CreateCommand(); $c.CommandText = $sql; return $c.ExecuteScalar() }
+
+# FTS5's integrity check is an INSERT statement, so it needs a WRITABLE handle
+# even though it writes nothing - on a read-only connection it fails whatever the
+# index's state, which is a check that cannot pass, not a check that failed.
+function Integrity([string]$path) {
+    $w = OpenDb $path $false
+    try { $null = Scalar $w "insert into termbase_terms_fts(termbase_terms_fts, rank) values('integrity-check', 0)"; return $true }
+    catch { Write-Host ("   integrity-check: {0}" -f $_.Exception.InnerException.Message) -ForegroundColor DarkGray; return $false }
+    finally { $w.Close() }
+}
 function Rows($con, [string]$sql) {
     $c = $con.CreateCommand(); $c.CommandText = $sql
     $r = $c.ExecuteReader(); $out = @()
@@ -152,9 +163,11 @@ function WithoutTmKey([string]$sql) {
 
 $objects = $schema.GetField('Objects', $NPS).GetValue($null)
 $drift = @()
+$pendingTriggers = 0
 foreach ($item in $objects) {
     $liveSql = Scalar $live ("select sql from sqlite_master where name = '{0}'" -f $item.Name)
     $testSql = Scalar $test ("select sql from sqlite_master where name = '{0}'" -f $item.Name)
+    if ($null -eq $liveSql -and $item.Type -eq 'trigger') { $pendingTriggers++; continue }
     if ($null -eq $liveSql) { $drift += "$($item.Name): not in the LIVE database"; continue }
     if ($null -eq $testSql) { $drift += "$($item.Name): not created"; continue }
     # One deliberate deviation, applied to the LIVE side: the Workbench's DDL
@@ -166,6 +179,41 @@ foreach ($item in $objects) {
     if ($liveCmp -ne (Comparable $item.Sql)) { $drift += "$($item.Name): TermbaseSchema text differs from live" }
 }
 Check ("every one of the {0} schema objects matches the live database" -f $objects.Count) ($drift.Count -eq 0) ($drift -join '; ')
+if ($pendingTriggers -gt 0) {
+    # Until the Trados release that installs them (18.20.192, 2026-09-21) the
+    # live file has no triggers; after it, they are compared like everything
+    # else. Say which state we are in rather than silently skipping.
+    Write-Host ("   ({0} trigger(s) not yet in the live file - Trados installs them on release; compared once they exist)" -f $pendingTriggers)
+}
+Check 'a created file has all three index triggers from birth' `
+      ((Scalar $test "select count(*) from sqlite_master where type='trigger' and tbl_name='termbase_terms'") -eq 3)
+
+# The trigger text this product emits for a three-column index must be the
+# agreed text, byte for byte - the Trados side asserts the same on theirs.
+function TriggerSql([string[]]$cols, [int]$kind) {
+    $a = [object[]]::new(2); $a[0] = $cols; $a[1] = $kind
+    return $schema.GetMethod('TriggerSql', $NPS).Invoke($null, $a)
+}
+$three = @('source_term', 'target_term', 'definition')
+$agreedInsert = "CREATE TRIGGER IF NOT EXISTS termbase_terms_fts_ai AFTER INSERT ON termbase_terms BEGIN`n" +
+                "  INSERT INTO termbase_terms_fts(rowid, source_term, target_term, definition)`n" +
+                "  VALUES (new.id, new.source_term, new.target_term, new.definition);`n" +
+                "END;"
+$agreedDelete = "CREATE TRIGGER IF NOT EXISTS termbase_terms_fts_ad AFTER DELETE ON termbase_terms BEGIN`n" +
+                "  INSERT INTO termbase_terms_fts(termbase_terms_fts, rowid, source_term, target_term, definition)`n" +
+                "  VALUES ('delete', old.id, old.source_term, old.target_term, old.definition);`n" +
+                "END;"
+$agreedUpdate = "CREATE TRIGGER IF NOT EXISTS termbase_terms_fts_au AFTER UPDATE ON termbase_terms BEGIN`n" +
+                "  INSERT INTO termbase_terms_fts(termbase_terms_fts, rowid, source_term, target_term, definition)`n" +
+                "  VALUES ('delete', old.id, old.source_term, old.target_term, old.definition);`n" +
+                "  INSERT INTO termbase_terms_fts(rowid, source_term, target_term, definition)`n" +
+                "  VALUES (new.id, new.source_term, new.target_term, new.definition);`n" +
+                "END;"
+Check 'insert trigger text equals the agreed SQL byte for byte' ((TriggerSql $three 0) -ceq $agreedInsert)
+Check 'delete trigger text equals the agreed SQL byte for byte' ((TriggerSql $three 1) -ceq $agreedDelete)
+Check 'update trigger text equals the agreed SQL byte for byte' ((TriggerSql $three 2) -ceq $agreedUpdate)
+Check 'the drift test compares the same text the file was created from' `
+      ((Comparable (TriggerSql $three 0)) -eq (Comparable (Scalar $test "select sql from sqlite_master where name='termbase_terms_fts_ai'")))
 Check 'the live file does carry the TM foreign key this product leaves out - the deviation is real, not stale' `
       ((Scalar $live "select sql from sqlite_master where name = 'termbase_terms'") -match 'REFERENCES\s+translation_units')
 Check 'and a created file does not carry it' `
@@ -219,7 +267,11 @@ Check 'not reversed: file and termbase run the same way' (-not $r.Reversed)
 # count with a completely empty index - measured 2026-09-17: content-only
 # insert gave count 1, match 0. Only MATCH reads the index. The 36,106 = 36,106
 # that looked like a healthy live index the day before was exactly this.
+# Kept by the TRIGGERS now, not by the writer - and a manual insert on top of a
+# trigger corrupts an external-content index rather than duplicating, so the
+# writer must not touch it. This MATCH is the proof that the triggers fired.
 Check 'the index finds each term that was just added'  ((Scalar $test "select count(*) from termbase_terms_fts where termbase_terms_fts match 'werkwijze'") -eq 1)
+Check 'and the index passes its own integrity check after the import' (Integrity $TestDb)
 Check 'and the forbidden one'                          ((Scalar $test "select count(*) from termbase_terms_fts where termbase_terms_fts match 'toestel'") -eq 1)
 Check 'and does not find one that was never added'     ((Scalar $test "select count(*) from termbase_terms_fts where termbase_terms_fts match 'nonesuch'") -eq 0)
 
@@ -322,6 +374,56 @@ $readBack = $sel.GetMethod('ReadFor', $NPS).Invoke($null, $ra)
 Check 'the selection file no longer names it' ($readBack.Count -eq 0) "still $($readBack.Count)"
 
 # =============================================================================
+# 6b. Files from the field: rows without triggers, and a four-column index
+# =============================================================================
+# (i) A file that already has terms but no triggers - the live file before the
+# Trados release, every Workbench file, every old Trados file. Opening it for
+# writing must install the triggers AND rebuild once, so the index is correct
+# from the first row the triggers see.
+$noTrig = Join-Path $Scratch 'notriggers.db'
+$raw = OpenDb $noTrig $false
+$null = Scalar $raw (Scalar $test "select sql from sqlite_master where name='termbases'")
+$null = Scalar $raw (Scalar $test "select sql from sqlite_master where name='termbase_terms'")
+$null = Scalar $raw (Scalar $test "select sql from sqlite_master where name='termbase_terms_fts'")
+$null = Scalar $raw "insert into termbases (name, source_lang, target_lang) values ('field', 'nl', 'en')"
+$null = Scalar $raw "insert into termbase_terms (source_term, target_term, termbase_id, term_uuid) values ('veldterm', 'fieldterm', 1, 'u-field-1')"
+Check 'fixture: a term no index knows about' ((Scalar $raw "select count(*) from termbase_terms_fts where termbase_terms_fts match 'veldterm'") -eq 0)
+$raw.Close()
+
+$db.GetField('PathOverride', $NPS).SetValue($null, $noTrig)
+$null = Create 'field two' 'nl' 'en'          # any write opens the file, which installs and rebuilds
+$chk = OpenDb $noTrig $true
+Check 'opening a field file installs the three triggers'        ((Scalar $chk "select count(*) from sqlite_master where type='trigger' and tbl_name='termbase_terms'") -eq 3)
+Check 'and rebuilds once, so the pre-existing term is now found' ((Scalar $chk "select count(*) from termbase_terms_fts where termbase_terms_fts match 'veldterm'") -eq 1)
+$chk.Close()
+
+# (ii) An old Trados-created file: four-column index. The triggers must be
+# written for FOUR columns, or every delete leaves notes tokens behind.
+$four = Join-Path $Scratch 'fourcol.db'
+$raw = OpenDb $four $false
+$null = Scalar $raw (Scalar $test "select sql from sqlite_master where name='termbases'")
+$null = Scalar $raw (Scalar $test "select sql from sqlite_master where name='termbase_terms'")
+$null = Scalar $raw "CREATE VIRTUAL TABLE termbase_terms_fts USING fts5(source_term, target_term, definition, notes, content=termbase_terms, content_rowid=id)"
+$raw.Close()
+
+$db.GetField('PathOverride', $NPS).SetValue($null, $four)
+$id4 = Create 'four columns' 'nl' 'en'
+$null = Import $id4 @((NewRow 'vierkolom' 'fourcol' $false 'a note to index')) 'nl' 'en'
+$chk = OpenDb $four $true
+$aiSql = Scalar $chk "select sql from sqlite_master where name='termbase_terms_fts_ai'"
+Check 'on a four-column index the triggers name four columns' ($aiSql -match 'definition, notes')
+Check 'and a term inserted through them is found'               ((Scalar $chk "select count(*) from termbase_terms_fts where termbase_terms_fts match 'vierkolom'") -eq 1)
+Check 'including by its notes, which that index does carry'    ((Scalar $chk "select count(*) from termbase_terms_fts where termbase_terms_fts match 'notes:index'") -eq 1)
+$chk.Close()
+Delete $id4
+$chk = OpenDb $four $true
+Check 'and the term is gone from it' ((Scalar $chk "select count(*) from termbase_terms_fts where termbase_terms_fts match 'vierkolom'") -eq 0)
+$chk.Close()
+Check 'deleting through a four-column trigger leaves the index consistent' (Integrity $four)
+
+$db.GetField('PathOverride', $NPS).SetValue($null, $TestDb)
+
+# =============================================================================
 # 7. Scale: an import the size of the biggest real termbase
 # =============================================================================
 $big = New-Object 'System.Collections.Generic.List[object]'
@@ -339,7 +441,7 @@ Check 'a large import stays under five seconds' ($sw.ElapsedMilliseconds -lt 500
 $sw = [Diagnostics.Stopwatch]::StartNew()
 Delete $id3
 $sw.Stop()
-Write-Host ("   deleting it (index rebuild over what remains): {0} ms" -f $sw.ElapsedMilliseconds)
+Write-Host ("   deleting it (the delete trigger, once per row): {0} ms" -f $sw.ElapsedMilliseconds)
 
 $test.Close()
 

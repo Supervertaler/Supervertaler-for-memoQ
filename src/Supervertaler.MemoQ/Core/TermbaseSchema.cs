@@ -61,6 +61,13 @@ namespace Supervertaler.MemoQ.Core
         }
 
         /// <summary>
+        /// The index columns a file this product creates has - the Workbench's.
+        /// Declared before <see cref="Objects"/>, which uses it in its own
+        /// initialiser; C# initialises statics in declaration order.
+        /// </summary>
+        internal static readonly string[] ThreeColumns = { "source_term", "target_term", "definition" };
+
+        /// <summary>
         /// In the order the live database created them, which matters for one
         /// pair: the FTS table names <c>termbase_terms</c> as its content and must
         /// come after it.
@@ -179,8 +186,95 @@ namespace Supervertaler.MemoQ.Core
                 content=termbase_terms,
                 content_rowid=id
             )"
-            }
+            },
+            // The triggers that keep that index current for EVERY writer - Trados,
+            // Workbench, memoQ - so that no writer maintains it by hand and no
+            // writer forgets to. Agreed text with the Trados side on 2026-09-17,
+            // byte for byte; their install emits the same, their test asserts it,
+            // and the harness here asserts that TriggerSql() reproduces it.
+            new Item { Type = "trigger", Name = "termbase_terms_fts_ai", Sql = TriggerSql(ThreeColumns, Insert) },
+            new Item { Type = "trigger", Name = "termbase_terms_fts_ad", Sql = TriggerSql(ThreeColumns, Delete) },
+            new Item { Type = "trigger", Name = "termbase_terms_fts_au", Sql = TriggerSql(ThreeColumns, Update) }
         };
+
+        // ---- triggers --------------------------------------------------------------
+
+        internal const int Insert = 0, Delete = 1, Update = 2;
+
+        // ThreeColumns is declared ABOVE Objects, near the top of the class:
+        // Objects' initialiser calls TriggerSql(ThreeColumns, ...) and C#
+        // initialises statics in declaration order, so declared here it would
+        // still be null when Objects is built and the type initialiser would
+        // throw - which it did, once.
+
+        // Every column name an index in the field might have, in the order the
+        // trigger text lists them. Old Trados-created files declared a fourth,
+        // notes; a trigger written for three columns on such a file would leave
+        // the notes tokens behind on every delete - quiet corruption FTS5's
+        // integrity-check catches later. So the columns are READ from the file
+        // (see EnsureCreated) and the text generated for exactly those.
+        private static readonly string[] KnownIndexColumns = { "source_term", "target_term", "definition", "notes" };
+
+        /// <summary>
+        /// The trigger text for an index with these columns. For
+        /// <see cref="ThreeColumns"/> this is the agreed text exactly, including
+        /// its whitespace: two-space indents, one statement per line.
+        /// </summary>
+        internal static string TriggerSql(string[] columns, int kind)
+        {
+            var cols = string.Join(", ", columns);
+            var news = string.Join(", ", Array.ConvertAll(columns, c => "new." + c));
+            var olds = string.Join(", ", Array.ConvertAll(columns, c => "old." + c));
+
+            var insertRow = "  INSERT INTO termbase_terms_fts(rowid, " + cols + ")\n"
+                          + "  VALUES (new.id, " + news + ");\n";
+            var deleteRow = "  INSERT INTO termbase_terms_fts(termbase_terms_fts, rowid, " + cols + ")\n"
+                          + "  VALUES ('delete', old.id, " + olds + ");\n";
+
+            switch (kind)
+            {
+                case Insert:
+                    return "CREATE TRIGGER IF NOT EXISTS termbase_terms_fts_ai AFTER INSERT ON termbase_terms BEGIN\n"
+                         + insertRow + "END;";
+                case Delete:
+                    return "CREATE TRIGGER IF NOT EXISTS termbase_terms_fts_ad AFTER DELETE ON termbase_terms BEGIN\n"
+                         + deleteRow + "END;";
+                default:
+                    return "CREATE TRIGGER IF NOT EXISTS termbase_terms_fts_au AFTER UPDATE ON termbase_terms BEGIN\n"
+                         + deleteRow + insertRow + "END;";
+            }
+        }
+
+        /// <summary>
+        /// The index's columns as the file actually declares them, in trigger
+        /// order; <see cref="ThreeColumns"/> when the index is not there yet.
+        /// </summary>
+        internal static string[] IndexColumns(SqliteConnection connection)
+        {
+            var present = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+
+            using (var command = connection.CreateCommand())
+            {
+                command.CommandText = "pragma table_info(termbase_terms_fts)";
+                try
+                {
+                    using (var reader = command.ExecuteReader())
+                        while (reader.Read()) present.Add(reader.GetString(1));
+                }
+                catch (SqliteException)
+                {
+                    // No such table: a fresh file, about to get the three-column index.
+                }
+            }
+
+            if (present.Count == 0) return ThreeColumns;
+
+            var found = new List<string>();
+            foreach (var name in KnownIndexColumns)
+                if (present.Contains(name)) found.Add(name);
+
+            return found.Count == 0 ? ThreeColumns : found.ToArray();
+        }
 
         /// <summary>
         /// Create whatever is missing, touch whatever exists not at all. Safe to
@@ -197,15 +291,52 @@ namespace Supervertaler.MemoQ.Core
                     while (reader.Read()) present.Add(reader.GetString(0));
             }
 
+            var triggersMade = false;
+
             foreach (var item in Objects)
             {
                 if (present.Contains(item.Name)) continue;
 
+                var sql = item.Sql;
+
+                if (item.Type == "trigger")
+                {
+                    // For the index this file has, not the one we would make.
+                    var kind = item.Name.EndsWith("_ai") ? Insert : item.Name.EndsWith("_ad") ? Delete : Update;
+                    sql = TriggerSql(IndexColumns(connection), kind);
+                    triggersMade = true;
+                }
+
                 using (var command = connection.CreateCommand())
                 {
-                    command.CommandText = item.Sql;
+                    command.CommandText = sql;
                     command.ExecuteNonQuery();
                 }
+            }
+
+            // A file that has terms but had no triggers until now has an index
+            // that was maintained by hand, or not at all - Trados's writer never
+            // touched it, and the Workbench rebuilt it once in a migration and
+            // never again. Rebuild once, so the triggers take over from a correct
+            // state and the delete trigger's old-values delete is right from the
+            // first row. The same thing the Trados install does.
+            if (triggersMade && Count(connection, "termbase_terms") > 0)
+            {
+                using (var command = connection.CreateCommand())
+                {
+                    command.CommandText = "insert into termbase_terms_fts(termbase_terms_fts) values('rebuild')";
+                    command.ExecuteNonQuery();
+                }
+            }
+        }
+
+        private static long Count(SqliteConnection connection, string table)
+        {
+            using (var command = connection.CreateCommand())
+            {
+                command.CommandText = "select count(*) from " + table;
+                try { return Convert.ToInt64(command.ExecuteScalar()); }
+                catch (SqliteException) { return 0; }
             }
         }
 
@@ -263,7 +394,14 @@ namespace Supervertaler.MemoQ.Core
 
             var collapsed = System.Text.RegularExpressions.Regex.Replace(text.ToString(), @"\s+", " ").Trim();
             collapsed = collapsed.Replace(" ,", ",").Replace("( ", "(").Replace(" )", ")");
-            return collapsed.ToLowerInvariant();
+            collapsed = collapsed.ToLowerInvariant();
+
+            // sqlite_master stores "create trigger x", not "create trigger if
+            // not exists x" - the clause is stripped on the way in - and stores
+            // a trigger up to its END without the terminating semicolon. So a
+            // statement written idempotently and the same statement read back
+            // differ by exactly those words and that character, and nothing else.
+            return collapsed.Replace(" if not exists ", " ").TrimEnd(';').TrimEnd();
         }
     }
 }
