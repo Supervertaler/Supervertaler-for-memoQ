@@ -222,7 +222,10 @@ only write channel; the Preview SDK has no "set target text" call.
 memoQ, and its redistribution terms are unknown. Adam has been asked for the
 SDK package; that is now a concrete, specific request: the assembly plus
 permission to reference it. Do not copy the DLL out of the PDF tool's folder
-into our repo.
+into our repo. **Status 2026-09-17:** Ádám Gaugecz has forwarded the question
+to Gábor Nagy at memoQ and is arranging a call ("let me ask around who is
+interested and come back with some timeslots"). Still no answer on
+redistribution; still local-only until there is one.
 
 **Privacy note:** the PDF tool's `%APPDATA%\MemoQ.PDFPreview\logs.txt`
 names every document it ever saw. Never paste from it.
@@ -284,8 +287,14 @@ the most lexically similar ones are fed back into later prompts. It is the
 substitute for the neighbouring-segment context we cannot have — and arguably
 better, since every example is human-approved rather than merely adjacent.
 
-Terminology proper still has no route through the MT SDK. If memoQ confirms that,
-TermLens belongs on the **TB SDK** (`MemoQ.TBInterfaces`) instead.
+Terminology proper has no route through the MT SDK, and **memoQ confirmed it on
+2026-09-17** (Ádám Gaugecz, in reply to the question below): today it "can only
+be queried through the Resources API" - which is the memoQ *server* REST API, not
+something a desktop plugin has - and memoQ is "about to start developing a new
+integration endpoint for MT that will also provide terminology and all the TM
+hits - probably by Q1 2027 it will be public." So: the TB-plugin route TermLens
+already uses is the right one and stays; when that endpoint ships, it becomes an
+additional source of the same terms, not a replacement for the termbase system.
 
 
 ## Reading memoQ's own data off disk
@@ -496,8 +505,10 @@ locates the current memoQ directory is a real requirement, not a nicety.
 2. ~~Get memoQ to call `CreateRichLookupSession`~~ — established that it never
    will; designed around it via `ISessionWithMetadata` + `ISessionForStoringTranslations`
    + `DocumentMemory`. **Verified working end to end 2026-08-30**: confirming a
-   segment with a chosen term causes later segments to adopt it. Awaiting memoQ's
-   answer on whether terminology is reachable at all.
+   segment with a chosen term causes later segments to adopt it. memoQ's answer
+   arrived 2026-09-17: not reachable by an MT plugin today; a new MT integration
+   endpoint carrying terminology and TM hits is planned, public around Q1 2027.
+   See "What to use instead" above.
 
    **`StoringTranslationSupported => true` only makes the engine _eligible_.** memoQ
    does not call `CreateStoreTranslationSession` until the plugin is selected under
