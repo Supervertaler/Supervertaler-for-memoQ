@@ -81,10 +81,19 @@ namespace Supervertaler.MemoQ.Core
             public override string ToString() => Name;
         }
 
+        /// <summary>
+        /// A harness points this somewhere disposable. Nothing in the product
+        /// sets it: the writer's tests create, fill and delete termbases, and
+        /// the one file they must never do that to is the real one.
+        /// </summary>
+        internal static string PathOverride;
+
         /// <summary>The path Supervertaler for Trados and Workbench share.</summary>
         internal static string Path =>
-            System.IO.Path.Combine(global::Supervertaler.Core.SupervertalerPaths.Root,
-                                   "resources", "supervertaler.db");
+            !string.IsNullOrEmpty(PathOverride)
+                ? PathOverride
+                : System.IO.Path.Combine(global::Supervertaler.Core.SupervertalerPaths.Root,
+                                         "resources", "supervertaler.db");
 
         internal static bool Exists => File.Exists(Path);
 
@@ -114,7 +123,7 @@ namespace Supervertaler.MemoQ.Core
         /// throw, an Init after another component has set a provider is fine,
         /// and the connection works afterwards either way.</para>
         /// </summary>
-        private static void EnsureProvider()
+        internal static void EnsureProvider()
         {
             lock (_lock)
             {
@@ -324,8 +333,8 @@ namespace Supervertaler.MemoQ.Core
         /// false direction costs the hits we already were not getting; getting it
         /// wrong in the true direction would show every translation backwards.</para>
         /// </summary>
-        private static bool Reversed(string tbSource, string tbTarget,
-                                     string jobSource, string jobTarget)
+        internal static bool Reversed(string tbSource, string tbTarget,
+                                      string jobSource, string jobTarget)
         {
             var ts = global::Supervertaler.Core.LanguageCodes.Normalise(tbSource);
             var tt = global::Supervertaler.Core.LanguageCodes.Normalise(tbTarget);
@@ -340,6 +349,49 @@ namespace Supervertaler.MemoQ.Core
             // plainly the same pair backwards; if we were told no target, that is
             // still the best reading available.
             return jt.Length == 0 || ts == jt;
+        }
+
+        /// <summary>
+        /// Every row of one termbase as a file would carry it, in the order it
+        /// was entered. For Export.
+        ///
+        /// <para>Everything, including rows marked non-translatable, which
+        /// <see cref="TermsIn"/> leaves out: an export that quietly dropped rows
+        /// would be the wrong kind of surprise, and a non-translatable re-imported
+        /// is merely a term whose translation is itself.</para>
+        /// </summary>
+        internal static IList<TermbaseFiles.Row> RowsOf(long termbaseId)
+        {
+            var rows = new List<TermbaseFiles.Row>();
+            if (!Exists) return rows;
+
+            try
+            {
+                using (var connection = Open())
+                using (var command = connection.CreateCommand())
+                {
+                    command.CommandText =
+                        "select source_term, target_term, forbidden, notes " +
+                        "from termbase_terms where termbase_id = @id order by id";
+                    command.Parameters.AddWithValue("@id", termbaseId);
+
+                    using (var reader = command.ExecuteReader())
+                        while (reader.Read())
+                            rows.Add(new TermbaseFiles.Row
+                            {
+                                Source = Text(reader, 0),
+                                Target = Text(reader, 1),
+                                Forbidden = Flag(reader, 2),
+                                Notes = Text(reader, 3)
+                            });
+                }
+            }
+            catch (Exception ex)
+            {
+                ErrorSink("Terms could not be read for export", ex);
+            }
+
+            return rows;
         }
 
         private static string Text(IDataRecord row, int i) =>

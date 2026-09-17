@@ -90,6 +90,15 @@
     <Compile Include="..\Supervertaler.MemoQ\Core\TermbaseDb.cs">
       <Link>Core\TermbaseDb.cs</Link>
     </Compile>
+    <Compile Include="..\Supervertaler.MemoQ\Core\TermbaseSchema.cs">
+      <Link>Core\TermbaseSchema.cs</Link>
+    </Compile>
+    <Compile Include="..\Supervertaler.MemoQ\Core\TermbaseWriter.cs">
+      <Link>Core\TermbaseWriter.cs</Link>
+    </Compile>
+    <Compile Include="..\Supervertaler.MemoQ\Core\TermbaseFiles.cs">
+      <Link>Core\TermbaseFiles.cs</Link>
+    </Compile>
     <Compile Include="..\Supervertaler.MemoQ\Core\TermIndex.cs">
       <Link>Core\TermIndex.cs</Link>
     </Compile>

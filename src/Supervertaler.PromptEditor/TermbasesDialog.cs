@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.Drawing;
+using System.IO;
 using System.Linq;
 using System.Windows.Forms;
 using Supervertaler.MemoQ.Core;
@@ -38,6 +39,12 @@ namespace Supervertaler.PromptEditor
         private readonly Label _project = new Label();
         private readonly Label _summary = new Label();
         private readonly Guid _projectGuid;
+
+        private readonly Button _new = new Button();
+        private readonly Button _import = new Button();
+        private readonly Button _addTo = new Button();
+        private readonly Button _export = new Button();
+        private readonly Button _delete = new Button();
 
         private const string ColRead = "read";
         private const string ColProject = "project";
@@ -80,15 +87,35 @@ namespace Supervertaler.PromptEditor
             var cancel = new Button { Text = "Cancel", Width = 90, Height = 28, DialogResult = DialogResult.Cancel };
             ok.Click += (s, e) => Save();
 
+            // The termbases themselves: created, filled, written out, removed.
+            // Every one of these first saves the ticks as they stand, because
+            // the table is rebuilt afterwards and a rebuild reads the file.
+            _new.Text = "New…";        _new.Click += (s, e) => Guarded(CreateNew);
+            _import.Text = "Import…";  _import.Click += (s, e) => Guarded(ImportAsNew);
+            _addTo.Text = "Add to…";   _addTo.Click += (s, e) => Guarded(AddToSelected);
+            _export.Text = "Export…";  _export.Click += (s, e) => Guarded(ExportSelected);
+            _delete.Text = "Delete";        _delete.Click += (s, e) => Guarded(DeleteSelected);
+            foreach (var b in new[] { _new, _import, _addTo, _export, _delete }) { b.Height = 28; b.AutoSize = true; b.Padding = new Padding(6, 0, 6, 0); }
+
             var bar = new Panel { Dock = DockStyle.Bottom, Height = 46, BackColor = Ui.Chrome };
             bar.Controls.Add(ok);
             bar.Controls.Add(cancel);
+            foreach (var b in new[] { _new, _import, _addTo, _export, _delete }) bar.Controls.Add(b);
             bar.Resize += (s, e) =>
             {
                 cancel.Left = bar.ClientSize.Width - cancel.Width - 12;
                 ok.Left = cancel.Left - ok.Width - 8;
                 ok.Top = cancel.Top = 9;
+
+                var x = 12;
+                foreach (var b in new[] { _new, _import, _addTo, _export, _delete })
+                {
+                    b.Left = x; b.Top = 9;
+                    x += b.Width + 6;
+                }
             };
+
+            _grid.SelectionChanged += (s, e) => EnableForSelection();
 
             Controls.Add(_grid);
             Controls.Add(_summary);
@@ -241,16 +268,21 @@ namespace Supervertaler.PromptEditor
 
         private void Fill()
         {
+            _grid.Rows.Clear();
+            _grid.Visible = true;
+            _summary.Height = 30;
+
             var termbases = TermbaseDb.All();
 
             if (termbases.Count == 0)
             {
                 _grid.Visible = false;
                 _summary.Text = TermbaseDb.Exists
-                    ? "The termbase database has no termbases in it yet."
-                    : "No termbase database at " + TermbaseDb.Path
-                      + " - it is created by Supervertaler for Trados and Supervertaler Workbench.";
+                    ? "No termbases yet. New… makes an empty one; Import… makes one from a glossary or a spreadsheet export."
+                    : "No termbase database yet - New… or Import… will create it at " + TermbaseDb.Path
+                      + ". Supervertaler for Trados and Workbench use the same file, if you have them.";
                 _summary.Height = 60;
+                EnableForSelection();
                 return;
             }
 
@@ -279,6 +311,194 @@ namespace Supervertaler.PromptEditor
             }
 
             UpdateSummary();
+            EnableForSelection();
+        }
+
+        // ---- the buttons ------------------------------------------------------
+
+        private TermbaseDb.Termbase Selected =>
+            _grid.Visible && _grid.CurrentRow != null ? _grid.CurrentRow.Tag as TermbaseDb.Termbase : null;
+
+        private void EnableForSelection()
+        {
+            var any = Selected != null;
+            _addTo.Enabled = any;
+            _export.Enabled = any;
+            _delete.Enabled = any;
+        }
+
+        /// <summary>
+        /// Run one of the operations with the one thing every failure needs:
+        /// to be shown, in words, rather than to close the dialog.
+        /// </summary>
+        private void Guarded(Action operation)
+        {
+            try
+            {
+                operation();
+            }
+            catch (Exception ex)
+            {
+                MessageBox.Show(this, ex.Message, "Termbases", MessageBoxButtons.OK, MessageBoxIcon.Warning);
+            }
+        }
+
+        private void CreateNew()
+        {
+            using (var form = new NewTermbaseForm("New termbase", "", "", ""))
+            {
+                if (form.ShowDialog(this) != DialogResult.OK) return;
+
+                Save();
+                var id = TermbaseWriter.Create(form.TermbaseName, form.SourceLang, form.TargetLang, "");
+                TickRead(id);
+                Fill();
+            }
+        }
+
+        /// <summary>
+        /// A termbase from a file: a prompt-library glossary, a memoQ or Excel
+        /// export, a Trados export. The file's own header names it and its
+        /// languages where it has one, and the form lets that be corrected
+        /// before anything is written.
+        /// </summary>
+        private void ImportAsNew()
+        {
+            var path = AskForFile();
+            if (path == null) return;
+
+            var contents = TermbaseFiles.Read(path);
+            if (contents.Rows.Count == 0)
+                throw new InvalidOperationException("No term pairs were found in that file.");
+
+            using (var form = new NewTermbaseForm("Import as a new termbase", contents.Name, contents.SourceLang, contents.TargetLang))
+            {
+                if (form.ShowDialog(this) != DialogResult.OK) return;
+
+                Save();
+                var id = TermbaseWriter.Create(form.TermbaseName, form.SourceLang, form.TargetLang, "");
+                var result = TermbaseWriter.Import(id, contents.Rows, form.SourceLang, form.TargetLang);
+                TickRead(id);
+                Fill();
+                Report(result, contents, form.TermbaseName);
+            }
+        }
+
+        private void AddToSelected()
+        {
+            var tb = Selected;
+            if (tb == null) return;
+
+            var path = AskForFile();
+            if (path == null) return;
+
+            var contents = TermbaseFiles.Read(path);
+            if (contents.Rows.Count == 0)
+                throw new InvalidOperationException("No term pairs were found in that file.");
+
+            // A file that does not say which way it runs is taken to run the
+            // termbase's way. Say so, because the alternative is silent.
+            if (string.IsNullOrEmpty(contents.SourceLang) || string.IsNullOrEmpty(contents.TargetLang))
+            {
+                var answer = MessageBox.Show(this,
+                    "The file does not say which language is which. Take its first column as "
+                    + tb.SourceLang + " and its second as " + tb.TargetLang + ", like the termbase?",
+                    "Termbases", MessageBoxButtons.OKCancel, MessageBoxIcon.Question);
+                if (answer != DialogResult.OK) return;
+            }
+
+            Save();
+            var result = TermbaseWriter.Import(tb.Id, contents.Rows, contents.SourceLang, contents.TargetLang);
+            Fill();
+            Report(result, contents, tb.Name);
+        }
+
+        private void ExportSelected()
+        {
+            var tb = Selected;
+            if (tb == null) return;
+
+            using (var dialog = new SaveFileDialog
+            {
+                Title = "Export termbase",
+                FileName = SafeFileName(tb.Name),
+                Filter = "Supervertaler glossary (*.txt)|*.txt|Tab-separated with a header row, for Excel or Trados (*.tsv)|*.tsv",
+                InitialDirectory = GlossariesFolder()
+            })
+            {
+                if (dialog.ShowDialog(this) != DialogResult.OK) return;
+
+                var shape = dialog.FilterIndex == 2 ? TermbaseFiles.Shape.HeaderRowTsv : TermbaseFiles.Shape.Glossary;
+                var rows = TermbaseDb.RowsOf(tb.Id);
+                TermbaseFiles.Write(dialog.FileName, shape, tb.Name, tb.SourceLang, tb.TargetLang, rows);
+
+                MessageBox.Show(this,
+                    string.Format("{0:N0} term{1} written to {2}.", rows.Count, rows.Count == 1 ? "" : "s", dialog.FileName),
+                    "Termbases", MessageBoxButtons.OK, MessageBoxIcon.Information);
+            }
+        }
+
+        private void DeleteSelected()
+        {
+            var tb = Selected;
+            if (tb == null) return;
+
+            var answer = MessageBox.Show(this,
+                string.Format("Delete “{0}” and its {1:N0} term{2}? This cannot be undone, and it is removed for "
+                            + "Supervertaler for Trados and Workbench as well - they share the database.",
+                              tb.Name, tb.Terms, tb.Terms == 1 ? "" : "s"),
+                "Termbases", MessageBoxButtons.OKCancel, MessageBoxIcon.Warning, MessageBoxDefaultButton.Button2);
+            if (answer != DialogResult.OK) return;
+
+            Save();
+            TermbaseWriter.Delete(tb.Id);
+            Fill();
+        }
+
+        /// <summary>A termbase just made is one this project wants: tick Read for it.</summary>
+        private void TickRead(long id)
+        {
+            if (_projectGuid == Guid.Empty) return;
+            var ids = new List<long>(TermbaseSelection.ReadFor(_projectGuid));
+            if (!ids.Contains(id)) ids.Add(id);
+            TermbaseSelection.Save(_projectGuid, ids, null);
+        }
+
+        private string AskForFile()
+        {
+            using (var dialog = new OpenFileDialog
+            {
+                Title = "Import terms",
+                Filter = "Glossaries and exports (*.txt;*.tsv;*.csv)|*.txt;*.tsv;*.csv|All files (*.*)|*.*",
+                InitialDirectory = GlossariesFolder()
+            })
+            {
+                return dialog.ShowDialog(this) == DialogResult.OK ? dialog.FileName : null;
+            }
+        }
+
+        private static void Report(TermbaseWriter.ImportResult result, TermbaseFiles.Contents contents, string name)
+        {
+            var text = string.Format("{0:N0} term{1} added to “{2}”.", result.Added, result.Added == 1 ? "" : "s", name);
+            if (result.Duplicates > 0) text += string.Format("\r\n{0:N0} already there, skipped.", result.Duplicates);
+            if (contents.Unreadable > 0) text += string.Format("\r\n{0:N0} line{1} could not be read as a pair.", contents.Unreadable, contents.Unreadable == 1 ? "" : "s");
+            if (result.Reversed) text += "\r\nThe file ran the other way round from the termbase, so each pair was stored turned round.";
+
+            MessageBox.Show(text, "Termbases", MessageBoxButtons.OK, MessageBoxIcon.Information);
+        }
+
+        /// <summary>Where Export glossary already writes, so exports and imports meet in one place.</summary>
+        private static string GlossariesFolder()
+        {
+            var dir = Path.Combine(global::Supervertaler.Core.SupervertalerPaths.Root, "memoq", "glossaries");
+            return Directory.Exists(dir) ? dir : global::Supervertaler.Core.SupervertalerPaths.Root;
+        }
+
+        private static string SafeFileName(string name)
+        {
+            var text = (name ?? "termbase").Trim();
+            foreach (var c in Path.GetInvalidFileNameChars()) text = text.Replace(c, '_');
+            return text.Length == 0 ? "termbase" : text;
         }
 
         /// <summary>

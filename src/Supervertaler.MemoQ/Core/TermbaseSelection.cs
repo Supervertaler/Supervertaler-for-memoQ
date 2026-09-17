@@ -164,6 +164,26 @@ namespace Supervertaler.MemoQ.Core
             }
         }
 
+        /// <summary>
+        /// A termbase that no longer exists has no business in this file: drop
+        /// its flags and take it out of every project's Read list. Called after
+        /// a delete, so that a stale id is not carried around forever answering
+        /// nothing.
+        /// </summary>
+        internal static void Forget(long id)
+        {
+            Load();
+
+            lock (_lock)
+            {
+                var changed = _flags.Remove(id);
+                foreach (var ids in _read.Values)
+                    changed |= ids.Remove(id);
+
+                if (changed) Write();
+            }
+        }
+
         /// <summary>A project's identity in the file. Guid.Empty is "no project yet".</summary>
         private static string Key(Guid project) => project.ToString("D");
 

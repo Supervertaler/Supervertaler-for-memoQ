@@ -105,6 +105,26 @@ Check 'a job and a termbase in the same pair agree' ((Same 'dut-NL' 'nl') -and (
 Check 'a German termbase is not a Dutch job' (-not (Same 'de' 'dut-NL'))
 Check 'empty is never equal to anything, including empty' (-not (Same '' '') -and -not (Same 'en' ''))
 
+# -- names, and the form a code is written down in ---------------------------
+# EnglishName is what an export heading shows; Canonical is what gets STORED,
+# and is Trados's CanonicalLocale rule with the three-letter step in front.
+# EnglishName is also the assertion that pins static-initialiser order: the
+# name table is filled as a side effect of building the code table, and if it
+# is declared after it, the type initialiser throws before anything runs.
+function Name($code)  { $a = [object[]]::new(1); $a[0] = $code; return $lc.GetMethod('EnglishName', $PS).Invoke($null, $a) }
+function Canon($code) { $a = [object[]]::new(1); $a[0] = $code; return $lc.GetMethod('Canonical', $PS).Invoke($null, $a) }
+
+Check 'dut-NL is Dutch'            ((Name 'dut-NL') -eq 'Dutch')
+Check 'en is English'              ((Name 'en') -eq 'English')
+Check 'Flemish resolves to Dutch'  ((Name 'Flemish') -eq 'Dutch')
+Check 'an unknown code has no name but itself' ((Name 'xyz') -eq 'xyz')
+
+Check 'stored form: dut-NL becomes nl-NL' ((Canon 'dut-NL') -eq 'nl-NL')
+Check 'stored form: ENG becomes en'       ((Canon 'ENG') -eq 'en')
+Check 'stored form: en_gb becomes en-GB'  ((Canon 'en_gb') -eq 'en-GB')
+Check 'stored form: nl stays nl'          ((Canon 'nl') -eq 'nl')
+Check 'stored form: an unknown base is kept, region still upper' ((Canon 'xyz-ab') -eq 'xyz-AB')
+
 # -- superseded codes still in the wild --------------------------------------
 Check 'iw is Hebrew' ((Norm 'iw') -eq 'he')
 Check 'in is Indonesian' ((Norm 'in') -eq 'id')
