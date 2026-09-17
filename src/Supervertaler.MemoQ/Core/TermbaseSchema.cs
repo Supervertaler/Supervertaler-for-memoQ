@@ -25,14 +25,25 @@ namespace Supervertaler.MemoQ.Core
     /// host's own business, kept in its own file, and those two tables are what
     /// happened when a host wrote its choices into the shared one - 5,139 rows
     /// keyed by project ids that join to nothing. Trados creates them when it
-    /// needs them; this product never needs them. Likewise no
-    /// <c>translation_units</c>: <c>termbase_terms</c> carries a foreign key to
-    /// it, and the Workbench creates that table itself. The key is inert only
-    /// because this product's writer turns foreign-key enforcement off - SQLite
-    /// leaves it off, but Microsoft.Data.Sqlite turns it on, and with it on the
-    /// first term inserted into a database without that table fails. Any other
-    /// writer using the same provider against a file this product made will meet
-    /// the same wall, which is written down in issue #133 in the Trados repo.</para>
+    /// needs them; this product never needs them.</para>
+    ///
+    /// <para><b>The one clause deliberately left out</b> - the single place
+    /// "copied, not written" is overridden, and the reason is recorded here and
+    /// enforced by the harness rather than left to memory. In the live file,
+    /// <c>termbase_terms</c> ends with
+    /// <c>FOREIGN KEY (tm_source_id) REFERENCES translation_units(id)</c>. That
+    /// clause is the Workbench's: <c>translation_units</c> is its
+    /// translation-memory table, which it creates and this product never will.
+    /// Trados's own <c>CREATE TABLE</c> for <c>termbase_terms</c> has no such
+    /// clause either. A database this product creates therefore keeps the
+    /// <c>tm_source_id</c> column and drops the key, because a file carrying a
+    /// foreign key to a table that does not exist is a defect of the file: any
+    /// writer with enforcement on - and Microsoft.Data.Sqlite turns it on by
+    /// default - fails on the first insert into <c>termbase_terms</c> with "no
+    /// such table", and Trados's delete, which turns enforcement on deliberately
+    /// for its cascades, would fail the same way. Found by this product's own
+    /// harness on 2026-09-17; the Trados side confirmed their DDL and agreed the
+    /// fix belongs in the created file, not in every writer. Issue #133.</para>
     ///
     /// <para><b>Additive-only, no version row.</b> Agreed with the Trados side:
     /// <c>PRAGMA user_version</c> stays 0, and a database made here is completed
@@ -101,9 +112,7 @@ namespace Supervertaler.MemoQ.Core
                 created_date TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
                 modified_date TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
                 usage_count INTEGER DEFAULT 0,
-                notes TEXT, project TEXT, client TEXT, term_uuid TEXT, note TEXT, is_nontranslatable BOOLEAN DEFAULT 0, source_abbreviation TEXT DEFAULT '', target_abbreviation TEXT DEFAULT '', url TEXT DEFAULT '',
-
-                FOREIGN KEY (tm_source_id) REFERENCES translation_units(id) ON DELETE SET NULL
+                notes TEXT, project TEXT, client TEXT, term_uuid TEXT, note TEXT, is_nontranslatable BOOLEAN DEFAULT 0, source_abbreviation TEXT DEFAULT '', target_abbreviation TEXT DEFAULT '', url TEXT DEFAULT ''
             )"
             },
             new Item
@@ -198,6 +207,24 @@ namespace Supervertaler.MemoQ.Core
                     command.ExecuteNonQuery();
                 }
             }
+        }
+
+        /// <summary>
+        /// The live file's <c>termbase_terms</c> DDL with the Workbench's
+        /// translation-memory foreign key removed - the one clause this product
+        /// does not reproduce (see the class remarks). The drift test applies this
+        /// to the LIVE side before comparing, so that the deviation is a single,
+        /// named exception rather than a reason to loosen the comparison.
+        /// </summary>
+        internal static string WithoutForeignTmKey(string sql)
+        {
+            if (sql == null) return string.Empty;
+
+            return System.Text.RegularExpressions.Regex.Replace(
+                sql,
+                @",?\s*FOREIGN\s+KEY\s*\(\s*tm_source_id\s*\)\s*REFERENCES\s+translation_units\s*\(\s*id\s*\)(\s+ON\s+DELETE\s+SET\s+NULL)?",
+                string.Empty,
+                System.Text.RegularExpressions.RegexOptions.IgnoreCase);
         }
 
         /// <summary>

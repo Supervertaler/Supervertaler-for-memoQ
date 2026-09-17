@@ -145,6 +145,11 @@ $test = OpenDb $TestDb $true
 Check 'it is in WAL mode, as the live file is' ((Scalar $test 'pragma journal_mode') -eq 'wal')
 Check 'user_version stays 0, per the additive-only agreement' ((Scalar $test 'pragma user_version') -eq 0)
 
+function WithoutTmKey([string]$sql) {
+    $a = [object[]]::new(1); $a[0] = $sql
+    return $schema.GetMethod('WithoutForeignTmKey', $NPS).Invoke($null, $a)
+}
+
 $objects = $schema.GetField('Objects', $NPS).GetValue($null)
 $drift = @()
 foreach ($item in $objects) {
@@ -152,10 +157,19 @@ foreach ($item in $objects) {
     $testSql = Scalar $test ("select sql from sqlite_master where name = '{0}'" -f $item.Name)
     if ($null -eq $liveSql) { $drift += "$($item.Name): not in the LIVE database"; continue }
     if ($null -eq $testSql) { $drift += "$($item.Name): not created"; continue }
-    if ((Comparable $liveSql) -ne (Comparable $testSql)) { $drift += "$($item.Name): differs" }
-    if ((Comparable $liveSql) -ne (Comparable $item.Sql)) { $drift += "$($item.Name): TermbaseSchema text differs from live" }
+    # One deliberate deviation, applied to the LIVE side: the Workbench's DDL
+    # gives termbase_terms a foreign key to translation_units, a table this
+    # product does not create. A created file must not carry a key to nothing
+    # (see TermbaseSchema), so the live text is compared without that clause.
+    $liveCmp = Comparable (WithoutTmKey $liveSql)
+    if ($liveCmp -ne (Comparable $testSql)) { $drift += "$($item.Name): differs" }
+    if ($liveCmp -ne (Comparable $item.Sql)) { $drift += "$($item.Name): TermbaseSchema text differs from live" }
 }
 Check ("every one of the {0} schema objects matches the live database" -f $objects.Count) ($drift.Count -eq 0) ($drift -join '; ')
+Check 'the live file does carry the TM foreign key this product leaves out - the deviation is real, not stale' `
+      ((Scalar $live "select sql from sqlite_master where name = 'termbase_terms'") -match 'REFERENCES\s+translation_units')
+Check 'and a created file does not carry it' `
+      (-not ((Scalar $test "select sql from sqlite_master where name = 'termbase_terms'") -match 'translation_units'))
 Check 'no activation tables are created - those are a host''s business' `
       (((Scalar $test "select count(*) from sqlite_master where name like 'termbase%activation'") -eq 0))
 
@@ -200,10 +214,14 @@ $r = Import $id1 $rows 'dut-NL' 'eng-GB'
 Check "three added, two duplicates ($($r.Added)/$($r.Duplicates))" ($r.Added -eq 3 -and $r.Duplicates -eq 2)
 Check 'not reversed: file and termbase run the same way' (-not $r.Reversed)
 
-$terms = Scalar $test 'select count(*) from termbase_terms where termbase_id = 1'
-$fts   = Scalar $test 'select count(*) from termbase_terms_fts'
-Check "the full-text index holds every term ($fts of $terms)" ($fts -eq $terms -and $terms -eq 3)
-Check 'the index actually finds a term' ((Scalar $test "select count(*) from termbase_terms_fts where termbase_terms_fts match 'werkwijze'") -eq 1)
+# NEVER assert the index by count(*). On an external-content FTS5 table a query
+# without MATCH is answered from the CONTENT table, so count(*) equals the term
+# count with a completely empty index - measured 2026-09-17: content-only
+# insert gave count 1, match 0. Only MATCH reads the index. The 36,106 = 36,106
+# that looked like a healthy live index the day before was exactly this.
+Check 'the index finds each term that was just added'  ((Scalar $test "select count(*) from termbase_terms_fts where termbase_terms_fts match 'werkwijze'") -eq 1)
+Check 'and the forbidden one'                          ((Scalar $test "select count(*) from termbase_terms_fts where termbase_terms_fts match 'toestel'") -eq 1)
+Check 'and does not find one that was never added'     ((Scalar $test "select count(*) from termbase_terms_fts where termbase_terms_fts match 'nonesuch'") -eq 0)
 
 $t = (Rows $test "select * from termbase_terms where source_term = 'toestel'")[0]
 Check 'forbidden survives'               ($t['forbidden'] -eq 1)
@@ -293,8 +311,12 @@ Delete $id1
 Check 'the termbase row is gone'      ((Scalar $test 'select count(*) from termbases where id = 1') -eq 0)
 Check 'its terms are gone'            ((Scalar $test 'select count(*) from termbase_terms where termbase_id = 1') -eq 0)
 Check 'the other termbase is untouched' ((Scalar $test 'select count(*) from termbase_terms where termbase_id = 2') -eq 2)
-$ftsAfter = Scalar $test 'select count(*) from termbase_terms_fts'
-Check "the index was rebuilt to match ($ftsAfter)" ($ftsAfter -eq 2)
+# The real proof of the rebuild: a term of the deleted termbase must no longer
+# MATCH. Without the rebuild it still would - measured: after a content-only
+# delete, count(*) fell to 0 and the deleted term STILL matched. A count here
+# would pass with the index untouched.
+Check 'the index no longer finds a term of the deleted termbase' ((Scalar $test "select count(*) from termbase_terms_fts where termbase_terms_fts match 'adsorbens'") -eq 0)
+Check 'and still finds one of the termbase that remains'         ((Scalar $test "select count(*) from termbase_terms_fts where termbase_terms_fts match 'house'") -eq 1)
 $ra = [object[]]::new(1); $ra[0] = $project
 $readBack = $sel.GetMethod('ReadFor', $NPS).Invoke($null, $ra)
 Check 'the selection file no longer names it' ($readBack.Count -eq 0) "still $($readBack.Count)"
@@ -310,7 +332,8 @@ $rb = Import $id3 $big 'nl' 'en'
 $sw.Stop()
 Write-Host ("   12,000-row import: {0} ms" -f $sw.ElapsedMilliseconds)
 Check '12,000 rows imported' ($rb.Added -eq 12000) "added=$($rb.Added)"
-Check 'index count matches after a large import' ((Scalar $test 'select count(*) from termbase_terms_fts') -eq (Scalar $test 'select count(*) from termbase_terms'))
+Check 'the index finds the last row of a large import' ((Scalar $test "select count(*) from termbase_terms_fts where termbase_terms_fts match 'bronterm12000'") -eq 1)
+Check 'and the first'                                   ((Scalar $test "select count(*) from termbase_terms_fts where termbase_terms_fts match 'bronterm00001'") -eq 1)
 Check 'a large import stays under five seconds' ($sw.ElapsedMilliseconds -lt 5000) "$($sw.ElapsedMilliseconds) ms"
 
 $sw = [Diagnostics.Stopwatch]::StartNew()

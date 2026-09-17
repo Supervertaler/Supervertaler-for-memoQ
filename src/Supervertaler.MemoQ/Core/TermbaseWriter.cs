@@ -68,13 +68,14 @@ namespace Supervertaler.MemoQ.Core
 
                 // Off, explicitly. SQLite itself leaves foreign keys off, but
                 // Microsoft.Data.Sqlite turns them ON for every connection it
-                // opens - and termbase_terms carries a foreign key to
-                // translation_units, the Workbench's translation-memory table,
-                // which a database this product created does not have. With
-                // enforcement on, the very first term insert fails with "no such
-                // table: translation_units". Measured, not inferred: that is how
-                // the harness found it. Every dependent row is deleted by name
-                // in Delete() precisely so that nothing here needs the cascades.
+                // opens. In a file the Workbench made, termbase_terms carries a
+                // foreign key to its translation_units table; a file this
+                // product makes no longer does (see TermbaseSchema), but the
+                // Workbench's files are the ones this mostly writes into, and
+                // nothing here wants the cascades anyway: every dependent row is
+                // deleted by name in Delete(). Measured before it was written
+                // down - with enforcement on, the first insert into a freshly
+                // created file failed with "no such table: translation_units".
                 ForeignKeys = false
             };
 
