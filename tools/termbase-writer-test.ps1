@@ -414,9 +414,13 @@ $index.GetField('ErrorSink', $NPS).SetValue($null, [Action[string, Exception]]{ 
 $lastCheck = $index.GetField('_lastCheck', $NPS)
 function Unthrottle { $lastCheck.SetValue($null, [DateTime]::MinValue) }
 function Find([Guid]$project, [string]$text) {
-    $m = $index.GetMethods($PS) | Where-Object { $_.Name -eq 'Find' -and $_.GetParameters().Count -eq 3 }
-    $a = [object[]]::new(3); $a[0] = $null; $a[1] = $project; $a[2] = $text
+    $m = $index.GetMethods($PS) | Where-Object { $_.Name -eq 'Find' -and $_.GetParameters().Count -eq 2 }
+    $a = [object[]]::new(2); $a[0] = $project; $a[1] = $text
     return $m.Invoke($null, $a)
+}
+function FindForModel([Guid]$project, [string]$text) {
+    $a = [object[]]::new(2); $a[0] = $project; $a[1] = $text
+    return $index.GetMethod('FindForModel', $PS).Invoke($null, $a)
 }
 $ua = [object[]]::new(2); $ua[0] = 'dut'; $ua[1] = 'eng'
 $index.GetMethod('UseLanguages', $PS).Invoke($null, $ua)
@@ -445,6 +449,20 @@ $sel.GetMethod('Save', $NPS).Invoke($null, $ea)
 Unthrottle
 Check 'a correction made in the same second reaches lookup once the editor saves' ((Find $editProject 'De meetkop werd gemeten.').Count -eq 1)
 Check 'and the old form is gone from lookup'                                          ((Find $editProject 'De meetsonde werd gemeten.').Count -eq 0)
+
+# The AI tick is a separate decision from Read, and it decides what the model
+# is told. Until 2026-09-18 nothing read it: every Read termbase reached the
+# prompt. Now Find (the grid, the pane) answers from Read; FindForModel (the
+# prompt, AutoPrompt) answers only from termbases ticked AI as well.
+$ef.Ai = $false
+$sel.GetMethod('Save', $NPS).Invoke($null, $ea)
+Unthrottle
+Check 'Read without AI: the grid sees the term'          ((Find $editProject 'Het adsorbens werd gemeten.').Count -eq 1)
+Check 'Read without AI: the model is NOT told about it'  ((FindForModel $editProject 'Het adsorbens werd gemeten.').Count -eq 0)
+$ef.Ai = $true
+$sel.GetMethod('Save', $NPS).Invoke($null, $ea)
+Unthrottle
+Check 'Read with AI: the model is told'                  ((FindForModel $editProject 'Het adsorbens werd gemeten.').Count -eq 1)
 
 # =============================================================================
 # 6. Delete leaves nothing dangling, in the file or in the selection

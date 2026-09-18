@@ -102,6 +102,23 @@ namespace Supervertaler.MemoQ.Core
             }
         }
 
+        /// <summary>
+        /// The memoQ project in force, as the MT engine last recorded it when a
+        /// translation request arrived. Neither SDK tells a plugin which project
+        /// it is in any other way, so this is the one answer every consumer of
+        /// the selection uses - lookup, the prompt, the bridge, the QA checks.
+        /// Guid.Empty until the first segment of a session has been translated.
+        /// </summary>
+        internal static Guid CurrentProject
+        {
+            get
+            {
+                Guid project;
+                return Guid.TryParse((SharedSettings.MemoryBankProject ?? string.Empty).Trim(), out project)
+                    ? project : Guid.Empty;
+            }
+        }
+
         /// <summary>Every termbase memoQ has an opinion about, by id.</summary>
         internal static IDictionary<long, Flags> All()
         {

@@ -63,16 +63,12 @@ namespace Supervertaler.MemoQ
 
         /// <summary>
         /// memoQ hides an unconfigured provider rather than offering something that
-        /// cannot work - so this must be true whenever there is any terminology at
-        /// all to offer, from either source.
-        ///
-        /// <para>It used to ask only about the glossary file, which meant that
-        /// selecting termbases and nothing else left the provider invisible in
-        /// memoQ: the terms were loaded and ready and the plugin was never
-        /// offered to the project. Termbases now count.</para>
+        /// cannot work - so this is true whenever the project has termbases ticked
+        /// Read. There was once a second source, a glossary file, and for a day
+        /// this asked only about that, which left a project with termbases and no
+        /// file never offered the provider at all.
         /// </summary>
-        public override bool PluginConfigured =>
-            !string.IsNullOrWhiteSpace(SharedSettings.GlossaryPath) || AnyTermbaseSelected;
+        public override bool PluginConfigured => AnyTermbaseSelected;
 
         /// <summary>
         /// Whether this project has termbases ticked. Never throws: this is asked
@@ -98,15 +94,7 @@ namespace Supervertaler.MemoQ
         /// SDK tells a terminology plugin nothing about projects, so this is the
         /// only way it can know which selection applies.
         /// </summary>
-        internal static Guid CurrentProject
-        {
-            get
-            {
-                Guid project;
-                return Guid.TryParse((SharedSettings.MemoryBankProject ?? string.Empty).Trim(), out project)
-                    ? project : Guid.Empty;
-            }
-        }
+        internal static Guid CurrentProject => TermbaseSelection.CurrentProject;
 
         public override bool PluginEnabled
         {
@@ -144,16 +132,17 @@ namespace Supervertaler.MemoQ
         public override IEngine CreateEngine(string srcLangName, string trgLangName)
         {
             PluginLog.Write($"TB CreateEngine: {srcLangName} -> {trgLangName}, "
-                + $"glossary={(string.IsNullOrWhiteSpace(SharedSettings.GlossaryPath) ? "(none)" : "set")}");
+                + $"termbases ticked for the project: {TermbaseSelection.ReadFor(CurrentProject).Count}");
             return new SupervertalerTBEngine(srcLangName, trgLangName);
         }
 
+        /// <summary>
+        /// Terminology is managed in the prompt editor - memoQ > Termbases... -
+        /// so the plugin's options button simply opens it.
+        /// </summary>
         public override void ShowOptionsForm(Form parentForm)
         {
-            using (var form = new GlossaryForm())
-            {
-                if (parentForm != null) form.ShowDialog(parentForm); else form.ShowDialog();
-            }
+            EditorLauncher.Open(parentForm);
         }
     }
 
@@ -246,8 +235,7 @@ namespace Supervertaler.MemoQ
                 // the second of two documents.
                 TermIndex.UseLanguages(_sourceLangName, _targetLangName);
 
-                var matches = TermIndex.Find(SharedSettings.GlossaryPath,
-                                             SupervertalerTBPluginDirector.CurrentProject, plain);
+                var matches = TermIndex.Find(SupervertalerTBPluginDirector.CurrentProject, plain);
                 if (matches.Count == 0) return new TerminologyResult[0];
 
                 var results = new List<TerminologyResult>(matches.Count);
@@ -346,8 +334,6 @@ namespace Supervertaler.MemoQ
             // whether a freshly exported glossary or a standing termbase is the
             // one talking.
             var origin = (entry.Origin ?? string.Empty).Trim();
-            if (origin.Length == 0)
-                origin = System.IO.Path.GetFileName(SharedSettings.GlossaryPath ?? string.Empty);
 
             sb.Append("<div style=\"color:#adb5bd;font-size:8pt\">Supervertaler")
               .Append(origin.Length > 0 ? " · " + Escape(origin) : string.Empty)

@@ -9,6 +9,16 @@ any release tooling that buckets on these headings works for both.
 
 ## [Unreleased] – 2026-09-16
 
+### Changed
+
+- **The AI tick now decides what the model is told.** It was in the Termbases window from the start and nothing read it: every termbase ticked Read reached the prompt. Now Read is what the grid and the terminology pane show you, and AI is what leaves the machine – the terms in a batch or single-segment prompt, the hits AutoPrompt draws on, the pairs the Claude tools read – and a termbase ticked Read without AI stays on your screen and goes no further. Which is what the two ticks always claimed.
+
+- **A term added by the Claude tools goes into the project termbase.** `add_term` over the bridge used to append a line to the glossary file. It now writes to whichever termbase is ticked both Read and Project for the current memoQ project, and says which; with none ticked it says so rather than guessing at a background termbase.
+
+### Removed
+
+- **The text glossaries.** The tab-separated files in `memoq\glossaries`, the Glossaries folder in the editor's tree with its own grid, the Glossary row in the context bar, the terminology plugin's own options dialog, and the *Choose the active glossary* and *Export … as a glossary* commands are gone. They were the terminology system before the termbases existed, and keeping both meant two editors, two sources and two places a term could live. Everything they did the termbases now do: your three files have been imported as termbases (and left where they were), **Termbase from this prompt's terms…** replaces *Export glossary* and makes the result the project's termbase, and the terminology plugin's Options button opens the prompt editor, where the Termbases window is. Import… still reads the old file format, so a glossary from anywhere else becomes a termbase in one click.
+
 ### Fixed
 
 - **The Termbases table clipped its own column headings.** The header row and the rows below it were left at the sizes WinForms chooses for a font this program stopped using, so every heading sat a pixel or two short. They are now measured from the font actually in use, and the Termbase column stretches to the right-hand edge instead of leaving a band of empty grid beside Languages.

@@ -77,8 +77,10 @@ function Save($project, $ids, $flags) {
     $sel.GetMethod('Save', $NPS).Invoke($null, $a)
 }
 function Find($project, $text) {
-    $m = $index.GetMethods($PS) | Where-Object { $_.Name -eq 'Find' -and $_.GetParameters().Count -eq 3 }
-    $a = [object[]]::new(3); $a[0] = $null; $a[1] = $project; $a[2] = $text
+    # Two parameters since the glossary file was retired: the project decides
+    # which termbases answer, and there is no other source.
+    $m = $index.GetMethods($PS) | Where-Object { $_.Name -eq 'Find' -and $_.GetParameters().Count -eq 2 }
+    $a = [object[]]::new(2); $a[0] = $project; $a[1] = $text
     return $m.Invoke($null, $a)
 }
 function UseLanguages($src, $tgt) {

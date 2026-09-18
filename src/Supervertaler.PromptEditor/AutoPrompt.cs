@@ -171,21 +171,6 @@ namespace Supervertaler.PromptEditor
             [DataMember(Name = "confirmedPairs")] public int ConfirmedPairs { get; set; }
         }
 
-        /// <summary>Make a glossary file the plugin's active glossary. Returns the plugin's message.</summary>
-        public async Task<string> ActivateGlossaryAsync(string path)
-        {
-            var body = new StringContent("{\"path\":" + JsonString(path) + "}", Encoding.UTF8, "application/json");
-            var response = await _http.PostAsync(_base + "/v1/glossary/activate", body).ConfigureAwait(false);
-            var json = await response.Content.ReadAsStringAsync().ConfigureAwait(false);
-            if (!response.IsSuccessStatusCode)
-            {
-                var err = Deserialize<ErrorBody>(json);
-                throw new InvalidOperationException(err?.Error ?? ("HTTP " + (int)response.StatusCode));
-            }
-            var m = Regex.Match(json, "\"message\"\\s*:\\s*\"((?:[^\"\\\\]|\\\\.)*)\"");
-            return m.Success ? Regex.Unescape(m.Groups[1].Value) : "Glossary activated.";
-        }
-
         /// <summary>Have the plugin take the project from the document memoQ is showing. Key: whether it could; Value: what it says.</summary>
         public async Task<KeyValuePair<bool, string>> SyncProjectAsync()
         {
@@ -329,7 +314,7 @@ namespace Supervertaler.PromptEditor
         private readonly ComboBox _domain = new ComboBox { DropDownStyle = ComboBoxStyle.DropDown };
         private readonly Label _detected = new Label { AutoSize = false, ForeColor = SystemColors.GrayText, Height = 34 };
         private readonly TextBox _hint = new TextBox { Multiline = true, ScrollBars = ScrollBars.Vertical, AcceptsReturn = true };
-        private readonly CheckBox _terms = new CheckBox { Text = "Include glossary hits from the document", Checked = true, AutoSize = true };
+        private readonly CheckBox _terms = new CheckBox { Text = "Include termbase hits from the document", Checked = true, AutoSize = true };
         private readonly CheckBox _confirmed = new CheckBox { Text = "Include segments already confirmed in memoQ", Checked = true, AutoSize = true };
 
         // Whether each option has anything to offer at all, as opposed to being
@@ -536,16 +521,19 @@ namespace Supervertaler.PromptEditor
         /// </summary>
         private void ShowWhatTheGlossaryCanOffer()
         {
-            var path = SharedSettings.GlossaryPath;
-            var have = !string.IsNullOrWhiteSpace(path) && File.Exists(path);
+            // Hits come from the termbases ticked AI for the project: those are
+            // the ones whose terms may be sent to a model, and drafting a prompt
+            // sends them.
+            var project = TermbaseSelection.CurrentProject;
+            var have = project != Guid.Empty && TermbaseSelection.AiFor(project).Count > 0;
 
             _termsPossible = have;
             _terms.Enabled = have;
             if (!have) _terms.Checked = false;
 
             _terms.Text = have
-                ? "Include glossary hits from the document"
-                : "Include glossary hits from the document \u2013 no glossary is active";
+                ? "Include termbase hits from the document"
+                : "Include termbase hits from the document \u2013 no termbase is ticked AI for this project";
         }
 
         private void ShowWhatTheDocumentCanOffer(int confirmedPairs)

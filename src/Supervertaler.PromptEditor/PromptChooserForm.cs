@@ -62,76 +62,6 @@ namespace Supervertaler.PromptEditor
         /// </summary>
         public const string BrowseValue = "?browse";
 
-        /// <summary>
-        /// Shows the glossary chooser. Returns the chosen path - empty for none,
-        /// <see cref="BrowseValue"/> to open a file dialog - or null when
-        /// cancelled.
-        /// </summary>
-        public static string ChooseGlossary(IWin32Window owner, IReadOnlyList<GlossaryRow> files, string current)
-        {
-            using (var dialog = new ChooserForm(
-                "Choose the active glossary",
-                "Used by the terminology pane, the QA check, and translation requests.",
-                "Type to filter by name",
-                GlossaryRows(files), current))
-            {
-                return dialog.ShowDialog(owner) == DialogResult.OK ? dialog.SelectedValue : null;
-            }
-        }
-
-        /// <summary>One glossary file, as the caller found it on disk.</summary>
-        internal sealed class GlossaryRow
-        {
-            public string Path;
-            public string Name;
-            public int Terms;
-
-            /// <summary>True for a file outside the glossaries folder, kept in the list so the active one is always visible.</summary>
-            public bool Elsewhere;
-        }
-
-        internal static IReadOnlyList<ChooserForm.Row> GlossaryRows(IReadOnlyList<GlossaryRow> files)
-        {
-            var rows = new List<ChooserForm.Row>
-            {
-                // The operation that did not exist before: a file dialog can only
-                // pick a file, so a glossary could be swapped but never cleared.
-                // A value shown with no way to clear it reads as stuck rather
-                // than chosen.
-                new ChooserForm.Row
-                {
-                    Value = "",
-                    Display = "(none)",
-                    Detail = "No glossary. The terminology pane shows nothing, the QA check has "
-                           + "nothing to check against, and no terms are sent to the model."
-                }
-            };
-
-            foreach (var f in files ?? new List<GlossaryRow>())
-            {
-                if (f == null || string.IsNullOrWhiteSpace(f.Path)) continue;
-
-                rows.Add(new ChooserForm.Row
-                {
-                    Value = f.Path,
-                    Display = f.Name + (f.Elsewhere ? "      \u00b7  outside the glossaries folder" : ""),
-                    Detail = (f.Terms > 0 ? f.Terms.ToString("N0") + " terms  \u00b7  " : "") + f.Path,
-                    Search = f.Path
-                });
-            }
-
-            // Last, because it is an escape hatch rather than a choice: nearly
-            // every glossary lives in the folder above it.
-            rows.Add(new ChooserForm.Row
-            {
-                Value = BrowseValue,
-                Display = "Browse\u2026",
-                Detail = "Choose a glossary file from anywhere on disk."
-            });
-
-            return rows;
-        }
-
         /// <summary>One bank, as the caller found it on disk.</summary>
         internal sealed class BankRow
         {
@@ -184,7 +114,7 @@ namespace Supervertaler.PromptEditor
                 // drafted prompt behaves differently at translation time, and
                 // the difference is invisible in the prompt's own text.
                 var detail = p.IsDrafted
-                    ? "Drafted by AutoPrompt, so the glossary is not sent to the model as well. "
+                    ? "Drafted by AutoPrompt, so termbase terms are not sent to the model as well. "
                       + (p.Description ?? "")
                     : p.Description;
 

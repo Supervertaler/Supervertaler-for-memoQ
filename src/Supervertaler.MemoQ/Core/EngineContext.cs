@@ -218,36 +218,6 @@ namespace Supervertaler.MemoQ.Core
                 SharedSettings.TargetLang = TargetLangCode ?? string.Empty;
         }
 
-        private static string _directionWarnedFor;
-
-        /// <summary>
-        /// Says so when the active glossary faces the wrong way. Silence was the
-        /// old behaviour and it cost a whole comparison run: a glossary for the
-        /// opposite direction produces no hits, no terms in the prompt and a clean
-        /// terminology QA report, with nothing anywhere explaining why.
-        ///
-        /// Warned once per glossary and language pair, because this is called from
-        /// the translation path.
-        /// </summary>
-        public void WarnIfGlossaryFacesTheWrongWay()
-        {
-            var path = SharedSettings.GlossaryPath;
-            if (string.IsNullOrWhiteSpace(path)) return;
-
-            var relation = GlossaryDirection.Compare(
-                SourceLangCode, TargetLangCode, TermIndex.DeclaredSource, TermIndex.DeclaredTarget);
-
-            if (relation == GlossaryDirection.Relation.Aligned
-                || relation == GlossaryDirection.Relation.Undeclared) return;
-
-            var key = path + "|" + SourceLangCode + "|" + TargetLangCode;
-            if (string.Equals(key, _directionWarnedFor, StringComparison.Ordinal)) return;
-            _directionWarnedFor = key;
-
-            PluginLog.Write("GLOSSARY DIRECTION: " + GlossaryDirection.Explain(
-                relation, TermIndex.DeclaredSource, TermIndex.DeclaredTarget,
-                SourceLangCode, TargetLangCode));
-        }
 
         private static string _promptWarnedFor;
 

@@ -230,10 +230,16 @@ namespace Supervertaler.MemoQ.Core
             // union of every segment's matches; recalled pairs are keyed on the
             // chunk's text so the examples suit what is actually being translated.
             var joined = string.Join(" ", chunk.Select(s => s.PlainText));
-            var ownTerms = context.GlossaryForModel(
-                TermIndex.Find(SharedSettings.GlossaryPath, joined));
 
-            context.WarnIfGlossaryFacesTheWrongWay();
+            // Only termbases ticked AI reach the model: that tick is the
+            // translator's decision about what leaves the machine, separate from
+            // Read, which is what the grid shows them. Languages set immediately
+            // before the lookup, never once per engine - memoQ builds one engine
+            // per target language.
+            TermIndex.UseLanguages(context.SourceLangCode, context.TargetLangCode);
+            var ownTerms = context.GlossaryForModel(
+                TermIndex.FindForModel(TermbaseSelection.CurrentProject, joined));
+
             context.WarnIfPromptFacesTheWrongWay();
 
             var recalled = general.UseDocumentContext

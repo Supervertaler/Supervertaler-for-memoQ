@@ -39,7 +39,6 @@ namespace Supervertaler.MemoQ.Core
     {
         private static readonly object _lock = new object();
 
-        private const string GlossaryKey = "glossary";
         private const string MemoryBankKey = "membank";
         private const string MemoryBankProjectKey = "membank.project";
         private const string MemoryBankProjectNameKey = "membank.projectname";
@@ -117,13 +116,6 @@ namespace Supervertaler.MemoQ.Core
         internal static string InstructionsPath => System.IO.Path.Combine(Directory, "instructions.txt");
 
         // ── typed settings ───────────────────────────────────────────────
-
-        /// <summary>Path to the tab-separated glossary, or empty.</summary>
-        public static string GlossaryPath
-        {
-            get => Read(GlossaryKey);
-            set => Write(GlossaryKey, value);
-        }
 
         /// <summary>
         /// The memory bank this translator has chosen, as a folder name under

@@ -102,7 +102,9 @@ namespace Supervertaler.PromptEditor
 
             _grid.Columns.Add(new DataGridViewTextBoxColumn { Name = ColSource, HeaderText = Heading(termbase.SourceLang), Width = 300 });
             _grid.Columns.Add(new DataGridViewTextBoxColumn { Name = ColTarget, HeaderText = Heading(termbase.TargetLang), Width = 300 });
-            _grid.Columns.Add(new DataGridViewCheckBoxColumn { Name = ColForbidden, HeaderText = "Forbidden", Width = 74,
+            // Wide enough for its own heading in the shell font: 74 clipped it to "Forbidder".
+            _grid.Columns.Add(new DataGridViewCheckBoxColumn { Name = ColForbidden, HeaderText = "Forbidden",
+                Width = TextRenderer.MeasureText("Forbidden", Font).Width + 24,
                 ToolTipText = "A term that must NOT be used. Shown in memoQ as a warning, and told to the model as such." });
             _grid.Columns.Add(new DataGridViewTextBoxColumn { Name = ColNotes, HeaderText = "Notes", Width = 200, AutoSizeMode = DataGridViewAutoSizeColumnMode.Fill });
 

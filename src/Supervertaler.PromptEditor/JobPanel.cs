@@ -6,7 +6,7 @@ namespace Supervertaler.PromptEditor
 {
     /// <summary>
     /// What memoQ will use for the next segment: the project, the model, the
-    /// prompt, the glossary and the memory bank.
+    /// prompt, and the memory bank.
     ///
     /// <para>It sits above the prompt library rather than across the top of the
     /// window, and the pairing is the point: the tree is what you could choose,
@@ -28,11 +28,10 @@ namespace Supervertaler.PromptEditor
         private readonly TableLayoutPanel _rows = new TableLayoutPanel();
         private readonly ToolTip _tips = new ToolTip { AutoPopDelay = 30000, InitialDelay = 400 };
 
-        public JobPanel(Action chooseModel, Action choosePrompt, Action chooseGlossary, Action chooseBank, Action syncProject = null)
+        public JobPanel(Action chooseModel, Action choosePrompt, Action chooseBank, Action syncProject = null)
         {
             if (chooseModel == null) throw new ArgumentNullException(nameof(chooseModel));
             if (choosePrompt == null) throw new ArgumentNullException(nameof(choosePrompt));
-            if (chooseGlossary == null) throw new ArgumentNullException(nameof(chooseGlossary));
             if (chooseBank == null) throw new ArgumentNullException(nameof(chooseBank));
 
             Dock = DockStyle.Top;
@@ -59,7 +58,6 @@ namespace Supervertaler.PromptEditor
 
             Model = AddRow("Model", chooseModel);
             Prompt = AddRow("Prompt", choosePrompt);
-            Glossary = AddRow("Glossary", chooseGlossary);
             Bank = AddRow("Bank", chooseBank);
 
             // One line, like every row below it, and shortened the same way when
@@ -99,7 +97,6 @@ namespace Supervertaler.PromptEditor
         public Field Project { get; }
         public Field Model { get; }
         public Field Prompt { get; }
-        public Field Glossary { get; }
         public Field Bank { get; }
 
         /// <summary>
@@ -333,7 +330,6 @@ namespace Supervertaler.PromptEditor
 
             Fit(Model);
             Fit(Prompt);
-            Fit(Glossary);
             Fit(Bank);
         }
 

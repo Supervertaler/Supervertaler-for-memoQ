@@ -60,7 +60,7 @@ namespace Supervertaler.MemoQ.Core
         // 1.234,56 matches 1,234.56 — and 1 234 matches 1234.
         private static readonly Regex Number = new Regex(@"\p{Nd}+(?:[.,  ]\p{Nd}+)*", RegexOptions.Compiled);
 
-        public static Result Run(string check, List<PreviewStore.Part> rows, int limit, string glossaryPath)
+        public static Result Run(string check, List<PreviewStore.Part> rows, int limit, Guid project)
         {
             var r = new Result { Check = check };
             var translated = rows.Select((p, i) => new { Part = p, Index = i + 1 })
@@ -130,7 +130,7 @@ namespace Supervertaler.MemoQ.Core
                     break;
 
                 case "terminology":
-                    RunTerminology(translated.Select(x => (x.Part, x.Index)).ToList(), glossaryPath, Add, r);
+                    RunTerminology(translated.Select(x => (x.Part, x.Index)).ToList(), project, Add, r);
                     break;
 
                 default:
@@ -164,12 +164,12 @@ namespace Supervertaler.MemoQ.Core
         // ── terminology ──────────────────────────────────────────────────
 
         private static void RunTerminology(
-            List<(PreviewStore.Part Part, int Index)> rows, string glossaryPath,
+            List<(PreviewStore.Part Part, int Index)> rows, Guid project,
             Action<PreviewStore.Part, int, string> add, Result r)
         {
-            if (string.IsNullOrWhiteSpace(glossaryPath))
+            if (TermbaseSelection.ReadFor(project).Count == 0)
             {
-                r.Note = "No glossary is configured (Options > Terminology plugins > Supervertaler terms), so there is nothing to check against.";
+                r.Note = "No termbase is ticked Read for this project (memoQ > Termbases… in the prompt editor), so there is nothing to check against.";
                 return;
             }
 
@@ -177,7 +177,7 @@ namespace Supervertaler.MemoQ.Core
             {
                 var srcPlain = StripTags(x.Part.Source);
                 var tgtPlain = StripTags(x.Part.Target);
-                var matches = TermIndex.Find(glossaryPath, srcPlain);
+                var matches = TermIndex.Find(project, srcPlain);
                 if (matches == null || matches.Count == 0) continue;
 
                 // Longest match wins where entries overlap, as in Trados: when

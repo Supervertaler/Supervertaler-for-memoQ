@@ -44,7 +44,6 @@ namespace Supervertaler.PromptEditor
         private Label _category;
         private Label _preserved;
         private RichTextBox _editor;
-        private GlossaryGrid _glossaryGrid;
         private TableLayoutPanel _promptFields;
 
         /// <summary>Shown in the editing pane when nothing is open in it.</summary>
@@ -57,7 +56,6 @@ namespace Supervertaler.PromptEditor
         /// </summary>
         private string _articlePath;
 
-        private GlossaryDocument _glossaryDoc;
         private ListBox _warnings;
         private ToolStripButton _save;
         private ToolStripDropDownButton _insert;
@@ -67,7 +65,6 @@ namespace Supervertaler.PromptEditor
         private int _iconSize = 16;
 
         private JobPanel _job;
-        private JobPanel.Field _glossary;
         private JobPanel.Field _prompt;
         private JobPanel.Field _memoryBank;
         private JobPanel.Field _model;
@@ -253,8 +250,7 @@ namespace Supervertaler.PromptEditor
                 ToolTipText = "The termbases shared with Supervertaler for Trados: which ones memoQ "
                             + "consults in this project, their rank, and which reach the model"
             });
-            memoqMenu.DropDownItems.Add(new ToolStripMenuItem("&Export this prompt's terms as a glossary…", null, (s, e) => ExportGlossary()));
-            memoqMenu.DropDownItems.Add(new ToolStripMenuItem("&Choose the active glossary…", null, (s, e) => ChooseGlossary()));
+            memoqMenu.DropDownItems.Add(new ToolStripMenuItem("&Termbase from this prompt's terms…", null, (s, e) => ExportToTermbase()));
             memoqMenu.DropDownItems.Add(new ToolStripMenuItem("Choose the active &prompt…", null, (s, e) => ChoosePrompt()));
             memoqMenu.DropDownItems.Add(new ToolStripMenuItem("Choose the active memory &bank…", null, (s, e) => ChooseMemoryBank()));
             memoqMenu.DropDownItems.Add(new ToolStripSeparator());
@@ -423,9 +419,8 @@ namespace Supervertaler.PromptEditor
             // after the prompt, and banks are named after projects, those four
             // names were usually the same words four times over. The labels that
             // said which was which were the greyed-out part.
-            _job = new JobPanel(ChooseModel, ChoosePrompt, ChooseGlossary, ChooseMemoryBank, SyncProject);
+            _job = new JobPanel(ChooseModel, ChoosePrompt, ChooseMemoryBank, SyncProject);
             _prompt = _job.Prompt;
-            _glossary = _job.Glossary;
             _memoryBank = _job.Bank;
             _model = _job.Model;
             _project = _job.Project;
@@ -434,7 +429,6 @@ namespace Supervertaler.PromptEditor
             StartSettingsWatch();
             RefreshModel();
             RefreshPrompt();
-            RefreshGlossary();
             RefreshMemoryBank();
 
             _tree = new TreeView
@@ -523,21 +517,13 @@ namespace Supervertaler.PromptEditor
                             : "Set " + article.Bank + " as the active memory bank";
                         break;
 
-                    case GlossaryNode glossary:
-                        setActive.Visible = true;
-                        setActive.Enabled = !IsActiveGlossary(glossary.Path);
-                        setActive.Text = IsActiveGlossary(glossary.Path)
-                            ? "Already the active glossary"
-                            : "Set as active glossary";
-                        break;
-
                     default:
                         setActive.Visible = false;
                         break;
                 }
 
-                // Moving and deleting are prompt-library operations. On a bank or a
-                // glossary they would either do nothing or do something surprising.
+                // Moving and deleting are prompt-library operations. On a bank they
+                // would either do nothing or do something surprising.
                 var isPrompt = tag is PromptTemplate;
                 foreach (var item in new[] { moveTo, delete }) item.Visible = isPrompt;
             };
@@ -620,12 +606,6 @@ namespace Supervertaler.PromptEditor
                 ForeColor = Color.FromArgb(0x8A, 0x50, 0x00)
             };
 
-            // The glossary grid shares the pane with the prompt editor and is
-            // hidden until a glossary is selected. One pane rather than a second
-            // window: what you clicked in the tree opens where you are looking.
-            _glossaryGrid = new GlossaryGrid { Visible = false };
-            _glossaryGrid.Edited += (s, e) => { _dirty = true; UpdateDirtyUi(); };
-
             _promptFields = fields;
 
             // Nothing open: the pane says so rather than showing an empty editor
@@ -637,13 +617,12 @@ namespace Supervertaler.PromptEditor
                 TextAlign = ContentAlignment.MiddleCenter,
                 ForeColor = SystemColors.GrayText,
                 Visible = false,
-                Text = "Select a prompt, an article or a glossary on the left."
+                Text = "Select a prompt or an article on the left."
                      + Environment.NewLine + Environment.NewLine
                      + "Or press New to write one."
             };
 
             var right = new Panel { Dock = DockStyle.Fill };
-            right.Controls.Add(_glossaryGrid);
             right.Controls.Add(_empty);
             right.Controls.Add(_editor);
             right.Controls.Add(_warnings);
@@ -849,7 +828,6 @@ namespace Supervertaler.PromptEditor
                 // with their articles opened out would bury the prompt library
                 // that the window is mostly for.
                 _tree.Nodes.Add(BuildBanks());
-                _tree.Nodes.Add(BuildGlossaries());
 
                 if (_tree.Nodes.Count > 0) _tree.Nodes[0].EnsureVisible();
                 ScrollTreeHome();
@@ -954,42 +932,6 @@ namespace Supervertaler.PromptEditor
             {
                 return new List<string>();
             }
-        }
-
-        /// <summary>
-        /// The glossaries, from the folder Export glossary writes to - plus the
-        /// active one when it lives somewhere else, since a list of glossaries that
-        /// omits the one in use would be worse than no list.
-        /// </summary>
-        private TreeNode BuildGlossaries()
-        {
-            var section = new TreeNode("Glossaries") { Tag = new SectionNode { Name = "Glossaries" } };
-
-            try
-            {
-                var dir = Path.Combine(SupervertalerPaths.Root, "memoq", "glossaries");
-                var current = SharedSettings.GlossaryPath;
-
-                foreach (var g in GlossaryFiles(dir, current))
-                {
-                    var active = !string.IsNullOrWhiteSpace(current)
-                        && string.Equals(g.Path, current, StringComparison.OrdinalIgnoreCase);
-
-                    section.Nodes.Add(new TreeNode(g.Name)
-                    {
-                        Tag = new GlossaryNode { Path = g.Path, Name = g.Name },
-                        NodeFont = active ? ActiveFont : null,
-                        ForeColor = active ? Ui.Accent : SystemColors.WindowText,
-                        ToolTipText = g.Path
-                    });
-                }
-            }
-            catch (Exception ex)
-            {
-                section.Nodes.Add(new TreeNode("(could not be read: " + ex.Message + ")") { ForeColor = Color.Firebrick });
-            }
-
-            return section;
         }
 
         private static bool IsActiveBank(string name)
@@ -1106,9 +1048,6 @@ namespace Supervertaler.PromptEditor
                     LoadArticle(article);
                     return;
 
-                case GlossaryNode glossary:
-                    LoadGlossary(glossary);
-                    return;
             }
 
             var prompt = e.Node?.Tag as PromptTemplate;
@@ -1160,12 +1099,10 @@ namespace Supervertaler.PromptEditor
                 _current = p;
                 ShowEmptyPane(false);
 
-                // Coming back from an article or a glossary: the prompt fields and
-                // the prose editor have to return, or the pane keeps whichever
-                // shape the last selection left it in.
+                // Coming back from an article: the prompt fields have to return,
+                // or the pane keeps the shape the last selection left it in.
                 _articlePath = null;
-                _glossaryDoc = null;
-                ShowGlossary(false);
+                ShowPromptFields(true);
 
                 _name.Text = p.Name ?? "";
                 _description.Text = p.Description ?? "";
@@ -1228,9 +1165,7 @@ namespace Supervertaler.PromptEditor
             try
             {
                 ShowEmptyPane(false);
-                ShowGlossary(false);
                 _current = null;
-                _glossaryDoc = null;
                 _articlePath = article.Path;
 
                 string text;
@@ -1258,50 +1193,6 @@ namespace Supervertaler.PromptEditor
                 _dirty = false;
                 UpdateDirtyUi();
             }
-        }
-
-        /// <summary>The glossary, as the table it is rather than as prose.</summary>
-        private void LoadGlossary(GlossaryNode glossary)
-        {
-            if (!ConfirmDiscard()) return;
-
-            _loading = true;
-            try
-            {
-                ShowEmptyPane(false);
-                _current = null;
-                _articlePath = null;
-
-                try
-                {
-                    _glossaryDoc = GlossaryDocument.Load(glossary.Path);
-                }
-                catch (Exception ex)
-                {
-                    MessageBox.Show(this, "Could not read the glossary.\r\n\r\n" + ex.Message,
-                        "Supervertaler", MessageBoxButtons.OK, MessageBoxIcon.Error);
-                    return;
-                }
-
-                _glossaryGrid.Load(_glossaryDoc);
-                ShowGlossary(true);
-                _warnings.Items.Clear();
-                _status.Text = glossary.Path;
-            }
-            finally
-            {
-                _loading = false;
-                _dirty = false;
-                UpdateDirtyUi();
-            }
-        }
-
-        private void ShowGlossary(bool on)
-        {
-            _glossaryGrid.Visible = on;
-            _editor.Visible = !on;
-            if (on) _glossaryGrid.BringToFront(); else _editor.BringToFront();
-            ShowPromptFields(!on);
         }
 
         /// <summary>
@@ -1347,8 +1238,7 @@ namespace Supervertaler.PromptEditor
         ///
         /// <para>The fields and the editor are hidden rather than left empty: an
         /// empty Name box invites typing, and typing into it does nothing when no
-        /// prompt is loaded. The glossary grid goes too, or it would sit behind
-        /// the message after a glossary had been open.</para>
+        /// prompt is loaded.</para>
         /// </summary>
         private void ShowEmptyPane(bool on)
         {
@@ -1357,10 +1247,9 @@ namespace Supervertaler.PromptEditor
             _empty.Visible = on;
             if (on) _empty.BringToFront();
 
-            if (_promptFields != null) _promptFields.Visible = !on && !_glossaryGrid.Visible;
-            _editor.Visible = !on && !_glossaryGrid.Visible;
+            if (_promptFields != null) _promptFields.Visible = !on;
+            _editor.Visible = !on;
             _warnings.Visible = !on;
-            if (on) _glossaryGrid.Visible = false;
         }
 
         private void Clear()
@@ -1393,12 +1282,11 @@ namespace Supervertaler.PromptEditor
         {
             if (!_dirty) return true;
 
-            // Three things can be open, and only one of them is a prompt. This
-            // guard was "_current == null" alone, so an article or a glossary
-            // returned here as if there were nothing to save - and the branches
-            // below, which do the saving, were unreachable. Ctrl+S appeared to do
-            // nothing at all.
-            if (_current == null && _articlePath == null && _glossaryDoc == null) return true;
+            // Two things can be open, and only one of them is a prompt. This
+            // guard was "_current == null" alone, so an article returned here as
+            // if there were nothing to save - and the branch below, which does the
+            // saving, was unreachable. Ctrl+S appeared to do nothing at all.
+            if (_current == null && _articlePath == null) return true;
 
             if (_current != null && _current.IsReadOnly)
             {
@@ -1407,7 +1295,6 @@ namespace Supervertaler.PromptEditor
                 return false;
             }
 
-            if (_glossaryDoc != null) return _glossaryGrid.Save(this) && Saved();
             if (_articlePath != null) return SaveArticle();
 
             var name = _name.Text.Trim();
@@ -1632,15 +1519,21 @@ namespace Supervertaler.PromptEditor
         }
 
         /// <summary>
-        /// The prompt's locked-terms table becomes the project glossary. Written
-        /// to &lt;Supervertaler data folder&gt;\memoq\glossaries\&lt;prompt&gt;.txt, in
-        /// the format the terminology plugin reads; then, if memoQ is running,
-        /// made the active glossary over the bridge. A general glossary flags a
-        /// term in every paragraph for senses the document does not use; a
-        /// dozen terms chosen for this job are what check_terminology and the
-        /// terminology pane should work from.
+        /// The prompt's locked-terms table becomes a termbase - the project's,
+        /// ticked Read and Project for the memoQ project in force - so that the
+        /// dozen terms chosen for this job are what the terminology pane, the
+        /// terminology check and Supervertaler for Trados work from.
+        ///
+        /// <para>Named after the prompt. Run again after editing the prompt and
+        /// the new rows are added and the rest skipped: pairs already present,
+        /// either way round, are never written twice. Rows the prompt no longer
+        /// has are not removed, since they may have been corrected by hand in the
+        /// meantime; the Terms window is where that decision belongs.</para>
+        ///
+        /// <para>This replaced "Export glossary", which wrote a text file that a
+        /// second, parallel system read. One system now.</para>
         /// </summary>
-        private void ExportGlossary()
+        private void ExportToTermbase()
         {
             if (_current == null) return;
 
@@ -1648,57 +1541,75 @@ namespace Supervertaler.PromptEditor
             if (entries.Count == 0)
             {
                 MessageBox.Show(this,
-                    "No glossary table found in this prompt.\r\n\r\nThe export looks for a Markdown table whose header names a source and a target column – the PROJECT-SPECIFIC GLOSSARY that AutoPrompt writes, or any table laid out the same way.",
-                    "Export glossary", MessageBoxButtons.OK, MessageBoxIcon.Information);
+                    "No glossary table found in this prompt.\r\n\r\nThe export looks for a Markdown table whose header names a source and a target column \u2013 the PROJECT-SPECIFIC GLOSSARY that AutoPrompt writes, or any table laid out the same way.",
+                    "Termbase from prompt", MessageBoxButtons.OK, MessageBoxIcon.Information);
                 return;
             }
 
-            var dir = Path.Combine(SupervertalerPaths.Root, "memoq", "glossaries");
-            var safe = string.Concat((_current.Name ?? "glossary").Select(c => Path.GetInvalidFileNameChars().Contains(c) ? '_' : c)).Trim();
-            var path = Path.Combine(dir, safe + ".txt");
+            var source = (SharedSettings.SourceLang ?? "").Trim();
+            var target = (SharedSettings.TargetLang ?? "").Trim();
+            if (source.Length == 0 || target.Length == 0)
+            {
+                MessageBox.Show(this,
+                    "The project's languages are not known yet. Translate one segment in memoQ, then try again.",
+                    "Termbase from prompt", MessageBoxButtons.OK, MessageBoxIcon.Information);
+                return;
+            }
 
+            var name = (_current.Name ?? "prompt").Trim();
+            var existing = TermbaseDb.All().FirstOrDefault(t => string.Equals(t.Name, name, StringComparison.OrdinalIgnoreCase));
             var forbidden = entries.Count(e => e.Forbidden);
-            var summary = entries.Count + " term(s)" + (forbidden > 0 ? " including " + forbidden + " forbidden" : "")
-                + "\r\n\r\nWrite to:\r\n" + path
-                + (File.Exists(path) ? "\r\n\r\n(The file exists and will be replaced.)" : "")
-                + "\r\n\r\nMake it the active glossary in memoQ as well?";
 
-            var choice = MessageBox.Show(this, summary, "Export glossary", MessageBoxButtons.YesNoCancel, MessageBoxIcon.Question);
-            if (choice == DialogResult.Cancel) return;
+            var summary = entries.Count + " term(s)" + (forbidden > 0 ? " including " + forbidden + " forbidden" : "")
+                + "\r\n\r\n"
+                + (existing != null
+                    ? "Add them to the existing termbase \u201c" + name + "\u201d? Pairs already there are skipped."
+                    : "Create the termbase \u201c" + name + "\u201d (" + source + " \u2192 " + target + ") from them?")
+                + "\r\n\r\nIt becomes this project's termbase: ticked Read and Project.";
+
+            if (MessageBox.Show(this, summary, "Termbase from prompt", MessageBoxButtons.OKCancel, MessageBoxIcon.Question) != DialogResult.OK)
+                return;
 
             try
             {
-                Directory.CreateDirectory(dir);
-                // Stamped with the direction of the project memoQ last worked
-                // in. Without it the file's direction lives only in its filename,
-                // which nothing reads, and a glossary facing the wrong way finds
-                // nothing and says nothing.
-                File.WriteAllText(
-                    path,
-                    PromptGlossaryExtractor.ToGlossaryText(
-                        entries, _current.Name, SharedSettings.SourceLang, SharedSettings.TargetLang),
-                    new UTF8Encoding(false));
+                var id = existing != null
+                    ? existing.Id
+                    : TermbaseWriter.Create(name, source, target, "From the prompt \u201c" + name + "\u201d");
+
+                var rows = entries.Select(e => new TermbaseFiles.Row { Source = e.Source, Target = e.Target, Forbidden = e.Forbidden }).ToList();
+                var result = TermbaseWriter.Import(id, rows, source, target);
+
+                MakeProjectTermbase(id, name);
+
+                _status.Text = string.Format("{0:N0} term{1} added to \u201c{2}\u201d{3}.",
+                    result.Added, result.Added == 1 ? "" : "s", name,
+                    result.Duplicates > 0 ? ", " + result.Duplicates + " already there" : "");
             }
             catch (Exception ex)
             {
-                MessageBox.Show(this, "Could not write the glossary.\r\n\r\n" + ex.Message, "Export glossary", MessageBoxButtons.OK, MessageBoxIcon.Error);
-                return;
+                MessageBox.Show(this, ex.Message, "Termbase from prompt", MessageBoxButtons.OK, MessageBoxIcon.Warning);
             }
+        }
 
-            if (choice != DialogResult.Yes)
-            {
-                _status.Text = "Glossary written: " + path;
-                return;
-            }
+        /// <summary>
+        /// Tick Read and Project for this termbase in the current memoQ project,
+        /// releasing the Project tick from whichever termbase held it - the same
+        /// single-project rule the Termbases window enforces.
+        /// </summary>
+        private static void MakeProjectTermbase(long id, string name)
+        {
+            var project = TermbaseSelection.CurrentProject;
+            if (project == Guid.Empty) return;
 
-            // Written straight to the shared setting rather than asked of a
-            // running memoQ over the bridge. It is the same single value either
-            // way, the plugin re-reads the file within seconds, and doing it here
-            // means exporting works with memoQ closed instead of ending in
-            // "select it by hand".
-            SharedSettings.GlossaryPath = path;
-            RefreshGlossary();
-            _status.Text = "Glossary written and made active: " + path;
+            var ids = new List<long>(TermbaseSelection.ReadFor(project));
+            if (!ids.Contains(id)) ids.Add(id);
+
+            var flags = TermbaseSelection.All().Values.ToList();
+            foreach (var f in flags) f.IsProject = f.Id == id;
+            if (!flags.Any(f => f.Id == id))
+                flags.Add(new TermbaseSelection.Flags { Id = id, IsProject = true, Name = name });
+
+            TermbaseSelection.Save(project, ids, flags);
         }
 
         /// <summary>
@@ -1961,18 +1872,6 @@ namespace Supervertaler.PromptEditor
         }
 
         /// <summary>
-        /// Makes the selected prompt the one memoQ uses (#1). The same setting the
-        /// panel’s Prompt row writes, so the two cannot disagree.
-        /// </summary>
-        private static bool IsActiveGlossary(string path)
-        {
-            var active = SharedSettings.GlossaryPath;
-            return !string.IsNullOrWhiteSpace(active)
-                && !string.IsNullOrWhiteSpace(path)
-                && string.Equals(active, path, StringComparison.OrdinalIgnoreCase);
-        }
-
-        /// <summary>
         /// Makes whichever kind of thing was right-clicked the active one. All
         /// three write the same settings the panel above the tree writes, so the
         /// two views cannot disagree.
@@ -1989,12 +1888,6 @@ namespace Supervertaler.PromptEditor
                     ActivateBank(article.Bank);
                     return;
 
-                case GlossaryNode glossary:
-                    SharedSettings.GlossaryPath = glossary.Path;
-                    RefreshGlossary();
-                    LoadTree();
-                    _status.Text = "Active glossary: " + glossary.Name + ".";
-                    return;
             }
 
             var prompt = _tree.SelectedNode?.Tag as PromptTemplate;
@@ -2227,7 +2120,6 @@ namespace Supervertaler.PromptEditor
             catch (Exception) { return 0; }
         }
 
-        /// <summary>Shows which glossary is active, or says plainly that none is.</summary>
         /// <summary>How Supervertaler translates: the same settings memoQ shows.</summary>
         // shared.txt is written by the plugin inside memoQ - a project switch,
         // the bank following it - and by memoQ's own dialog. Activated catches
@@ -2325,134 +2217,6 @@ namespace Supervertaler.PromptEditor
                 MessageBox.Show(this, "Could not open the documentation.\r\n\r\n" + ex.Message,
                     "Supervertaler", MessageBoxButtons.OK, MessageBoxIcon.Information);
             }
-        }
-
-        private void RefreshGlossary()
-        {
-            var path = SharedSettings.GlossaryPath;
-
-            if (string.IsNullOrWhiteSpace(path))
-            {
-                _glossary.Text = "none";
-                _glossary.ForeColor = SystemColors.GrayText;
-                _glossary.ToolTipText = Tip("No glossary is active, so the terminology pane, the "
-                    + "prompts and the terminology check have nothing to work from. Click to choose one.");
-                return;
-            }
-
-            var missing = !File.Exists(path);
-            _glossary.Text = Path.GetFileName(path) + (missing ? " (missing)" : "");
-            _glossary.ForeColor = missing ? Color.Firebrick : SystemColors.ControlText;
-            _glossary.ToolTipText = Tip((missing ? "This file no longer exists:\r\n" : "Active glossary:\r\n")
-                + path + "\r\n\r\nClick to choose a different one.");
-        }
-
-        /// <summary>
-        /// Picks the glossary the plugin uses for the terminology pane, the prompts
-        /// and the terminology check. One setting, so this is the same choice as the
-        /// one offered by memoQ's own dialogs, and either can be used.
-        /// </summary>
-        private void ChooseGlossary()
-        {
-            var glossaries = Path.Combine(SupervertalerPaths.Root, "memoq", "glossaries");
-            var current = SharedSettings.GlossaryPath;
-            var currentDir = string.IsNullOrWhiteSpace(current) ? null : Path.GetDirectoryName(current);
-
-            var chosen = PromptChooserForm.ChooseGlossary(this, GlossaryFiles(glossaries, current), current);
-            if (chosen == null) return;
-
-            if (string.Equals(chosen, PromptChooserForm.BrowseValue, StringComparison.Ordinal))
-            {
-                using (var dialog = new OpenFileDialog
-                {
-                    Title = "Choose the active glossary",
-                    Filter = "Glossary files (*.txt;*.tsv)|*.txt;*.tsv|All files (*.*)|*.*",
-                    CheckFileExists = true,
-                    InitialDirectory = Directory.Exists(currentDir ?? "") ? currentDir
-                        : (Directory.Exists(glossaries) ? glossaries : SupervertalerPaths.Root),
-                    FileName = string.IsNullOrWhiteSpace(current) ? "" : Path.GetFileName(current)
-                })
-                {
-                    if (dialog.ShowDialog(this) != DialogResult.OK) return;
-                    chosen = dialog.FileName;
-                }
-            }
-
-            SharedSettings.GlossaryPath = chosen;
-            RefreshGlossary();
-            _status.Text = chosen.Length == 0
-                ? "No glossary. The terminology pane, the QA check and the prompts have nothing to work from."
-                : "Active glossary: " + chosen;
-        }
-
-        /// <summary>
-        /// The glossaries on offer: everything in the glossaries folder, plus the
-        /// active one when it lives somewhere else - which is the case that must
-        /// not vanish from the list, since a value you cannot re-select is one
-        /// you cannot get back after looking at something else.
-        /// </summary>
-        private static List<PromptChooserForm.GlossaryRow> GlossaryFiles(string folder, string current)
-        {
-            var rows = new List<PromptChooserForm.GlossaryRow>();
-
-            try
-            {
-                if (Directory.Exists(folder))
-                {
-                    foreach (var path in Directory.GetFiles(folder, "*.*")
-                                                  .Where(IsGlossaryFile)
-                                                  .OrderBy(p => p, StringComparer.OrdinalIgnoreCase))
-                    {
-                        rows.Add(new PromptChooserForm.GlossaryRow
-                        {
-                            Path = path,
-                            Name = Path.GetFileName(path),
-                            Terms = CountTerms(path)
-                        });
-                    }
-                }
-            }
-            catch (Exception) { /* an unreadable folder still leaves (none) and Browse */ }
-
-            if (!string.IsNullOrWhiteSpace(current)
-                && !rows.Any(r => string.Equals(r.Path, current, StringComparison.OrdinalIgnoreCase)))
-            {
-                rows.Add(new PromptChooserForm.GlossaryRow
-                {
-                    Path = current,
-                    Name = Path.GetFileName(current),
-                    Terms = CountTerms(current),
-                    Elsewhere = true
-                });
-            }
-
-            return rows;
-        }
-
-        private static bool IsGlossaryFile(string path)
-        {
-            var ext = (Path.GetExtension(path) ?? "").ToLowerInvariant();
-            return ext == ".txt" || ext == ".tsv";
-        }
-
-        /// <summary>
-        /// Roughly how many terms a glossary holds, for the chooser's detail
-        /// line. Best effort and capped: this runs over every file in the folder
-        /// each time the chooser opens, and a glossary that has grown into
-        /// something else should not stall it.
-        /// </summary>
-        private static int CountTerms(string path)
-        {
-            try
-            {
-                var info = new FileInfo(path);
-                if (!info.Exists || info.Length > 4 * 1024 * 1024) return 0;
-
-                return File.ReadLines(path)
-                           .Count(l => !string.IsNullOrWhiteSpace(l)
-                                       && !l.StartsWith("#", StringComparison.Ordinal));
-            }
-            catch (Exception) { return 0; }
         }
 
         private void NewFolder()
@@ -2714,8 +2478,7 @@ namespace Supervertaler.PromptEditor
             // stayed grey while an edited article sat unsaved beside it, which
             // reads as "there is nothing to save" rather than as a bug.
             var editable = (_current != null && !_current.IsReadOnly)
-                           || _articlePath != null
-                           || _glossaryDoc != null;
+                           || _articlePath != null;
 
             _save.Enabled = _dirty && editable;
             _dirtyLabel.Text = _dirty ? "Unsaved changes" : "";

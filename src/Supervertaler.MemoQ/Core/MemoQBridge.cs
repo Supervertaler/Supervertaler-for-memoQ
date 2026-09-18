@@ -316,7 +316,6 @@ namespace Supervertaler.MemoQ.Core
                 case "GET /v1/supermemory-context": HandleSuperMemoryContext(ctx); return;
                 case "GET /v1/supermemory-search": HandleSuperMemorySearch(ctx); return;
                 case "GET /v1/inconsistencies": HandleInconsistencies(ctx); return;
-                case "POST /v1/glossary/activate": HandleGlossaryActivate(ctx); return;
                 default:
                     TryWrite(ctx, 404, Json(new ErrorBody { Error = "unknown endpoint " + method + " " + path }));
                     return;
@@ -394,8 +393,9 @@ namespace Supervertaler.MemoQ.Core
                 }).ToArray(),
                 StagedTranslations = StagedTranslations.Snapshot(null).Count,
                 PreviewToolConnected = PreviewStore.ToolAlive,
-                // The glossary all three consumers (terminology pane, prompts, QA) read.
-                ActiveGlossary = string.IsNullOrWhiteSpace(SharedSettings.GlossaryPath) ? null : SharedSettings.GlossaryPath,
+                // The termbases ticked Read for this project: what the pane,
+                // the prompts and the QA checks work from.
+                ActiveTermbases = ActiveTermbaseNames(),
                 LiveDocuments = PreviewStore.ToolAlive
                     ? PreviewStore.Documents().Select(d => new LiveDocumentBody
                     {
@@ -512,10 +512,40 @@ namespace Supervertaler.MemoQ.Core
             }));
         }
 
+        /// <summary>Names of the termbases ticked Read for the current project, for get_project.</summary>
+        private static string[] ActiveTermbaseNames()
+        {
+            try
+            {
+                var flags = TermbaseSelection.All();
+                return TermbaseSelection.ReadFor(TermbaseSelection.CurrentProject)
+                    .Select(id => flags.ContainsKey(id) && !string.IsNullOrEmpty(flags[id].Name) ? flags[id].Name : "#" + id)
+                    .ToArray();
+            }
+            catch (Exception ex)
+            {
+                PluginLog.Write("active termbases could not be listed", ex);
+                return new string[0];
+            }
+        }
+
+        /// <summary>The termbase ticked both Read and Project for this project, or null.</summary>
+        private static TermbaseSelection.Flags ProjectTermbase(Guid project)
+        {
+            if (project == Guid.Empty) return null;
+            var flags = TermbaseSelection.All();
+            foreach (var id in TermbaseSelection.ReadFor(project))
+            {
+                TermbaseSelection.Flags f;
+                if (flags.TryGetValue(id, out f) && f.IsProject) return f;
+            }
+            return null;
+        }
+
         private void HandleTermLookup(HttpListenerContext ctx)
         {
             var text = ctx.Request.QueryString["text"] ?? "";
-            var matches = TermIndex.Find(SharedSettings.GlossaryPath, text);
+            var matches = TermIndex.Find(TermbaseSelection.CurrentProject, text);
 
             TryWrite(ctx, 200, Json(new TermsBody
             {
@@ -538,26 +568,38 @@ namespace Supervertaler.MemoQ.Core
                 return;
             }
 
-            var path = SharedSettings.GlossaryPath;
-            if (string.IsNullOrWhiteSpace(path))
+            // Into the project termbase - the one ticked Project and Read for
+            // this project - and nowhere else. A background termbase is the
+            // translator's standing reference; a term decided for this job goes
+            // into this job's termbase, which is the rule Trados's add_term
+            // applies with scope 'project'.
+            var project = TermbaseSelection.CurrentProject;
+            var target = ProjectTermbase(project);
+            if (target == null)
             {
                 TryWrite(ctx, 400, Json(new ErrorBody
                 {
-                    Error = "No glossary is configured. The user sets one in memoQ under "
-                          + "Resources > Settings > MT > Supervertaler (glossary in the terminology plugin settings)."
+                    Error = "No project termbase: nothing is ticked both Read and Project for this memoQ project. "
+                          + "The user chooses one in the prompt editor under memoQ > Termbases…"
                 }));
                 return;
             }
 
-            // The TB plugin's own format: source TAB target [TAB forbidden].
-            var line = req.Source.Trim() + "\t" + req.Target.Trim() + (req.Forbidden ? "\tforbidden" : "");
-            File.AppendAllText(path, Environment.NewLine + line, new UTF8Encoding(false));
+            try
+            {
+                TermbaseWriter.AddTerm(target.Id, req.Source, req.Target, req.Forbidden, null);
+            }
+            catch (Exception ex)
+            {
+                TryWrite(ctx, 409, Json(new ErrorBody { Error = ex.Message }));
+                return;
+            }
 
             TryWrite(ctx, 200, Json(new OkBody
             {
                 Ok = true,
-                Message = "Term added. memoQ's terminology pane and the translation prompts pick it up "
-                        + "within a few seconds (the index reloads when the file changes)."
+                Message = "Term added to \u201c" + target.Name + "\u201d. memoQ's terminology pane and the prompts "
+                        + "pick it up within a few seconds; Supervertaler for Trados and Workbench see it at once."
             }));
         }
 
@@ -996,7 +1038,7 @@ namespace Supervertaler.MemoQ.Core
             var terms = new List<global::Supervertaler.Core.Models.TermEntry>();
             if (req.IncludeTerms)
             {
-                var matches = TermIndex.Find(SharedSettings.GlossaryPath, string.Join("\n", doc.Plain))
+                var matches = TermIndex.FindForModel(TermbaseSelection.CurrentProject, string.Join("\n", doc.Plain))
                               ?? (IReadOnlyList<TermIndex.Match>)new TermIndex.Match[0];
                 terms = matches
                     .GroupBy(m => m.Entry.Source + "\t" + m.Entry.Target, StringComparer.OrdinalIgnoreCase)
@@ -2060,7 +2102,7 @@ namespace Supervertaler.MemoQ.Core
             if (rows == null) { TryWrite(ctx, 409, Json(new ErrorBody { Error = problem })); return; }
 
             var limit = Math.Min(200, ParseInt(ctx.Request.QueryString["limit"], 50));
-            var result = QaChecks.Run(type, rows, limit, SharedSettings.GlossaryPath);
+            var result = QaChecks.Run(type, rows, limit, TermbaseSelection.CurrentProject);
 
             TryWrite(ctx, 200, Json(new QaBody
             {
@@ -2149,40 +2191,6 @@ namespace Supervertaler.MemoQ.Core
             [DataMember(Name = "target")] public string Target { get; set; }
         }
 
-        /// <summary>
-        /// POST /v1/glossary/activate — make a glossary file the one the
-        /// terminology plugin serves and the prompts and QA checks use. The
-        /// setting lives in the plugin's shared settings, which only the plugin
-        /// should write; the prompt editor asks for it here after exporting a
-        /// prompt's glossary.
-        /// </summary>
-        private void HandleGlossaryActivate(HttpListenerContext ctx)
-        {
-            var req = Read<GlossaryActivateRequest>(ctx);
-            var path = req?.Path?.Trim();
-            if (string.IsNullOrEmpty(path) || !File.Exists(path))
-            {
-                TryWrite(ctx, 400, Json(new ErrorBody { Error = "path is required and must exist: " + path }));
-                return;
-            }
-
-            var previous = SharedSettings.GlossaryPath;
-            SharedSettings.GlossaryPath = path;
-            PluginLog.Write($"glossary activated over the bridge: {path} (was: {previous})");
-
-            TryWrite(ctx, 200, Json(new OkBody
-            {
-                Ok = true,
-                Message = "Active glossary is now " + Path.GetFileName(path) + ". The terminology pane, translation prompts "
-                        + "and check_terminology use it from the next lookup."
-            }));
-        }
-
-        [DataContract]
-        internal class GlossaryActivateRequest
-        {
-            [DataMember(Name = "path")] public string Path { get; set; }
-        }
 
         // ── plumbing ─────────────────────────────────────────────────────
 
@@ -2280,7 +2288,7 @@ namespace Supervertaler.MemoQ.Core
             [DataMember(Name = "documents")] public ProjectDocumentBody[] Documents { get; set; }
             [DataMember(Name = "stagedTranslations")] public int StagedTranslations { get; set; }
             [DataMember(Name = "previewToolConnected")] public bool PreviewToolConnected { get; set; }
-            [DataMember(Name = "activeGlossary", EmitDefaultValue = false)] public string ActiveGlossary { get; set; }
+            [DataMember(Name = "activeTermbases", EmitDefaultValue = false)] public string[] ActiveTermbases { get; set; }
             [DataMember(Name = "liveDocuments", EmitDefaultValue = false)] public LiveDocumentBody[] LiveDocuments { get; set; }
             [DataMember(Name = "note", EmitDefaultValue = false)] public string Note { get; set; }
         }

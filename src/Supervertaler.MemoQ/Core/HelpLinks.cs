@@ -23,7 +23,6 @@ namespace Supervertaler.MemoQ.Core
         private const string Base = "https://docs.supervertaler.com/memoq/";
 
         public const string GettingStarted = Base + "getting-started/";
-        public const string GlossaryFormat = Base + "glossary-format/";
         public const string SelfLearning = Base + "self-learning/";
         public const string Troubleshooting = Base + "troubleshooting/";
 
