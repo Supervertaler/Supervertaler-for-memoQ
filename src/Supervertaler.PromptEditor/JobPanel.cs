@@ -28,11 +28,12 @@ namespace Supervertaler.PromptEditor
         private readonly TableLayoutPanel _rows = new TableLayoutPanel();
         private readonly ToolTip _tips = new ToolTip { AutoPopDelay = 30000, InitialDelay = 400 };
 
-        public JobPanel(Action chooseModel, Action choosePrompt, Action chooseBank, Action syncProject = null)
+        public JobPanel(Action chooseModel, Action choosePrompt, Action chooseBank, Action chooseTermbases, Action syncProject = null)
         {
             if (chooseModel == null) throw new ArgumentNullException(nameof(chooseModel));
             if (choosePrompt == null) throw new ArgumentNullException(nameof(choosePrompt));
             if (chooseBank == null) throw new ArgumentNullException(nameof(chooseBank));
+            if (chooseTermbases == null) throw new ArgumentNullException(nameof(chooseTermbases));
 
             Dock = DockStyle.Top;
             AutoSize = true;
@@ -59,6 +60,12 @@ namespace Supervertaler.PromptEditor
             Model = AddRow("Model", chooseModel);
             Prompt = AddRow("Prompt", choosePrompt);
             Bank = AddRow("Bank", chooseBank);
+
+            // A summary, not a picker: the other rows hold one value each, this
+            // one holds a set, and a dropdown cannot say "these two, one of them
+            // the project's, one of them reaching the model". Clicking opens the
+            // Termbases window, which can.
+            Termbases = AddRow("Termbases", chooseTermbases);
 
             // One line, like every row below it, and shortened the same way when
             // it has to be. Wrapping was the first attempt and it cost an evening:
@@ -98,6 +105,7 @@ namespace Supervertaler.PromptEditor
         public Field Model { get; }
         public Field Prompt { get; }
         public Field Bank { get; }
+        public Field Termbases { get; }
 
         /// <summary>
         /// One line of the panel, presenting the three properties the toolbar items
@@ -331,6 +339,7 @@ namespace Supervertaler.PromptEditor
             Fit(Model);
             Fit(Prompt);
             Fit(Bank);
+            Fit(Termbases);
         }
 
         private void Fit(Field field)

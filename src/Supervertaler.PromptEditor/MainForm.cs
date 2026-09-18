@@ -67,6 +67,7 @@ namespace Supervertaler.PromptEditor
         private JobPanel _job;
         private JobPanel.Field _prompt;
         private JobPanel.Field _memoryBank;
+        private JobPanel.Field _termbases;
         private JobPanel.Field _model;
         private ToolStripStatusLabel _dirtyLabel;
         private SplitContainer _split;
@@ -310,6 +311,7 @@ namespace Supervertaler.PromptEditor
                 // the whole point of showing the name is that it is right.
                 RefreshProject();
                 RefreshMemoryBank();
+                RefreshTermbases();
             };
 
             var helpMenu = new ToolStripMenuItem("&Help");
@@ -419,9 +421,10 @@ namespace Supervertaler.PromptEditor
             // after the prompt, and banks are named after projects, those four
             // names were usually the same words four times over. The labels that
             // said which was which were the greyed-out part.
-            _job = new JobPanel(ChooseModel, ChoosePrompt, ChooseMemoryBank, SyncProject);
+            _job = new JobPanel(ChooseModel, ChoosePrompt, ChooseMemoryBank, ShowTermbases, SyncProject);
             _prompt = _job.Prompt;
             _memoryBank = _job.Bank;
+            _termbases = _job.Termbases;
             _model = _job.Model;
             _project = _job.Project;
 
@@ -430,6 +433,7 @@ namespace Supervertaler.PromptEditor
             RefreshModel();
             RefreshPrompt();
             RefreshMemoryBank();
+            RefreshTermbases();
 
             _tree = new TreeView
             {
@@ -1356,6 +1360,58 @@ namespace Supervertaler.PromptEditor
         {
             using (var dialog = new TermbasesDialog())
                 dialog.ShowDialog(this);
+
+            RefreshTermbases();
+        }
+
+        /// <summary>
+        /// The termbases in force for the memoQ project, as one line: which, which
+        /// of them is the project's, and how many reach the model. The one row in
+        /// the panel that summarises a set rather than naming a value, because
+        /// that is what terminology is.
+        /// </summary>
+        private void RefreshTermbases()
+        {
+            if (_termbases == null) return;
+
+            var project = TermbaseSelection.CurrentProject;
+            var ids = project == Guid.Empty ? new List<long>() : new List<long>(TermbaseSelection.ReadFor(project));
+
+            if (ids.Count == 0)
+            {
+                _termbases.Text = "none";
+                _termbases.ForeColor = SystemColors.GrayText;
+                _termbases.ToolTipText = Tip(project == Guid.Empty
+                    ? "No memoQ project yet. Translate a segment, and the termbases ticked for that project show here."
+                    : "No termbase is ticked Read for this project, so terminology is off: nothing in the grid, "
+                      + "nothing in the pane, nothing to the model.\r\n\r\nClick to choose.");
+                return;
+            }
+
+            var flags = TermbaseSelection.All();
+            Func<long, TermbaseSelection.Flags> of = id => { TermbaseSelection.Flags f; return flags.TryGetValue(id, out f) ? f : null; };
+            Func<long, string> name = id => of(id) != null && !string.IsNullOrEmpty(of(id).Name) ? of(id).Name : "#" + id;
+
+            var projectId = ids.FirstOrDefault(id => of(id) != null && of(id).IsProject);
+            var others = ids.Where(id => id != projectId).Select(name).ToList();
+            var toModel = ids.Count(id => of(id) != null && of(id).Ai);
+
+            var parts = new List<string>();
+            if (projectId != 0) parts.Add(name(projectId) + " (project)");
+            if (others.Count == 1) parts.Add(others[0]);
+            else if (others.Count > 1) parts.Add(others.Count + " background");
+
+            var model = toModel == 0 ? "none to the model"
+                      : toModel == ids.Count ? (ids.Count == 1 ? "to the model" : "all to the model")
+                      : toModel + " of " + ids.Count + " to the model";
+
+            _termbases.Text = string.Join(" + ", parts) + "   \u00b7   " + model;
+            _termbases.ForeColor = SystemColors.ControlText;
+            _termbases.ToolTipText = Tip(string.Join("\r\n", ids.Select(id =>
+                    "\u2022 " + name(id)
+                    + (of(id) != null && of(id).IsProject ? "  \u2013 project termbase" : "")
+                    + (of(id) != null && of(id).Ai ? "  \u2013 reaches the model" : "")))
+                + "\r\n\r\nRead in memoQ's grid and terminology pane. Click to change.");
         }
 
         private void ShowActivity()
@@ -2127,6 +2183,7 @@ namespace Supervertaler.PromptEditor
         // already is. One stat call every two seconds, nothing parsed until
         // the stamp moves.
         private readonly Timer _settingsWatch = new Timer { Interval = 2000 };
+        private long _termbasesStamp;
         private long _settingsStamp;
         private string _bankSeen;
 
@@ -2134,8 +2191,14 @@ namespace Supervertaler.PromptEditor
         {
             _settingsStamp = SharedSettings.FileStamp;
             _bankSeen = SharedSettings.MemoryBank ?? "";
+            _termbasesStamp = TermbaseSelection.FileStamp;
             _settingsWatch.Tick += (s, e) =>
             {
+                // The selection file has its own life: the Termbases window
+                // writes it, and so does a termbase made from a prompt.
+                var termbases = TermbaseSelection.FileStamp;
+                if (termbases != _termbasesStamp) { _termbasesStamp = termbases; RefreshTermbases(); }
+
                 var stamp = SharedSettings.FileStamp;
                 if (stamp == _settingsStamp) return;
                 _settingsStamp = stamp;
