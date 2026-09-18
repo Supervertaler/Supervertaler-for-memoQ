@@ -1632,7 +1632,7 @@ namespace Supervertaler.PromptEditor
                     ? existing.Id
                     : TermbaseWriter.Create(name, source, target, "From the prompt \u201c" + name + "\u201d");
 
-                var rows = entries.Select(e => new TermbaseFiles.Row { Source = e.Source, Target = e.Target, Forbidden = e.Forbidden }).ToList();
+                var rows = SplitAlternates(entries);
                 var result = TermbaseWriter.Import(id, rows, source, target);
 
                 MakeProjectTermbase(id, name);
@@ -1645,6 +1645,40 @@ namespace Supervertaler.PromptEditor
             {
                 MessageBox.Show(this, ex.Message, "Termbase from prompt", MessageBoxButtons.OK, MessageBoxIcon.Warning);
             }
+        }
+
+        /// <summary>
+        /// A glossary row with alternates on both sides becomes one pair per
+        /// alternate, matched by position: "regenereren / regeneratie |
+        /// regenerate / regeneration" is two terms, not one term whose source is
+        /// the string "regenereren / regeneratie" - which no segment will ever
+        /// contain, so a row stored that way can never match in the grid.
+        /// AutoPrompt writes such rows when a source word has two forms. A row
+        /// whose sides do not split into the same number of parts is kept whole,
+        /// because guessing the pairing would be worse than one unmatched row.
+        /// </summary>
+        private static List<TermbaseFiles.Row> SplitAlternates(IEnumerable<PromptGlossaryExtractor.Entry> entries)
+        {
+            var rows = new List<TermbaseFiles.Row>();
+            var separator = new[] { " / " };
+
+            foreach (var e in entries)
+            {
+                var sources = (e.Source ?? "").Split(separator, StringSplitOptions.RemoveEmptyEntries);
+                var targets = (e.Target ?? "").Split(separator, StringSplitOptions.RemoveEmptyEntries);
+
+                if (sources.Length > 1 && sources.Length == targets.Length)
+                {
+                    for (var i = 0; i < sources.Length; i++)
+                        rows.Add(new TermbaseFiles.Row { Source = sources[i].Trim(), Target = targets[i].Trim(), Forbidden = e.Forbidden });
+                }
+                else
+                {
+                    rows.Add(new TermbaseFiles.Row { Source = e.Source, Target = e.Target, Forbidden = e.Forbidden });
+                }
+            }
+
+            return rows;
         }
 
         /// <summary>
