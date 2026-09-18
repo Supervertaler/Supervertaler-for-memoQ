@@ -1396,16 +1396,27 @@ namespace Supervertaler.PromptEditor
             var others = ids.Where(id => id != projectId).Select(name).ToList();
             var toModel = ids.Count(id => of(id) != null && of(id).Ai);
 
-            var parts = new List<string>();
-            if (projectId != 0) parts.Add(name(projectId) + " (project)");
-            if (others.Count == 1) parts.Add(others[0]);
-            else if (others.Count > 1) parts.Add(others.Count + " background");
-
             var model = toModel == 0 ? "none to the model"
                       : toModel == ids.Count ? (ids.Count == 1 ? "to the model" : "all to the model")
                       : toModel + " of " + ids.Count + " to the model";
 
-            _termbases.Text = string.Join(" + ", parts) + "   \u00b7   " + model;
+            // Three wordings, longest first; the row shows the longest that fits.
+            // The name is the last thing to go: the fitter's rule for the other
+            // rows - drop the project's name, since it is written just above -
+            // turns a project termbase named after the project into "… (project)",
+            // which reads as broken rather than shortened. So this row is given
+            // words it can lose first.
+            Func<bool, bool, string> line = (projectWord, background) =>
+            {
+                var parts = new List<string>();
+                if (projectId != 0) parts.Add(name(projectId) + (projectWord ? " (project)" : ""));
+                if (others.Count == 1) parts.Add(others[0]);
+                else if (others.Count > 1) parts.Add(others.Count + (background ? " background" : " more"));
+                return string.Join(" + ", parts) + "   \u00b7   " + model;
+            };
+
+            _termbases.Set(line(true, true), line(true, false), line(false, false),
+                           line(false, false).Replace("   \u00b7   ", " \u00b7 ").Replace(" to the model", " AI"));
             _termbases.ForeColor = SystemColors.ControlText;
             _termbases.ToolTipText = Tip(string.Join("\r\n", ids.Select(id =>
                     "\u2022 " + name(id)

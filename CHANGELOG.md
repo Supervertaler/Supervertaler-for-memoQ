@@ -1,4 +1,4 @@
-# Changelog
+﻿# Changelog
 
 Supervertaler for memoQ is pre-release: nothing below has shipped to anyone yet.
 This first entry summarises what exists today; from here on, every change to
@@ -22,6 +22,8 @@ any release tooling that buckets on these headings works for both.
 - **The text glossaries.** The tab-separated files in `memoq\glossaries`, the Glossaries folder in the editor's tree with its own grid, the Glossary row in the context bar, the terminology plugin's own options dialog, and the *Choose the active glossary* and *Export … as a glossary* commands are gone. They were the terminology system before the termbases existed, and keeping both meant two editors, two sources and two places a term could live. Everything they did the termbases now do: your three files have been imported as termbases (and left where they were), **Termbase from this prompt's terms…** replaces *Export glossary* and makes the result the project's termbase, and the terminology plugin's Options button opens the prompt editor, where the Termbases window is. Import… still reads the old file format, so a glossary from anywhere else becomes a termbase in one click.
 
 ### Fixed
+
+- **The Termbases row in the context bar began with an ellipsis.** The rows are shortened, when they have to be, by dropping the project name that is written just above them – right for a prompt or bank named after the project, wrong for this row, where the project termbase is named after the project too and the line came out as “… (project) + 2 background”. The name is what the row is for, so it is now the last thing to go: the row first drops “background”, then “(project)”, then shortens “to the model”, and only cuts the name when even that will not fit. The full line is on the tooltip as before.
 
 - **The Termbases table clipped its own column headings.** The header row and the rows below it were left at the sizes WinForms chooses for a font this program stopped using, so every heading sat a pixel or two short. They are now measured from the font actually in use, and the Termbase column stretches to the right-hand edge instead of leaving a band of empty grid beside Languages.
 

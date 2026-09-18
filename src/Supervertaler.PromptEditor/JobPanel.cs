@@ -1,4 +1,6 @@
-using System;
+﻿using System;
+using System.Collections.Generic;
+using System.Linq;
 using System.Drawing;
 using System.Windows.Forms;
 
@@ -133,10 +135,44 @@ namespace Supervertaler.PromptEditor
             /// <summary>What was set, before any shortening. The tooltip and the fitter both use it.</summary>
             internal string Full { get; private set; } = "";
 
+            /// <summary>
+            /// Shorter wordings of <see cref="Full"/>, longest first, tried before
+            /// anything is cut. A row that summarises a set has words it can drop
+            /// - "background", "(project)" - before it has to lose the name.
+            /// </summary>
+            private string[] _shorter = new string[0];
+
+            internal IEnumerable<string> Candidates
+            {
+                get
+                {
+                    yield return Full;
+                    foreach (var s in _shorter) yield return s;
+                }
+            }
+
+            /// <summary>
+            /// <paramref name="full"/> as the text, with <paramref name="shorter"/>
+            /// as the wordings to fall back on when it does not fit, longest first.
+            /// </summary>
+            public void Set(string full, params string[] shorter)
+            {
+                _shorter = (shorter ?? new string[0]).Select(s => (s ?? "").Trim()).Where(s => s.Length > 0).ToArray();
+                Assign(full);
+            }
+
             public string Text
             {
                 get => Full;
                 set
+                {
+                    _shorter = new string[0];
+                    Assign(value);
+                }
+            }
+
+            private void Assign(string value)
+            {
                 {
                     Full = (value ?? "").Trim();
 
@@ -362,7 +398,17 @@ namespace Supervertaler.PromptEditor
                 Func<string, int> measure = s => TextRenderer.MeasureText(
                     g, s, font, new Size(int.MaxValue, int.MaxValue), TextFormatFlags.NoPadding).Width;
 
-                field.Value.Text = JobLabel.Fit(field.Full, against, width, measure);
+                // The first wording that fits wins outright. Only when even the
+                // shortest is too long does the cutting start, and it starts from
+                // the shortest, so what is lost is the least that can be.
+                var last = field.Full;
+                foreach (var candidate in field.Candidates)
+                {
+                    last = candidate;
+                    if (measure(candidate) <= width) { field.Value.Text = candidate; return; }
+                }
+
+                field.Value.Text = JobLabel.Fit(last, against, width, measure);
             }
         }
     }
