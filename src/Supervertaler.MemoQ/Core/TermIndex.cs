@@ -338,7 +338,19 @@ namespace Supervertaler.MemoQ.Core
                 ids = TermbaseSelection.ReadFor(project);
                 flags = TermbaseSelection.All();
                 key = project.ToString("N") + "|" + string.Join(",",
-                    ids.Select(id => id + ":" + (flags.ContainsKey(id) ? flags[id].Rank : 0)));
+                    ids.Select(id => id + ":" + (flags.ContainsKey(id) ? flags[id].Rank : 0)))
+                    // ...and the terms themselves: an edit in the editor, or a
+                    // term added from Studio, moves this and reloads the
+                    // selection on the next check. Without it, a corrected term
+                    // reached the grid only after the selection changed.
+                    + "|" + TermbaseDb.ChangeStamp(ids)
+                    // The database's timestamps are whole seconds, so a
+                    // correction made in the same second as the last change
+                    // would not move the stamp above. The editor rewrites the
+                    // selection file on every OK; its write time closes that gap
+                    // for edits made here. Changes from Studio or the Workbench
+                    // are never sub-second in practice and the stamp covers them.
+                    + "|" + TermbaseSelection.FileStamp;
             }
             catch (Exception ex)
             {

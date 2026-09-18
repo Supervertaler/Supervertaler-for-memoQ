@@ -351,6 +351,96 @@ namespace Supervertaler.MemoQ.Core
             return jt.Length == 0 || ts == jt;
         }
 
+        /// <summary>One term as the editor shows it: a row with an identity.</summary>
+        internal sealed class Term
+        {
+            public long Id { get; set; }
+            public string Source { get; set; }
+            public string Target { get; set; }
+            public bool Forbidden { get; set; }
+            public string Notes { get; set; }
+        }
+
+        /// <summary>
+        /// Every row of one termbase, with ids, in the order entered. For the
+        /// term editor, which needs to say which row it changed.
+        /// </summary>
+        internal static IList<Term> TermsOf(long termbaseId)
+        {
+            var terms = new List<Term>();
+            if (!Exists) return terms;
+
+            try
+            {
+                using (var connection = Open())
+                using (var command = connection.CreateCommand())
+                {
+                    command.CommandText =
+                        "select id, source_term, target_term, forbidden, notes " +
+                        "from termbase_terms where termbase_id = @id order by id";
+                    command.Parameters.AddWithValue("@id", termbaseId);
+
+                    using (var reader = command.ExecuteReader())
+                        while (reader.Read())
+                            terms.Add(new Term
+                            {
+                                Id = reader.GetInt64(0),
+                                Source = Text(reader, 1),
+                                Target = Text(reader, 2),
+                                Forbidden = Flag(reader, 3),
+                                Notes = Text(reader, 4)
+                            });
+                }
+            }
+            catch (Exception ex)
+            {
+                ErrorSink("Terms could not be read for editing", ex);
+            }
+
+            return terms;
+        }
+
+        /// <summary>
+        /// Something that changes whenever the terms of these termbases do -
+        /// from any product. The lookup index reloads a selection when this
+        /// moves, which is how an edit made in the editor, or a term added from
+        /// Studio, reaches memoQ's grid without a restart.
+        ///
+        /// <para>Row count, highest id and latest modified_date together: a
+        /// count catches deletes, the id catches an add-after-delete that leaves
+        /// the count unchanged, the date catches an edit. One indexed query per
+        /// check, on the three-second throttle the index already keeps.</para>
+        /// </summary>
+        internal static string ChangeStamp(IEnumerable<long> termbaseIds)
+        {
+            if (!Exists || termbaseIds == null) return string.Empty;
+
+            var ids = new List<long>(termbaseIds);
+            if (ids.Count == 0) return string.Empty;
+
+            try
+            {
+                using (var connection = Open())
+                using (var command = connection.CreateCommand())
+                {
+                    command.CommandText =
+                        "select count(*), coalesce(max(id), 0), coalesce(max(modified_date), '') " +
+                        "from termbase_terms where termbase_id in (" +
+                        string.Join(",", ids.ConvertAll(i => i.ToString())) + ")";
+
+                    using (var reader = command.ExecuteReader())
+                        if (reader.Read())
+                            return reader.GetValue(0) + "/" + reader.GetValue(1) + "/" + reader.GetValue(2);
+                }
+            }
+            catch (Exception ex)
+            {
+                ErrorSink("Termbase change stamp could not be read", ex);
+            }
+
+            return string.Empty;
+        }
+
         /// <summary>
         /// Every row of one termbase as a file would carry it, in the order it
         /// was entered. For Export.

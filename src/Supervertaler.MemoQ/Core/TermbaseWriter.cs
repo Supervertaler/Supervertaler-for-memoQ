@@ -207,15 +207,7 @@ namespace Supervertaler.MemoQ.Core
 
                 result.Reversed = TermbaseDb.Reversed(tbSource, tbTarget, rowsSourceLang, rowsTargetLang);
 
-                var seen = new HashSet<string>(StringComparer.Ordinal);
-                using (var command = connection.CreateCommand())
-                {
-                    command.CommandText = "select source_term, target_term from termbase_terms where termbase_id = @id";
-                    command.Parameters.AddWithValue("@id", termbaseId);
-                    using (var reader = command.ExecuteReader())
-                        while (reader.Read())
-                            Remember(seen, reader.GetString(0), reader.GetString(1));
-                }
+                var seen = ExistingPairs(connection, termbaseId);
 
                 using (var transaction = connection.BeginTransaction())
                 {
@@ -275,6 +267,167 @@ namespace Supervertaler.MemoQ.Core
             }
 
             return result;
+        }
+
+        // ---- single terms, for the editor -------------------------------------------
+
+        /// <summary>
+        /// One pair added by hand, in the termbase's own direction - the editor
+        /// shows which language each column is, so there is nothing to turn.
+        /// Refused, with the reason in words, when the termbase already has the
+        /// pair either way round.
+        /// </summary>
+        internal static long AddTerm(long termbaseId, string source, string target, bool forbidden, string notes)
+        {
+            var s = (source ?? string.Empty).Trim();
+            var t = (target ?? string.Empty).Trim();
+            if (s.Length == 0 || t.Length == 0) throw new ArgumentException("A term needs both a source and a target.");
+
+            using (var connection = Open())
+            {
+                string tbSource, tbTarget;
+                Languages(connection, termbaseId, out tbSource, out tbTarget);
+
+                var seen = ExistingPairs(connection, termbaseId);
+                if (!Remember(seen, s, t))
+                    throw new InvalidOperationException("“" + s + "” → “" + t + "” is already in this termbase.");
+
+                using (var transaction = connection.BeginTransaction())
+                {
+                    long id;
+                    using (var command = connection.CreateCommand())
+                    {
+                        command.Transaction = transaction;
+                        command.CommandText =
+                            "insert into termbase_terms " +
+                            "  (source_term, target_term, source_lang, target_lang, termbase_id, forbidden, notes, term_uuid) " +
+                            "values (@source, @target, @slang, @tlang, @tb, @forbidden, @notes, @uuid); " +
+                            "select last_insert_rowid()";
+                        command.Parameters.AddWithValue("@source", s);
+                        command.Parameters.AddWithValue("@target", t);
+                        command.Parameters.AddWithValue("@slang", tbSource);
+                        command.Parameters.AddWithValue("@tlang", tbTarget);
+                        command.Parameters.AddWithValue("@tb", termbaseId);
+                        command.Parameters.AddWithValue("@forbidden", forbidden ? 1 : 0);
+                        command.Parameters.AddWithValue("@notes", (object)NullIfEmpty(notes) ?? DBNull.Value);
+                        command.Parameters.AddWithValue("@uuid", Guid.NewGuid().ToString("D"));
+                        id = Convert.ToInt64(command.ExecuteScalar());
+                    }
+
+                    Touch(connection, transaction, termbaseId);
+                    transaction.Commit();
+                    return id;
+                }
+            }
+        }
+
+        /// <summary>
+        /// Change one row in place. The row keeps its id and its uuid - it is
+        /// the same term, corrected - and the update trigger re-indexes it.
+        /// </summary>
+        internal static void UpdateTerm(long termId, string source, string target, bool forbidden, string notes)
+        {
+            var s = (source ?? string.Empty).Trim();
+            var t = (target ?? string.Empty).Trim();
+            if (s.Length == 0 || t.Length == 0) throw new ArgumentException("A term needs both a source and a target.");
+
+            using (var connection = Open())
+            using (var transaction = connection.BeginTransaction())
+            {
+                long termbaseId;
+                using (var command = connection.CreateCommand())
+                {
+                    command.Transaction = transaction;
+                    command.CommandText = "select termbase_id from termbase_terms where id = @id";
+                    command.Parameters.AddWithValue("@id", termId);
+                    var value = command.ExecuteScalar();
+                    if (value == null || value is DBNull) throw new InvalidOperationException("That term no longer exists.");
+                    termbaseId = Convert.ToInt64(value);
+                }
+
+                using (var command = connection.CreateCommand())
+                {
+                    command.Transaction = transaction;
+                    command.CommandText =
+                        "update termbase_terms set source_term = @source, target_term = @target, " +
+                        "  forbidden = @forbidden, notes = @notes, modified_date = CURRENT_TIMESTAMP " +
+                        "where id = @id";
+                    command.Parameters.AddWithValue("@source", s);
+                    command.Parameters.AddWithValue("@target", t);
+                    command.Parameters.AddWithValue("@forbidden", forbidden ? 1 : 0);
+                    command.Parameters.AddWithValue("@notes", (object)NullIfEmpty(notes) ?? DBNull.Value);
+                    command.Parameters.AddWithValue("@id", termId);
+                    command.ExecuteNonQuery();
+                }
+
+                Touch(connection, transaction, termbaseId);
+                transaction.Commit();
+            }
+        }
+
+        /// <summary>Remove one row and its synonyms. The delete trigger takes it out of the index.</summary>
+        internal static void DeleteTerm(long termId)
+        {
+            using (var connection = Open())
+            using (var transaction = connection.BeginTransaction())
+            {
+                long termbaseId = 0;
+                using (var command = connection.CreateCommand())
+                {
+                    command.Transaction = transaction;
+                    command.CommandText = "select termbase_id from termbase_terms where id = @id";
+                    command.Parameters.AddWithValue("@id", termId);
+                    var value = command.ExecuteScalar();
+                    if (value != null && !(value is DBNull)) termbaseId = Convert.ToInt64(value);
+                }
+
+                Exec(connection, transaction, "delete from termbase_synonyms where term_id = @id", termId);
+                Exec(connection, transaction, "delete from termbase_terms where id = @id", termId);
+                if (termbaseId != 0) Touch(connection, transaction, termbaseId);
+                transaction.Commit();
+            }
+        }
+
+        private static void Languages(SqliteConnection connection, long termbaseId, out string source, out string target)
+        {
+            using (var command = connection.CreateCommand())
+            {
+                command.CommandText = "select source_lang, target_lang from termbases where id = @id";
+                command.Parameters.AddWithValue("@id", termbaseId);
+                using (var reader = command.ExecuteReader())
+                {
+                    if (!reader.Read()) throw new InvalidOperationException("That termbase no longer exists.");
+                    source = reader.IsDBNull(0) ? string.Empty : reader.GetString(0);
+                    target = reader.IsDBNull(1) ? string.Empty : reader.GetString(1);
+                }
+            }
+        }
+
+        /// <summary>Every pair the termbase holds, remembered both ways round.</summary>
+        private static HashSet<string> ExistingPairs(SqliteConnection connection, long termbaseId)
+        {
+            var seen = new HashSet<string>(StringComparer.Ordinal);
+            using (var command = connection.CreateCommand())
+            {
+                command.CommandText = "select source_term, target_term from termbase_terms where termbase_id = @id";
+                command.Parameters.AddWithValue("@id", termbaseId);
+                using (var reader = command.ExecuteReader())
+                    while (reader.Read())
+                        Remember(seen, reader.GetString(0), reader.GetString(1));
+            }
+            return seen;
+        }
+
+        /// <summary>The termbase was touched: say so where the other products look.</summary>
+        private static void Touch(SqliteConnection connection, SqliteTransaction transaction, long termbaseId)
+        {
+            using (var command = connection.CreateCommand())
+            {
+                command.Transaction = transaction;
+                command.CommandText = "update termbases set modified_date = CURRENT_TIMESTAMP where id = @id";
+                command.Parameters.AddWithValue("@id", termbaseId);
+                command.ExecuteNonQuery();
+            }
         }
 
         /// <summary>

@@ -40,6 +40,7 @@ namespace Supervertaler.PromptEditor
         private readonly Label _summary = new Label();
         private readonly Guid _projectGuid;
 
+        private readonly Button _terms = new Button();
         private readonly Button _new = new Button();
         private readonly Button _import = new Button();
         private readonly Button _addTo = new Button();
@@ -90,17 +91,18 @@ namespace Supervertaler.PromptEditor
             // The termbases themselves: created, filled, written out, removed.
             // Every one of these first saves the ticks as they stand, because
             // the table is rebuilt afterwards and a rebuild reads the file.
+            _terms.Text = "Terms…";    _terms.Click += (s, e) => Guarded(EditTerms);
             _new.Text = "New…";        _new.Click += (s, e) => Guarded(CreateNew);
             _import.Text = "Import…";  _import.Click += (s, e) => Guarded(ImportAsNew);
             _addTo.Text = "Add to…";   _addTo.Click += (s, e) => Guarded(AddToSelected);
             _export.Text = "Export…";  _export.Click += (s, e) => Guarded(ExportSelected);
             _delete.Text = "Delete";        _delete.Click += (s, e) => Guarded(DeleteSelected);
-            foreach (var b in new[] { _new, _import, _addTo, _export, _delete }) { b.Height = 28; b.AutoSize = true; b.Padding = new Padding(6, 0, 6, 0); }
+            foreach (var b in new[] { _terms, _new, _import, _addTo, _export, _delete }) { b.Height = 28; b.AutoSize = true; b.Padding = new Padding(6, 0, 6, 0); }
 
             var bar = new Panel { Dock = DockStyle.Bottom, Height = 46, BackColor = Ui.Chrome };
             bar.Controls.Add(ok);
             bar.Controls.Add(cancel);
-            foreach (var b in new[] { _new, _import, _addTo, _export, _delete }) bar.Controls.Add(b);
+            foreach (var b in new[] { _terms, _new, _import, _addTo, _export, _delete }) bar.Controls.Add(b);
             bar.Resize += (s, e) =>
             {
                 cancel.Left = bar.ClientSize.Width - cancel.Width - 12;
@@ -108,7 +110,7 @@ namespace Supervertaler.PromptEditor
                 ok.Top = cancel.Top = 9;
 
                 var x = 12;
-                foreach (var b in new[] { _new, _import, _addTo, _export, _delete })
+                foreach (var b in new[] { _terms, _new, _import, _addTo, _export, _delete })
                 {
                     b.Left = x; b.Top = 9;
                     x += b.Width + 6;
@@ -116,6 +118,15 @@ namespace Supervertaler.PromptEditor
             };
 
             _grid.SelectionChanged += (s, e) => EnableForSelection();
+
+            // Double-click a row on any column but the ticks: the ticks are
+            // already a click, and a double-click there toggles them twice.
+            _grid.CellDoubleClick += (s, e) =>
+            {
+                if (e.RowIndex < 0 || e.ColumnIndex < 0) return;
+                if (_grid.Columns[e.ColumnIndex] is DataGridViewCheckBoxColumn) return;
+                Guarded(EditTerms);
+            };
 
             Controls.Add(_grid);
             Controls.Add(_summary);
@@ -322,6 +333,7 @@ namespace Supervertaler.PromptEditor
         private void EnableForSelection()
         {
             var any = Selected != null;
+            _terms.Enabled = any;
             _addTo.Enabled = any;
             _export.Enabled = any;
             _delete.Enabled = any;
@@ -340,6 +352,25 @@ namespace Supervertaler.PromptEditor
             catch (Exception ex)
             {
                 MessageBox.Show(this, ex.Message, "Termbases", MessageBoxButtons.OK, MessageBoxIcon.Warning);
+            }
+        }
+
+        private void EditTerms()
+        {
+            var tb = Selected;
+            if (tb == null) return;
+
+            using (var form = new TermsForm(tb))
+            {
+                if (form.ShowDialog(this) != DialogResult.OK) return;
+
+                Save();
+                Fill();
+
+                if (form.Failures.Count > 0)
+                    MessageBox.Show(this,
+                        "Not everything could be saved:\r\n\r\n" + string.Join("\r\n", form.Failures),
+                        "Termbases", MessageBoxButtons.OK, MessageBoxIcon.Warning);
             }
         }
 

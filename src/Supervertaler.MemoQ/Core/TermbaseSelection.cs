@@ -86,6 +86,22 @@ namespace Supervertaler.MemoQ.Core
         private static Dictionary<string, List<long>> _read =
             new Dictionary<string, List<long>>(StringComparer.OrdinalIgnoreCase);
 
+        /// <summary>
+        /// When the file was last written, as a number; 0 when there is none.
+        /// The lookup index folds this into its reload key: the editor rewrites
+        /// this file on every OK, so an edit made in the editor reaches lookup
+        /// even when it changed nothing the database's one-second timestamps can
+        /// tell apart. One stat per check.
+        /// </summary>
+        internal static long FileStamp
+        {
+            get
+            {
+                try { return File.Exists(Path) ? File.GetLastWriteTimeUtc(Path).Ticks : 0; }
+                catch { return 0; }
+            }
+        }
+
         /// <summary>Every termbase memoQ has an opinion about, by id.</summary>
         internal static IDictionary<long, Flags> All()
         {

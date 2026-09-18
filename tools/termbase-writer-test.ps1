@@ -349,6 +349,104 @@ Check 'languages are taken from the header names'     ($cs.SourceLang -eq 'Dutch
 Check 'quoted cells keep their delimiter and doubled quotes' ($cs.Rows[1].Source -eq 'werkwijze; alt' -and $cs.Rows[1].Notes -eq 'has a "quote" in it') ("$($cs.Rows[1].Source) / $($cs.Rows[1].Notes)")
 
 # =============================================================================
+# 5b. Single terms: add, correct, remove - and the edit reaches lookup
+# =============================================================================
+function AddTerm([long]$tb, [string]$s, [string]$t, [bool]$forbidden, [string]$notes) {
+    $a = [object[]]::new(5); $a[0] = $tb; $a[1] = $s; $a[2] = $t; $a[3] = $forbidden; $a[4] = $notes
+    return [long]$writer.GetMethod('AddTerm', $NPS).Invoke($null, $a)
+}
+function UpdateTerm([long]$id, [string]$s, [string]$t, [bool]$forbidden, [string]$notes) {
+    $a = [object[]]::new(5); $a[0] = $id; $a[1] = $s; $a[2] = $t; $a[3] = $forbidden; $a[4] = $notes
+    $writer.GetMethod('UpdateTerm', $NPS).Invoke($null, $a)
+}
+function DeleteTerm([long]$id) {
+    $a = [object[]]::new(1); $a[0] = $id
+    $writer.GetMethod('DeleteTerm', $NPS).Invoke($null, $a)
+}
+function Stamp([long[]]$ids) {
+    $l = New-Object 'System.Collections.Generic.List[long]'; foreach ($i in $ids) { $l.Add($i) }
+    $a = [object[]]::new(1); $a[0] = $l.PSObject.BaseObject
+    return $db.GetMethod('ChangeStamp', $NPS).Invoke($null, $a)
+}
+function Match([string]$word) { return Scalar $test ("select count(*) from termbase_terms_fts where termbase_terms_fts match '{0}'" -f $word) }
+
+$stamp0 = Stamp @($id1)
+$kolom = AddTerm $id1 'kolom' 'column' $false 'added by hand'
+Check 'a term added by hand gets an id'                 ($kolom -gt 0)
+Check 'and is found by the index at once (insert trigger)' ((Match 'kolom') -eq 1)
+Check 'and moves the change stamp'                       ((Stamp @($id1)) -ne $stamp0)
+$termsOf = $db.GetMethod('TermsOf', $NPS).Invoke($null, [object[]]@($id1))
+$mine = $termsOf | Where-Object { $_.Id -eq $kolom } | Select-Object -First 1
+Check 'TermsOf returns it with its id, notes and all'   ($null -ne $mine -and $mine.Notes -eq 'added by hand')
+
+$refusal = ''
+try { $null = AddTerm $id1 'column' 'kolom' $false $null }
+catch { $e = $_.Exception; if ($e -is [Reflection.TargetInvocationException] -and $e.InnerException) { $e = $e.InnerException }; $refusal = $e.Message }
+Check 'the same pair the other way round is refused, in words' ($refusal -like '*already in this termbase*') $refusal
+
+$stamp1 = Stamp @($id1)
+# The stamp's date part is whole seconds, so a correction in the same second as
+# the add above would not move it - measured, the first time this ran. That is
+# the real contract: the database's stamp catches changes a second apart (every
+# change from another product, in practice), and the editor's own same-second
+# edits are caught by the selection file's write time, which is the other half
+# of TermIndex's reload key and is tested at the end of this section.
+Start-Sleep -Milliseconds 1100
+UpdateTerm $kolom 'kolommen' 'columns' $true 'corrected'
+Check 'after a correction the old word is no longer found (update trigger)' ((Match 'kolom') -eq 0)
+Check 'and the new one is'                                                  ((Match 'kolommen') -eq 1)
+Check 'the row kept its id'                                                  ((Scalar $test "select count(*) from termbase_terms where id = $kolom and source_term = 'kolommen'") -eq 1)
+Check 'forbidden and notes were written'                                     ((Scalar $test "select forbidden || '|' || notes from termbase_terms where id = $kolom") -eq '1|corrected')
+Check 'a correction moves the change stamp'                                  ((Stamp @($id1)) -ne $stamp1)
+Check 'the index passes its integrity check after an update'                (Integrity $TestDb)
+
+$stamp2 = Stamp @($id1)
+DeleteTerm $kolom
+Check 'a removed term is gone'                          ((Scalar $test "select count(*) from termbase_terms where id = $kolom") -eq 0)
+Check 'and no longer found (delete trigger)'            ((Match 'kolommen') -eq 0)
+Check 'a removal moves the change stamp'                ((Stamp @($id1)) -ne $stamp2)
+
+# The point of the stamp: an edit reaches memoQ's lookup WITHOUT the selection
+# changing. Before the stamp, TermIndex reloaded a selection only when the ids
+# or ranks changed, so a corrected term reached the grid after a restart.
+$index = $plugin.GetType('Supervertaler.MemoQ.Core.TermIndex')
+$index.GetField('ErrorSink', $NPS).SetValue($null, [Action[string, Exception]]{ param($m, $ex) })
+$lastCheck = $index.GetField('_lastCheck', $NPS)
+function Unthrottle { $lastCheck.SetValue($null, [DateTime]::MinValue) }
+function Find([Guid]$project, [string]$text) {
+    $m = $index.GetMethods($PS) | Where-Object { $_.Name -eq 'Find' -and $_.GetParameters().Count -eq 3 }
+    $a = [object[]]::new(3); $a[0] = $null; $a[1] = $project; $a[2] = $text
+    return $m.Invoke($null, $a)
+}
+$ua = [object[]]::new(2); $ua[0] = 'dut'; $ua[1] = 'eng'
+$index.GetMethod('UseLanguages', $PS).Invoke($null, $ua)
+
+$editProject = [Guid]'66666666-6666-6666-6666-666666666666'
+$ef = [Activator]::CreateInstance($flagsType); $ef.Id = $id1; $ef.Rank = 1; $ef.Name = 'Writer test A'
+$eIds = New-Object 'System.Collections.Generic.List[long]'; $eIds.Add($id1)
+$eFlags = [Activator]::CreateInstance([System.Collections.Generic.List`1].MakeGenericType($flagsType)); $eFlags.Add($ef)
+$ea = [object[]]::new(3); $ea[0] = $editProject; $ea[1] = $eIds.PSObject.BaseObject; $ea[2] = $eFlags.PSObject.BaseObject
+$sel.GetMethod('Save', $NPS).Invoke($null, $ea)
+
+Unthrottle
+Check 'lookup finds an existing term of the selection'   ((Find $editProject 'Het adsorbens werd gemeten.').Count -eq 1)
+Check 'and not one that does not exist yet'              ((Find $editProject 'De meetsonde werd gemeten.').Count -eq 0)
+$null = AddTerm $id1 'meetsonde' 'probe' $false $null
+Unthrottle
+Check 'a term added by hand reaches lookup with NO change to the selection' ((Find $editProject 'De meetsonde werd gemeten.').Count -eq 1)
+
+# The same-second case, which the database stamp cannot see: correct the term
+# immediately after lookup loaded it, then do what the editor does on OK - save
+# the selection, which rewrites the file - and look again.
+$probe = ($db.GetMethod('TermsOf', $NPS).Invoke($null, [object[]]@($id1)) | Where-Object { $_.Source -eq 'meetsonde' } | Select-Object -First 1).Id
+UpdateTerm $probe 'meetkop' 'probe head' $false $null
+Start-Sleep -Milliseconds 20      # so the file's write time below is distinguishable from the save above
+$sel.GetMethod('Save', $NPS).Invoke($null, $ea)
+Unthrottle
+Check 'a correction made in the same second reaches lookup once the editor saves' ((Find $editProject 'De meetkop werd gemeten.').Count -eq 1)
+Check 'and the old form is gone from lookup'                                          ((Find $editProject 'De meetsonde werd gemeten.').Count -eq 0)
+
+# =============================================================================
 # 6. Delete leaves nothing dangling, in the file or in the selection
 # =============================================================================
 # Put the termbase into a project's selection first, so Forget has something to do.
