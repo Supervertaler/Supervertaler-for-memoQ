@@ -119,6 +119,26 @@ namespace Supervertaler.MemoQ.Core
             }
         }
 
+        /// <summary>
+        /// The termbase ticked both Read and Project for this project, or null.
+        /// Where a term decided in the grid goes - Add Term from memoQ's ribbon,
+        /// add_term over the bridge - and nowhere else: a background termbase is
+        /// the translator's standing reference, not this job's scratchpad.
+        /// </summary>
+        internal static Flags ProjectTermbaseFor(Guid project)
+        {
+            if (project == Guid.Empty) return null;
+
+            var flags = All();
+            foreach (var id in ReadFor(project))
+            {
+                Flags f;
+                if (flags.TryGetValue(id, out f) && f.IsProject) return f;
+            }
+
+            return null;
+        }
+
         /// <summary>Every termbase memoQ has an opinion about, by id.</summary>
         internal static IDictionary<long, Flags> All()
         {

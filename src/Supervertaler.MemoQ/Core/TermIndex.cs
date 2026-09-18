@@ -49,6 +49,13 @@ namespace Supervertaler.MemoQ.Core
             /// <summary>1 for the project termbase, 0 for a background one. Decides the shade of a hit.</summary>
             public int Rank { get; set; }
 
+            /// <summary>
+            /// The termbase's CS tick: this term matches only with its case as
+            /// written. Off, "wire" matches "Wire" and "WIRE"; on, an abbreviation
+            /// like "AC" stops matching the "ac" inside ordinary words' initials.
+            /// </summary>
+            public bool CaseSensitive { get; set; }
+
             /// <summary>The termbase's name, for the terminology pane.</summary>
             public string Origin { get; set; }
         }
@@ -191,10 +198,19 @@ namespace Supervertaler.MemoQ.Core
                     if (at < 0) break;
 
                     var end = at + source.Length;
-                    if (IsWholeWord(plainText, at, end) && !AnyTaken(taken, at, end))
+
+                    // The search above ignores case, so that one pass serves every
+                    // entry. An entry from a termbase ticked CS then has to match
+                    // the text exactly as written - and if none in the group does,
+                    // the span is not claimed, so a shorter case-insensitive term
+                    // inside it can still have its turn.
+                    var exact = string.CompareOrdinal(plainText, at, source, 0, source.Length) == 0;
+                    var hits = group.Where(entry => !entry.CaseSensitive || exact).ToList();
+
+                    if (hits.Count > 0 && IsWholeWord(plainText, at, end) && !AnyTaken(taken, at, end))
                     {
                         for (var i = at; i < end; i++) taken[i] = true;
-                        foreach (var entry in group)
+                        foreach (var entry in hits)
                             matches.Add(new Match { Entry = entry, Start = at, Length = source.Length });
                     }
 
@@ -347,7 +363,9 @@ namespace Supervertaler.MemoQ.Core
                 foreach (var e in loaded)
                 {
                     TermbaseSelection.Flags f;
-                    e.Rank = flags.TryGetValue(e.TermbaseId, out f) ? f.Rank : 0;
+                    var known = flags.TryGetValue(e.TermbaseId, out f);
+                    e.Rank = known ? f.Rank : 0;
+                    e.CaseSensitive = known && f.CaseSensitive;
                 }
 
                 // The project termbase first, so that where two termbases carry

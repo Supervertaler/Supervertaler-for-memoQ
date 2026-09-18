@@ -464,6 +464,19 @@ $sel.GetMethod('Save', $NPS).Invoke($null, $ea)
 Unthrottle
 Check 'Read with AI: the model is told'                  ((FindForModel $editProject 'Het adsorbens werd gemeten.').Count -eq 1)
 
+# The CS tick, which the matcher ignored until 2026-09-18 - every match was
+# case-insensitive whatever the window said. Now a termbase ticked CS matches
+# only the case as written; the rest keep matching any case.
+Check 'CS off: ADSORBENS in capitals still matches adsorbens' ((Find $editProject 'Het ADSORBENS werd gemeten.').Count -eq 1)
+$ef.CaseSensitive = $true
+$sel.GetMethod('Save', $NPS).Invoke($null, $ea)
+Unthrottle
+Check 'CS on: ADSORBENS in capitals no longer matches'       ((Find $editProject 'Het ADSORBENS werd gemeten.').Count -eq 0)
+Check 'CS on: adsorbens as written still does'                ((Find $editProject 'Het adsorbens werd gemeten.').Count -eq 1)
+$ef.CaseSensitive = $false
+$sel.GetMethod('Save', $NPS).Invoke($null, $ea)
+Unthrottle
+
 # =============================================================================
 # 6. Delete leaves nothing dangling, in the file or in the selection
 # =============================================================================

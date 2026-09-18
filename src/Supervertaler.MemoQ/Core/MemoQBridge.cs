@@ -530,17 +530,8 @@ namespace Supervertaler.MemoQ.Core
         }
 
         /// <summary>The termbase ticked both Read and Project for this project, or null.</summary>
-        private static TermbaseSelection.Flags ProjectTermbase(Guid project)
-        {
-            if (project == Guid.Empty) return null;
-            var flags = TermbaseSelection.All();
-            foreach (var id in TermbaseSelection.ReadFor(project))
-            {
-                TermbaseSelection.Flags f;
-                if (flags.TryGetValue(id, out f) && f.IsProject) return f;
-            }
-            return null;
-        }
+        private static TermbaseSelection.Flags ProjectTermbase(Guid project) =>
+            TermbaseSelection.ProjectTermbaseFor(project);
 
         private void HandleTermLookup(HttpListenerContext ctx)
         {

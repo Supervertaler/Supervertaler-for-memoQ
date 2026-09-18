@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.Drawing;
 using System.Linq;
 using System.Text;
+using System.Threading;
 using System.Windows.Forms;
 using MemoQ.Addins.Common.DataStructures;
 using MemoQ.Addins.Common.Framework;
@@ -120,14 +121,79 @@ namespace Supervertaler.MemoQ
         public override bool IsLanguagePairSupported(string srcLangName, string trgLangName) => true;
 
         /// <summary>
-        /// Both false: the SDK's add and edit paths hand memoQ a *URL* to open
-        /// (<c>GetAddTermsUrl</c> / <c>GetModifyTermsUrl</c>) rather than letting us
-        /// show a dialog, which is a poor substitute for the Trados quick-add. Term
-        /// editing belongs in the companion app, not behind a browser redirect.
+        /// memoQ's own Add Term button works with this term base. The SDK's
+        /// contract is that memoQ hands over the selected source and target text
+        /// and opens whatever URL <see cref="GetAddTermsUrl"/> returns - a design
+        /// for web-based term bases. This plugin shows a small dialog of its own
+        /// instead and returns no URL, so a term decided in the grid lands in the
+        /// project termbase without a browser. Whether memoQ tolerates a null URL
+        /// is the experiment the first build of this runs; the log records every
+        /// call and its outcome.
         /// </summary>
-        public override bool SupportsAddingNewTerms => false;
+        public override bool SupportsAddingNewTerms => true;
 
+        /// <summary>Editing stays in the editor's Terms window; memoQ's edit path is a URL as well.</summary>
         public override bool SupportsModifyingExistingTerms => false;
+
+        public override string GetAddTermsUrl(string externalId, string sourceLang, string sourceTerm, string targetLang, string targetTerm)
+        {
+            PluginLog.Write($"TB GetAddTermsUrl: {sourceLang} -> {targetLang}, source {(sourceTerm ?? "").Length} chars, "
+                + $"target {(targetTerm ?? "").Length} chars, externalId={(string.IsNullOrEmpty(externalId) ? "(none)" : externalId)}, "
+                + $"thread {Thread.CurrentThread.ManagedThreadId} {Thread.CurrentThread.GetApartmentState()}");
+
+            try
+            {
+                var project = TermbaseSelection.CurrentProject;
+                var into = TermbaseSelection.ProjectTermbaseFor(project);
+                string outcome = "cancelled";
+
+                // Its own STA thread with its own message loop: memoQ may call
+                // this from a thread that cannot show a window, and even from its
+                // UI thread a dialog it did not open cannot be parented to it.
+                // Join blocks memoQ's thread until the dialog closes, which is
+                // what a modal quick-add should do.
+                var thread = new Thread(() =>
+                {
+                    try
+                    {
+                        using (var form = new QuickAddForm(sourceLang, targetLang, sourceTerm, targetTerm, into?.Name))
+                        {
+                            if (form.ShowDialog() != DialogResult.OK || into == null) return;
+
+                            // One row through Import rather than AddTerm: Import turns
+                            // the pair round when the termbase runs the other way from
+                            // the project, and refuses a pair already there either way.
+                            var row = new TermbaseFiles.Row
+                            {
+                                Source = form.Source, Target = form.Target,
+                                Forbidden = form.Forbidden, Notes = form.Notes
+                            };
+                            var result = TermbaseWriter.Import(into.Id, new[] { row }, sourceLang, targetLang);
+                            outcome = result.Added == 1
+                                ? "added to " + into.Name + (result.Reversed ? " (turned round for it)" : "")
+                                : "already in " + into.Name;
+                        }
+                    }
+                    catch (Exception ex)
+                    {
+                        outcome = "failed: " + ex.Message;
+                        MessageBox.Show(ex.Message, "Supervertaler – Add term", MessageBoxButtons.OK, MessageBoxIcon.Warning);
+                    }
+                });
+                thread.SetApartmentState(ApartmentState.STA);
+                thread.IsBackground = true;
+                thread.Start();
+                thread.Join();
+
+                PluginLog.Write("TB add term: " + outcome);
+            }
+            catch (Exception ex)
+            {
+                PluginLog.Write("TB GetAddTermsUrl failed", ex);
+            }
+
+            return null;
+        }
 
         public override IEngine CreateEngine(string srcLangName, string trgLangName)
         {
