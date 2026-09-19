@@ -712,6 +712,36 @@ while looking into a memoQ hang: the tail was my own harness. Until the
 plugin logs to the data folder instead, ask the user to copy the real file,
 or read it through a path this shell does not virtualise.
 
+## Security defects are never written up in public
+
+Every Supervertaler repository is public, deliberately: the products read
+confidential client documents and send them to a model, and being able to say
+"read the code and see what leaves your machine" is worth more to translators
+under NDA than any obscurity would be. That is a settled decision, not an
+oversight, and it is not to be re-litigated.
+
+What follows from it is a rule about *writing*, not about code:
+
+- **A defect in the licensing or trial system, or anything else where the
+  write-up is a working recipe, does not go in a public issue tracker.** Use a
+  GitHub security advisory on the repository, which stays private until
+  published, or a private note. Link to it from a public issue by all means; the
+  stub can say what is being hardened without saying how to exploit it.
+- The distinction is between source and recipe. Publishing the code is
+  transparency, and anyone reading it has to do the work. Publishing the trigger,
+  the effect and the repeat interval removes that work for someone who would
+  never have found it.
+- This happened on 2026-09-19: a licence bypass was filed in full on the public
+  Trados tracker and was readable for about an hour before being deleted. The
+  private write-up is at `D:\Google Drive\Skills\Supervertaler licence hole
+  (PRIVATE) 2026-09-19.md`.
+
+The licensing design that follows from the same decision: the client is not a
+trust boundary and must not be treated as one. Deadlines rather than
+permissions, detection rather than prevention, and never a hard lockout on an
+absence of information - a false lockout on a Sunday costs a customer, while a
+freeloader costs revenue that was never coming.
+
 ## Confidentiality
 
 Same rule as the Trados repo: **never use real client names.** `Acme` for a client,
