@@ -1,4 +1,4 @@
-# A prompt's term table becomes a termbase: does every term, and every note,
+﻿# A prompt's term table becomes a termbase: does every term, and every note,
 # survive the journey?
 #
 # The note is the only part of a locked-terms table that says WHY a term was
@@ -84,6 +84,27 @@ Check ((@($banned | Where-Object { $_.Source -eq 'inrichting' }).Count -eq 1) -a
     "one for each source: $(($banned | ForEach-Object { $_.Source }) -join ', ')"
 Check (@($banned | Where-Object { $_.Target -ne 'apparatus' }).Count -eq 0) "both banning the rendering the prompt refused"
 Check ($banned[0].Notes.Length -gt 0) "and carrying a note saying where the ban came from: '$($banned[0].Notes)'"
+
+# ---- 4. counts that do not match ----------------------------------------
+# Three sources against two targets. Neither list can be paired, so each source
+# takes the target - but the target is itself a list and has to be collapsed
+# first, exactly as the one-source case does it.
+#
+# The first version of the pairing did not collapse here, so every source was
+# given the uncollapsed "x / y" as its target and nothing recorded that
+# alternatives had been listed: slash-bearing TARGETS, which is the one thing
+# the code being replaced never produced. Found by the core owner reviewing the
+# commit, in the one branch the new structure did not name.
+$odd = $extract.Invoke($null, [object[]]@([string]@"
+| Source | Target | Notes |
+|---|---|---|
+| a / b / c | x / y |  |
+"@))
+
+Check ($odd.Count -eq 3) "three sources against two targets gives three terms ($($odd.Count))"
+Check (@($odd | Where-Object { $_.Target -like '* / *' }).Count -eq 0) "none of them carrying a slash in the target"
+Check (@($odd | Where-Object { $_.Target -eq 'x' }).Count -eq 3) "all taking the first rendering as binding"
+Check (@($odd | Where-Object { $_.Note -like '*listed alternatives*' }).Count -eq 3) "and all recording what the prompt actually listed"
 
 Write-Host ''
 Write-Host "NOTES COLUMN TEST COMPLETE - $fails failure(s)"
