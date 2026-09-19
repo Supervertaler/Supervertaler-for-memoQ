@@ -732,12 +732,22 @@ discipline it needs is not pulling inside a checked-out `core/` during your own
 freeze, since the build uses the checked-out state rather than the pinned
 commit.
 
-Ownership of core was raised with the Trados session on 2026-09-19 and is not
-yet settled: the proposal is that they own it, since core was extracted from
-their plugin and they carry the higher cost of a bad change, with either session
-free to propose, the non-owner free to write a change the owner has agreed to,
-and a message to the other session whenever a behaviour change lands so nobody
-bumps into a surprise. Do not treat this as agreed until they have answered.
+**The Trados session owns core.** Michael decided this on 2026-09-19, after both
+sessions declined to settle it between themselves. The reasoning: core was
+extracted from the Trados plugin and most of it is still that code, that session
+has the deepest context on it, and an App Store release is slow to correct where
+a memoQ add-in is a file copy.
+
+Four rules go with it:
+
+1. Either session may propose a core change. The owner decides.
+2. **The non-owner may write a core change with the owner's prior agreement.**
+   Normal practice, not an exception - an owner in a release freeze is
+   unavailable to decide at exactly the moment the other side is waiting.
+3. A behaviour change landing in core gets a message to the other session when
+   it lands, so nobody bumps a pointer into a surprise.
+4. Each product bumps its own pointer when it suits, and never inside its own
+   release window.
 
 ## Security defects are never written up in public
 
