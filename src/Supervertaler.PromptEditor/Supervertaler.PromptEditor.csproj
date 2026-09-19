@@ -1,4 +1,4 @@
-<Project Sdk="Microsoft.NET.Sdk">
+﻿<Project Sdk="Microsoft.NET.Sdk">
 
   <PropertyGroup>
     <OutputType>WinExe</OutputType>
@@ -101,6 +101,10 @@
     </Compile>
     <Compile Include="..\Supervertaler.MemoQ\Core\TermIndex.cs">
       <Link>Core\TermIndex.cs</Link>
+    </Compile>
+    <!-- TermIndex matches against folded text, so the editor needs this too. -->
+    <Compile Include="..\Supervertaler.MemoQ\Core\ScriptChars.cs">
+      <Link>Core\ScriptChars.cs</Link>
     </Compile>
     <Compile Include="..\Supervertaler.MemoQ\Core\SharedSettings.cs">
       <Link>Shared\SharedSettings.cs</Link>
