@@ -112,16 +112,25 @@ namespace Supervertaler.MemoQ.Core
                     return;
                 }
 
+                // Not the range memoQ already has. Asked for exactly that, memoQ
+                // answered accepted and did nothing - reasonably, since there was
+                // nothing to change. One character inside the same sentence is a
+                // selection it has to apply, and it keeps the cursor on the same
+                // grid row: the range picks which sentence of the paragraph to
+                // land on, and this one names the sentence already active.
+                var length = active.SourceLength > 1 ? 1 : active.SourceLength;
+
                 PreviewStore.Enqueue(new PreviewStore.Command
                 {
                     Type = "goto",
                     PartId = active.PartId,
                     SourceStart = active.SourceStart,
-                    SourceLength = active.SourceLength
+                    SourceLength = length
                 });
 
                 PluginLog.Write("Quick term: asked memoQ to re-select " + active.PartId
-                    + " [" + active.SourceStart + "+" + active.SourceLength + "] for a fresh lookup");
+                    + " [" + active.SourceStart + "+" + length + "] for a fresh lookup"
+                    + " (it was on [" + active.SourceStart + "+" + active.SourceLength + "])");
             }
             catch (Exception ex)
             {
