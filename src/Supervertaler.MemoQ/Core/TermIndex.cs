@@ -58,6 +58,17 @@ namespace Supervertaler.MemoQ.Core
 
             /// <summary>The termbase's name, for the terminology pane.</summary>
             public string Origin { get; set; }
+
+            /// <summary>
+            /// <see cref="Source"/> with subscripts, superscripts and radical dots
+            /// folded to their plain forms - what matching compares against, while
+            /// Source stays as written for the pane and the prompt.
+            ///
+            /// <para>Held rather than folded on demand: memoQ looks a segment up on
+            /// every cursor move, and folding hundreds of candidate terms each time
+            /// would be work repeated for an answer that never changes.</para>
+            /// </summary>
+            public string MatchSource { get; set; }
         }
 
         internal sealed class Match
@@ -163,7 +174,7 @@ namespace Supervertaler.MemoQ.Core
             lock (_lock)
             {
                 if (_entries.Count == 0) return Array.Empty<Match>();
-                candidates = Candidates(plainText);
+                candidates = Candidates(ScriptChars.Fold(plainText));
             }
 
             if (onlyTermbases != null)
@@ -171,8 +182,13 @@ namespace Supervertaler.MemoQ.Core
 
             if (candidates.Count == 0) return Array.Empty<Match>();
 
+            // Folded once, here. Every comparison below runs against this, and
+            // every offset reported refers to plainText - which is sound only
+            // because the fold is one character for one character.
+            var text = ScriptChars.Fold(plainText);
+
             var matches = new List<Match>();
-            var taken = new bool[plainText.Length];
+            var taken = new bool[text.Length];
 
             // Longest source first: a longer term is the more specific statement
             // about this text, and claiming its span stops a shorter one inside it
@@ -186,15 +202,15 @@ namespace Supervertaler.MemoQ.Core
             // so the ban never reached the model - which is exactly the instruction
             // the translator most wanted enforced.
             foreach (var group in candidates
-                .GroupBy(e => e.Source, StringComparer.OrdinalIgnoreCase)
+                .GroupBy(e => e.MatchSource, StringComparer.OrdinalIgnoreCase)
                 .OrderByDescending(g => g.Key.Length))
             {
                 var source = group.Key;
                 var from = 0;
 
-                while (from <= plainText.Length - source.Length)
+                while (from <= text.Length - source.Length)
                 {
-                    var at = plainText.IndexOf(source, from, StringComparison.OrdinalIgnoreCase);
+                    var at = text.IndexOf(source, from, StringComparison.OrdinalIgnoreCase);
                     if (at < 0) break;
 
                     var end = at + source.Length;
@@ -204,10 +220,10 @@ namespace Supervertaler.MemoQ.Core
                     // the text exactly as written - and if none in the group does,
                     // the span is not claimed, so a shorter case-insensitive term
                     // inside it can still have its turn.
-                    var exact = string.CompareOrdinal(plainText, at, source, 0, source.Length) == 0;
+                    var exact = string.CompareOrdinal(text, at, source, 0, source.Length) == 0;
                     var hits = group.Where(entry => !entry.CaseSensitive || exact).ToList();
 
-                    if (hits.Count > 0 && IsWholeWord(plainText, at, end) && !AnyTaken(taken, at, end))
+                    if (hits.Count > 0 && IsWholeWord(text, at, end) && !AnyTaken(taken, at, end))
                     {
                         for (var i = at; i < end; i++) taken[i] = true;
                         foreach (var entry in hits)
@@ -414,7 +430,9 @@ namespace Supervertaler.MemoQ.Core
 
             foreach (var e in _entries)
             {
-                var first = FirstWord(e.Source);
+                e.MatchSource = ScriptChars.Fold(e.Source);
+
+                var first = FirstWord(e.MatchSource);
                 if (first == null) { _unbucketed.Add(e); continue; }
 
                 if (!_byFirstWord.TryGetValue(first, out var bucket))
