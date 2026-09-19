@@ -712,6 +712,33 @@ while looking into a memoQ hang: the tail was my own harness. Until the
 plugin logs to the data folder instead, ask the user to copy the real file,
 or read it through a path this shell does not virtualise.
 
+## core is a submodule, so a freeze belongs on the pointer, not on core
+
+`core/` is a git submodule pinned by commit - memoQ pins one, Trados pins its
+own. **A commit on core's main branch does not reach either product's build
+until that product bumps its pointer.**
+
+This was missed for a fortnight, at real cost. The rule agreed with the Trados
+session before their App Store submission was "no behaviour-changing commits to
+core", which stalled every piece of shared work behind their release date: the
+notes column for `PromptGlossaryExtractor.Entry`, the shared licence reader, the
+core port of the termbase writer. The rule that was actually needed was "Trados
+does not bump its pointer", which protects the release just as completely and
+blocks nothing.
+
+So: **a release freeze is per-product and applies to bumping the pointer.**
+memoQ can take a core change the day it lands while Trados waits weeks. The one
+discipline it needs is not pulling inside a checked-out `core/` during your own
+freeze, since the build uses the checked-out state rather than the pinned
+commit.
+
+Ownership of core was raised with the Trados session on 2026-09-19 and is not
+yet settled: the proposal is that they own it, since core was extracted from
+their plugin and they carry the higher cost of a bad change, with either session
+free to propose, the non-owner free to write a change the owner has agreed to,
+and a message to the other session whenever a behaviour change lands so nobody
+bumps into a surprise. Do not treat this as agreed until they have answered.
+
 ## Security defects are never written up in public
 
 Every Supervertaler repository is public, deliberately: the products read
