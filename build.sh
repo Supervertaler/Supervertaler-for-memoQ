@@ -108,6 +108,35 @@ fi
 # in scope, which is the only place that class of break is visible. Under three
 # seconds, and it fails where the fault is instead of a hundred lines into a
 # plugin build.
+# --- core must be the commit this repo pins ---------------------------------
+# core/ is a submodule, but this checkout sits on a branch rather than detached,
+# and the build compiles the files that are CHECKED OUT rather than the commit
+# that is PINNED. So a pull inside core/, or any tool running "submodule update
+# --remote", silently moves the shared sources under this build while the
+# recorded pointer stays where it was.
+#
+# That matters most in the other direction: the Trados side ships to an App
+# Store, and the agreement that lets shared work continue during their release
+# freeze is that a commit to core reaches nobody until they bump. That agreement
+# rests entirely on a checkout not drifting from its pin - which, until this
+# check existed, rested on somebody remembering. The Trados side added the same
+# guard after finding its own checkout was on a branch too.
+PINNED_CORE="$(git ls-tree HEAD core 2>/dev/null | awk '{print $3}')"
+ACTUAL_CORE="$(git -C core rev-parse HEAD 2>/dev/null)"
+
+if [[ -n "$PINNED_CORE" && -n "$ACTUAL_CORE" && "$PINNED_CORE" != "$ACTUAL_CORE" ]]; then
+    echo "ERROR: core/ is not the commit this repository pins." >&2
+    echo "       pinned:       $PINNED_CORE" >&2
+    echo "       checked out:  $ACTUAL_CORE" >&2
+    echo >&2
+    echo "       The build compiles what is checked out, so this would ship a core" >&2
+    echo "       nobody recorded. Two ways out, and they are different decisions:" >&2
+    echo >&2
+    echo "         go back to the pin:   git -C core checkout $PINNED_CORE" >&2
+    echo "         take the new core:    git add core && git commit -m 'core: bump'" >&2
+    exit 1
+fi
+
 echo
 echo "core (on its own):"
 if ! dotnet build "$(cygpath -w "$ROOT/core/build/Supervertaler.Core.Build.csproj")" \
