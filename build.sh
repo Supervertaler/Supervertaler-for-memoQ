@@ -223,10 +223,23 @@ ADDINS="$MEMOQ_DIR/Addins"
 # report why (exit -196608, empty log). "D:\Google Drive\..." is such a path.
 
 STAGE="/c/Temp/sv-deploy"
+
+# Emptied first, not merely created. What is copied in is named file by file,
+# but deploy.ps1 reads the folder with a WILDCARD - every Supervertaler.MemoQ*.dll
+# it finds - so anything left behind by an older build would be deployed again
+# for ever, silently, alongside the current one. A DLL that is no longer produced
+# would go on being loaded by memoQ.
+#
+# The same shape as two other things found on 2026-09-19: an old deploy of the
+# preview tool kept working and hid a broken resolver, and Google Drive's sync
+# conflict copies accumulate in build output where a wildcard could pick them up.
+# The stage lives under C:\Temp, which Drive does not sync, so conflict copies
+# are not the risk here - staleness is.
+rm -rf "$STAGE"
 mkdir -p "$STAGE"
+
 cp "$OUTPUT" "$OUTPUT_TB" "$OUTPUT_ED" "$STAGE/"
 cp "$ROOT/tools/deploy.ps1" "$STAGE/"
-rm -f "$STAGE/deploy.log"
 
 echo
 powershell.exe -NoProfile -ExecutionPolicy Bypass -Command "
