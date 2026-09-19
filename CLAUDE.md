@@ -749,6 +749,14 @@ Four rules go with it:
 4. Each product bumps its own pointer when it suits, and never inside its own
    release window.
 
+**Byte-order marks in core: match the file you are in, and do not tidy.** Core's
+files are inconsistent about the BOM - `GlossaryRepair.cs` carries one,
+`LanguageCodes.cs` and `PromptTemplate.cs` do not - and the owner's ruling on
+2026-09-19 is to leave it that way. Normalising them is a whole-file diff on
+several files, buys nothing functional, and collides with in-flight work from
+both products. Watch for a tool adding one: writing a file as `utf-8-sig` put a
+BOM on a file that had none, and it took a reviewer to notice.
+
 ## Security defects are never written up in public
 
 Every Supervertaler repository is public, deliberately: the products read
