@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Collections.Generic;
 using System.Linq;
 
@@ -285,6 +285,23 @@ namespace Supervertaler.MemoQ.Core
                 _selectionKey = null;
                 _lastCheck = DateTime.MinValue;
             }
+        }
+
+        /// <summary>
+        /// Say that the termbases have just been written to, so the next lookup
+        /// re-reads them instead of waiting out the three-second throttle.
+        ///
+        /// <para>Called after a term is added from the grid. Without it the
+        /// refresh that follows would ask memoQ to look the segment up again
+        /// while this index still held the set from before the add, and the new
+        /// term would be missing from a pane that had just been refreshed on
+        /// purpose - which reads as the feature not working.</para>
+        /// </summary>
+        public static void NoticeChange()
+        {
+            // The throttle only; the reload key still decides whether anything
+            // is actually re-read, and an added term changes it.
+            lock (_lock) _lastCheck = DateTime.MinValue;
         }
 
         private static void EnsureLoaded(Guid project)

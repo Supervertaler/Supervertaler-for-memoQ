@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Threading;
 using System.Windows.Forms;
 
@@ -68,7 +68,67 @@ namespace Supervertaler.MemoQ.Core
             thread.Start();
             thread.Join();
 
+            if (outcome.StartsWith("added", StringComparison.Ordinal))
+            {
+                TermIndex.NoticeChange();
+                AskForAFreshLookup();
+            }
+
             return outcome;
+        }
+
+        /// <summary>
+        /// Ask memoQ to select the segment it is already on, so that it looks it
+        /// up again and the new term appears in the grid and the Translation
+        /// results pane without the user moving away and back.
+        ///
+        /// <para>memoQ asks a terminology plugin about a segment once and keeps
+        /// the answer; the terminology SDK has no way to say that answer has
+        /// changed. The only thing that can reach memoQ from out here is the live
+        /// document link, whose one outbound call selects a segment - so a
+        /// refresh is spelled "select where you already are".</para>
+        ///
+        /// <para>Whether memoQ treats that as a fresh lookup or as nothing at all
+        /// is memoQ's business and is not documented. It costs nothing to ask:
+        /// the request names the segment the cursor is on, so if memoQ acts on it
+        /// the cursor does not move, and if it ignores it the term appears the
+        /// next time the user lands on the segment, exactly as before. With no
+        /// preview tool connected nothing happens at all.</para>
+        /// </summary>
+        private static void AskForAFreshLookup()
+        {
+            try
+            {
+                if (!PreviewStore.ToolAlive)
+                {
+                    PluginLog.Write("Quick term: no live document link, so the pane will refresh when you next land on the segment");
+                    return;
+                }
+
+                var active = PreviewStore.GetActive();
+                if (active == null || string.IsNullOrEmpty(active.PartId))
+                {
+                    PluginLog.Write("Quick term: no active segment to re-select");
+                    return;
+                }
+
+                PreviewStore.Enqueue(new PreviewStore.Command
+                {
+                    Type = "goto",
+                    PartId = active.PartId,
+                    SourceStart = active.SourceStart,
+                    SourceLength = active.SourceLength
+                });
+
+                PluginLog.Write("Quick term: asked memoQ to re-select " + active.PartId
+                    + " [" + active.SourceStart + "+" + active.SourceLength + "] for a fresh lookup");
+            }
+            catch (Exception ex)
+            {
+                // A refresh that fails costs the user one keystroke, so it must
+                // never cost them the term they just added.
+                PluginLog.Write("Quick term: asking for a fresh lookup failed", ex);
+            }
         }
     }
 }
