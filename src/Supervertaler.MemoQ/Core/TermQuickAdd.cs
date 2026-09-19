@@ -68,76 +68,42 @@ namespace Supervertaler.MemoQ.Core
             thread.Start();
             thread.Join();
 
-            if (outcome.StartsWith("added", StringComparison.Ordinal))
-            {
-                TermIndex.NoticeChange();
-                AskForAFreshLookup();
-            }
+            // Not a refresh: memoQ will not look the segment up again while the
+            // cursor is on it (see AboutRefreshing below). This only means that
+            // when the user does move back onto the segment, the term is there,
+            // rather than up to three seconds later.
+            if (outcome.StartsWith("added", StringComparison.Ordinal)) TermIndex.NoticeChange();
 
             return outcome;
         }
 
         /// <summary>
-        /// Ask memoQ to select the segment it is already on, so that it looks it
-        /// up again and the new term appears in the grid and the Translation
-        /// results pane without the user moving away and back.
+        /// Why a term added from the grid does not appear until you move off the
+        /// segment and back - and what was tried.
         ///
         /// <para>memoQ asks a terminology plugin about a segment once and keeps
-        /// the answer; the terminology SDK has no way to say that answer has
-        /// changed. The only thing that can reach memoQ from out here is the live
-        /// document link, whose one outbound call selects a segment - so a
-        /// refresh is spelled "select where you already are".</para>
+        /// the answer. The terminology SDK has nothing that says the answer has
+        /// changed: its only refresh-shaped members concern term base domains and
+        /// private collections, neither of which touches the results pane.</para>
         ///
-        /// <para>Whether memoQ treats that as a fresh lookup or as nothing at all
-        /// is memoQ's business and is not documented. It costs nothing to ask:
-        /// the request names the segment the cursor is on, so if memoQ acts on it
-        /// the cursor does not move, and if it ignores it the term appears the
-        /// next time the user lands on the segment, exactly as before. With no
-        /// preview tool connected nothing happens at all.</para>
+        /// <para>The one channel that reaches memoQ from outside the plugin is
+        /// the live document link, whose single outbound call selects a segment.
+        /// Both readings of "select where you already are" were tried against
+        /// memoQ 12.4 on 2026-09-19. Asking for the range memoQ already had was
+        /// accepted and changed nothing, which is fair - there was nothing to
+        /// change. Asking for one character inside the same sentence, a selection
+        /// it genuinely had to apply, was also accepted and also produced no
+        /// fresh lookup. So memoQ re-queries terminology when the cursor changes
+        /// row, and not when a preview tool moves the selection within one.</para>
+        ///
+        /// <para>What is left is stepping to a neighbouring row and back, which
+        /// works - it is what the user does by hand - and costs them their place
+        /// in the target cell, mid-sentence, every time they add a term. That is
+        /// not worth paying to see a highlight a few seconds earlier, when the
+        /// dialog has already confirmed the term was added. Left undone on
+        /// purpose; if memoQ ever exposes a real refresh, this is the note that
+        /// says what to replace.</para>
         /// </summary>
-        private static void AskForAFreshLookup()
-        {
-            try
-            {
-                if (!PreviewStore.ToolAlive)
-                {
-                    PluginLog.Write("Quick term: no live document link, so the pane will refresh when you next land on the segment");
-                    return;
-                }
-
-                var active = PreviewStore.GetActive();
-                if (active == null || string.IsNullOrEmpty(active.PartId))
-                {
-                    PluginLog.Write("Quick term: no active segment to re-select");
-                    return;
-                }
-
-                // Not the range memoQ already has. Asked for exactly that, memoQ
-                // answered accepted and did nothing - reasonably, since there was
-                // nothing to change. One character inside the same sentence is a
-                // selection it has to apply, and it keeps the cursor on the same
-                // grid row: the range picks which sentence of the paragraph to
-                // land on, and this one names the sentence already active.
-                var length = active.SourceLength > 1 ? 1 : active.SourceLength;
-
-                PreviewStore.Enqueue(new PreviewStore.Command
-                {
-                    Type = "goto",
-                    PartId = active.PartId,
-                    SourceStart = active.SourceStart,
-                    SourceLength = length
-                });
-
-                PluginLog.Write("Quick term: asked memoQ to re-select " + active.PartId
-                    + " [" + active.SourceStart + "+" + length + "] for a fresh lookup"
-                    + " (it was on [" + active.SourceStart + "+" + active.SourceLength + "])");
-            }
-            catch (Exception ex)
-            {
-                // A refresh that fails costs the user one keystroke, so it must
-                // never cost them the term they just added.
-                PluginLog.Write("Quick term: asking for a fresh lookup failed", ex);
-            }
-        }
+        private static void AboutRefreshing() { }
     }
 }
