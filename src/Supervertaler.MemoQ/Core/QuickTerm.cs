@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Windows.Forms;
 
 namespace Supervertaler.MemoQ.Core
@@ -39,14 +39,17 @@ namespace Supervertaler.MemoQ.Core
 
         private static void Pressed()
         {
-            var text = CellSelection.Read();
+            var caught = CellSelection.Read();
+            var text = caught.Text;
 
             if (string.IsNullOrWhiteSpace(text))
             {
                 // Silence here would be indistinguishable from a broken shortcut,
-                // and this is the most likely thing a new user does wrong.
+                // and this is the most likely thing a new user does wrong. The log
+                // gets the real reason, which the user cannot be asked to care
+                // about but which is the difference between a mistake and a bug.
                 Toast.Show("Select a word first, then press Alt+Up.");
-                PluginLog.Write("Quick term: nothing was selected");
+                PluginLog.Write("Quick term: nothing caught - " + caught.Why);
                 return;
             }
 

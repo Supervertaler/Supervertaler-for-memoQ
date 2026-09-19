@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Collections.Generic;
 using System.Runtime.InteropServices;
 using System.Threading;
@@ -76,14 +76,39 @@ namespace Supervertaler.MemoQ.Core
         /// Ctrl+C. Held down, it would arrive as Ctrl+Alt+C.</summary>
         private static readonly TimeSpan AltRelease = TimeSpan.FromMilliseconds(700);
 
-        /// <summary>How long to wait for memoQ to answer Ctrl+C.</summary>
-        private static readonly TimeSpan CopyAnswer = TimeSpan.FromMilliseconds(600);
+        /// <summary>
+        /// How long to wait for memoQ to answer Ctrl+C, and again if it does not.
+        ///
+        /// <para>Two attempts because the first copy of a session is measurably
+        /// slower than the rest: this thread is new, the clipboard has not been
+        /// touched from this process yet, and memoQ builds several formats for
+        /// one copied word. The first press after memoQ started was the one press
+        /// that failed in testing, and it reported "nothing was selected" over a
+        /// word that was plainly selected - a wrong answer rather than a slow
+        /// one, which is the kind worth spending a second on.</para>
+        /// </summary>
+        private static readonly TimeSpan[] CopyAnswer =
+        {
+            TimeSpan.FromMilliseconds(900),
+            TimeSpan.FromMilliseconds(1200)
+        };
+
+        /// <summary>What a press found, and when it found nothing, why not.</summary>
+        internal sealed class Capture
+        {
+            public string Text;
+
+            /// <summary>Empty when <see cref="Text"/> was found. Written to the log
+            /// otherwise: "nothing was selected" and "memoQ was too slow to say"
+            /// look identical to the user and must not look identical to us.</summary>
+            public string Why = "";
+        }
 
         /// <summary>
-        /// The selected text of whichever memoQ cell has the caret, or null when
-        /// nothing is selected. Must be called on an STA thread.
+        /// The selected text of whichever memoQ cell has the caret. Must be called
+        /// on an STA thread.
         /// </summary>
-        public static string Read()
+        public static Capture Read()
         {
             // The shortcut is Alt+Up and the hook swallowed it, but Alt itself is
             // still physically down: the user has not let go yet. Ctrl+C sent now
@@ -99,20 +124,35 @@ namespace Supervertaler.MemoQ.Core
 
             using (var clipboard = new ClipboardGuard())
             {
-                var before = GetClipboardSequenceNumber();
+                var answered = false;
 
-                Send(VK_CONTROL, up: false);
-                Send(VK_C, up: false);
-                Send(VK_C, up: true);
-                Send(VK_CONTROL, up: true);
+                foreach (var patience in CopyAnswer)
+                {
+                    // The sequence number rather than the content: copying the same
+                    // word twice running leaves the text identical, and a comparison
+                    // on content would read the second one as "memoQ did not answer".
+                    var before = GetClipboardSequenceNumber();
 
-                // The sequence number rather than the content: copying the same
-                // word twice running leaves the text identical, and a comparison
-                // on content would read the second one as "memoQ did not answer".
-                if (!Wait(() => GetClipboardSequenceNumber() != before, CopyAnswer)) return null;
+                    Send(VK_CONTROL, up: false);
+                    Send(VK_C, up: false);
+                    Send(VK_C, up: true);
+                    Send(VK_CONTROL, up: true);
+
+                    if (Wait(() => GetClipboardSequenceNumber() != before, patience)) { answered = true; break; }
+                }
+
+                if (!answered)
+                    return new Capture { Why = "memoQ did not answer Ctrl+C, so most likely nothing was selected" };
 
                 var text = TryGetText();
-                return string.IsNullOrWhiteSpace(text) ? null : text.Trim();
+
+                if (text == null)
+                    return new Capture { Why = "memoQ answered Ctrl+C but put no text on the clipboard" };
+
+                if (string.IsNullOrWhiteSpace(text))
+                    return new Capture { Why = "the selection was blank" };
+
+                return new Capture { Text = text.Trim() };
             }
         }
 

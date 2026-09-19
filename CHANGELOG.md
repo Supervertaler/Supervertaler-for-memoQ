@@ -23,6 +23,8 @@ any release tooling that buckets on these headings works for both.
 
 ### Fixed
 
+- **The first Alt+Up of a memoQ session said no word was selected when one was.** Only the first: the thread handling the press is new, the clipboard has not been touched from memoQ’s process yet, and memoQ builds several formats for one copied word, so the answer to the first Ctrl+C arrived after the plugin had stopped waiting for it. It now waits longer and asks a second time before concluding anything, and the log says which of the three things happened – no answer at all, an answer carrying no text, or a blank selection – because to the user those are one message and to us they are three different faults.
+
 - **The Termbases row in the context bar began with an ellipsis.** The rows are shortened, when they have to be, by dropping the project name that is written just above them – right for a prompt or a bank named after the project, wrong for this row, where the project termbase is named after the project too and the line came out as “… (project) + 2 background”, naming no termbase at all. The name is what the row is for, so it is now the last thing to go: the row first drops “background”, then “(project)”, then shortens “to the model”, and only when even that will not fit does it cut – from the middle, so the name still starts the line. The full line is on the tooltip as before.
 
 - **The Termbases table clipped its own column headings.** The header row and the rows below it were left at the sizes WinForms chooses for a font this program stopped using, so every heading sat a pixel or two short. They are now measured from the font actually in use, and the Termbase column stretches to the right-hand edge instead of leaving a band of empty grid beside Languages.
