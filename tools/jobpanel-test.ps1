@@ -1,4 +1,4 @@
-# Fitting a name into the job panel's column.
+﻿# Fitting a name into the job panel's column.
 #
 # The rule that matters is what it does NOT do. Most names are short enough to
 # show whole, and a prompt and a glossary are often named nothing like each
@@ -88,6 +88,58 @@ Check ($sharedPrefix.Invoke($null, [object[]]@("$PROJECT v3", $PROJECT)) -gt 0) 
 Check ($sharedPrefix.Invoke($null, [object[]]@('patent eng-dut', $PROJECT)) -eq 0) "no prefix when the name is unrelated"
 Check ($sharedPrefix.Invoke($null, [object[]]@("$PROJECT v3", '')) -eq 0) "no prefix when no project is known"
 Check ($sharedPrefix.Invoke($null, [object[]]@('Acme (PROJ', $PROJECT)) -eq 0) "no prefix when the value is shorter than the project"
+
+
+# ---- 7. a row that can be reworded shortens its words before its name ----
+# The Termbases row summarises a set, and its project termbase is usually named
+# after the project - so the rule above, drop the repeated project name, turned
+# the whole line into an ellipsis and left the reader with nothing. A row may
+# now offer the same line in several wordings, longest first.
+$best = $label.GetMethod('Best', $Static)
+function Best($candidates, $project, $width) {
+    $list = [Collections.Generic.List[string]]::new()
+    foreach ($c in $candidates) { $list.Add([string]$c) }
+    return $best.Invoke($null, [object[]]@($list, $project, [int]$width, $measure))
+}
+
+$NAME = 'BRANTS (INOP-003-BE)'
+$wordings = @(
+    "$NAME (project) + 2 background    ·    1 of 3 to the model",
+    "$NAME (project) + 2 more    ·    1 of 3 to the model",
+    "$NAME + 2 more    ·    1 of 3 to the model",
+    "$NAME + 2 more · 1 of 3 AI"
+)
+
+Check ((Best $wordings $NAME 200) -eq $wordings[0]) "the fullest wording is shown when it fits"
+# The four wordings are 71, 65, 55 and 41 characters, and one character is one
+# pixel here, so each width below is just wide enough for the wording named.
+Check ((Best $wordings $NAME 70) -eq $wordings[1]) "'background' is spent first: $(Best $wordings $NAME 70)"
+Check ((Best $wordings $NAME 60) -eq $wordings[2]) "'(project)' goes next: $(Best $wordings $NAME 60)"
+Check ((Best $wordings $NAME 50) -eq $wordings[3]) "then the spacing and 'to the model': $(Best $wordings $NAME 50)"
+
+# The name survives every rewording. This is the whole point of the change:
+# before it, the row read "ELLIPSIS (project) + 2 background" and named nothing.
+foreach ($w in 200, 70, 60, 50) {
+    Check ((Best $wordings $NAME $w).StartsWith('BRANTS')) "the termbase is still named at $w px"
+}
+
+# Only when no wording fits does it cut, and it cuts the shortest one. The row
+# passes no project name to cut against - see JobPanel.Field.DropsProjectName -
+# because dropping the leading name is exactly what must not happen here: this
+# name is the project termbase's, not a repeat of the heading, and a row reading
+# "ELLIPSIS 2 more" names nothing. A middle cut keeps the front.
+$tight = Best $wordings '' 30
+Check ($tight.Length -le 30) "a width narrower than every wording still fits: '$tight'"
+Check ($tight.Contains([char]0x2026)) "and says it was cut: $tight"
+Check ($tight.StartsWith('BRANT')) "and the name still starts the row when cut: $tight"
+
+# One candidate is the old behaviour exactly, which is what every other row passes.
+Check ((Best @("$PROJECT v3") $PROJECT 10) -eq (Fit "$PROJECT v3" $PROJECT 10)) "a single wording behaves as before"
+
+# Degenerate inputs: the panel measures before layout and fields start empty.
+Check ((Best @() $PROJECT 40) -eq '') "no wordings at all returns empty rather than throwing"
+Check ((Best @('', '  ') $PROJECT 40) -eq '') "blank wordings are skipped"
+Check ((Best @('', 'BEIJER') $PROJECT 40) -eq 'BEIJER') "a blank among real ones is skipped, not chosen"
 
 Write-Host ''
 Write-Host "JOB PANEL TEST COMPLETE - $fails failure(s)"

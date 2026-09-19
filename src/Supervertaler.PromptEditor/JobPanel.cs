@@ -69,6 +69,11 @@ namespace Supervertaler.PromptEditor
             // Termbases window, which can.
             Termbases = AddRow("Termbases", chooseTermbases);
 
+            // Its first words are the project termbase's name, which is usually
+            // the project's name as well - but here they are the answer, not a
+            // repeated heading. See DropsProjectName.
+            Termbases.DropsProjectName = false;
+
             // One line, like every row below it, and shortened the same way when
             // it has to be. Wrapping was the first attempt and it cost an evening:
             // an AutoSize label wraps against its MaximumSize, that width has to
@@ -131,6 +136,19 @@ namespace Supervertaler.PromptEditor
             internal Label Caption { get; }
             internal Label Value { get; }
             internal Label Arrow { get; }
+
+            /// <summary>
+            /// Whether a value that starts with the project's name may lose that
+            /// start when it does not fit, the project being written just above.
+            ///
+            /// <para>True for the rows that hold one name: a prompt or a bank
+            /// called after the job spends the whole column repeating the heading.
+            /// False for a row whose opening words are somebody else's name that
+            /// merely coincides with the project's - the Termbases row, where
+            /// dropping them leaves "… (project) + 2 more", a line that names no
+            /// termbase at all. That row is cut from the middle instead.</para>
+            /// </summary>
+            internal bool DropsProjectName { get; set; } = true;
 
             /// <summary>What was set, before any shortening. The tooltip and the fitter both use it.</summary>
             internal string Full { get; private set; } = "";
@@ -385,7 +403,7 @@ namespace Supervertaler.PromptEditor
             var width = field.Value.ClientSize.Width;
             if (width <= 0) width = Math.Max(40, ClientSize.Width - Padding.Horizontal - 96);
 
-            Fit(field, width, _projectName);
+            Fit(field, width, field.DropsProjectName ? _projectName : "");
         }
 
         private void Fit(Field field, int width, string against)
@@ -398,17 +416,7 @@ namespace Supervertaler.PromptEditor
                 Func<string, int> measure = s => TextRenderer.MeasureText(
                     g, s, font, new Size(int.MaxValue, int.MaxValue), TextFormatFlags.NoPadding).Width;
 
-                // The first wording that fits wins outright. Only when even the
-                // shortest is too long does the cutting start, and it starts from
-                // the shortest, so what is lost is the least that can be.
-                var last = field.Full;
-                foreach (var candidate in field.Candidates)
-                {
-                    last = candidate;
-                    if (measure(candidate) <= width) { field.Value.Text = candidate; return; }
-                }
-
-                field.Value.Text = JobLabel.Fit(last, against, width, measure);
+                field.Value.Text = JobLabel.Best(field.Candidates, against, width, measure);
             }
         }
     }

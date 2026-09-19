@@ -1,4 +1,5 @@
-using System;
+﻿using System;
+using System.Collections.Generic;
 
 namespace Supervertaler.PromptEditor
 {
@@ -64,6 +65,42 @@ namespace Supervertaler.PromptEditor
             }
 
             return Middle(value, width, measure);
+        }
+
+        /// <summary>
+        /// The first of <paramref name="candidates"/> that fits <paramref name="width"/>,
+        /// or the last of them shortened by <see cref="Fit"/>.
+        ///
+        /// <para>A row that summarises a set has words it can spend before it has
+        /// to spend the name: "2 background" says no more than "2 more", and
+        /// "(project)" repeats what the darker shade already says. So the caller
+        /// offers the same line in several wordings, longest first, and the
+        /// longest that fits is shown. Cutting is the last resort, and it is
+        /// applied to the shortest wording, so what is lost is the least that
+        /// can be.</para>
+        ///
+        /// <para>One candidate behaves exactly like <see cref="Fit"/>, which is
+        /// what every row but Termbases passes.</para>
+        /// </summary>
+        public static string Best(IEnumerable<string> candidates, string project, int width, Func<string, int> measure)
+        {
+            if (measure == null) throw new ArgumentNullException(nameof(measure));
+            if (candidates == null) return string.Empty;
+
+            var last = string.Empty;
+            var any = false;
+
+            foreach (var candidate in candidates)
+            {
+                var text = (candidate ?? string.Empty).Trim();
+                if (text.Length == 0) continue;
+
+                any = true;
+                last = text;
+                if (measure(text) <= width) return text;
+            }
+
+            return any ? Fit(last, project, width, measure) : string.Empty;
         }
 
         /// <summary>

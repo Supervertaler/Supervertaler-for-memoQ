@@ -23,7 +23,7 @@ any release tooling that buckets on these headings works for both.
 
 ### Fixed
 
-- **The Termbases row in the context bar began with an ellipsis.** The rows are shortened, when they have to be, by dropping the project name that is written just above them – right for a prompt or bank named after the project, wrong for this row, where the project termbase is named after the project too and the line came out as “… (project) + 2 background”. The name is what the row is for, so it is now the last thing to go: the row first drops “background”, then “(project)”, then shortens “to the model”, and only cuts the name when even that will not fit. The full line is on the tooltip as before.
+- **The Termbases row in the context bar began with an ellipsis.** The rows are shortened, when they have to be, by dropping the project name that is written just above them – right for a prompt or a bank named after the project, wrong for this row, where the project termbase is named after the project too and the line came out as “… (project) + 2 background”, naming no termbase at all. The name is what the row is for, so it is now the last thing to go: the row first drops “background”, then “(project)”, then shortens “to the model”, and only when even that will not fit does it cut – from the middle, so the name still starts the line. The full line is on the tooltip as before.
 
 - **The Termbases table clipped its own column headings.** The header row and the rows below it were left at the sizes WinForms chooses for a font this program stopped using, so every heading sat a pixel or two short. They are now measured from the font actually in use, and the Termbase column stretches to the right-hand edge instead of leaving a band of empty grid beside Languages.
 
