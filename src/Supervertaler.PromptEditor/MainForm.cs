@@ -295,9 +295,31 @@ namespace Supervertaler.PromptEditor
             // that gets flipped between jobs rather than set once.
             settingsMenu.DropDownItems.Add(bridgeMode);
 
+            // The shortcut's off switch, here as well as in memoQ's own settings
+            // dialog, because this window is where terminology is managed and
+            // that dialog is four clicks inside Project home.
+            var quickTerm = new ToolStripMenuItem("Alt+Up adds a &term in memoQ") { CheckOnClick = true };
+            quickTerm.ToolTipText =
+                "Select a word in memoQ's grid, press Alt+Up, select its translation, press Alt+Up again."
+                + Environment.NewLine + Environment.NewLine
+                + "The shortcut is live only while memoQ is in front; everywhere else Alt+Up is unchanged.";
+            quickTerm.CheckedChanged += (s, e) =>
+            {
+                if (SharedSettings.QuickTermHotkey == quickTerm.Checked) return;
+                SharedSettings.QuickTermHotkey = quickTerm.Checked;
+                _status.Text = quickTerm.Checked
+                    ? "Alt+Up in memoQ collects a term for the project termbase."
+                    : "Alt+Up in memoQ does nothing; add terms from Translation results instead.";
+            };
+            settingsMenu.DropDownItems.Add(quickTerm);
+
             // memoQ's dialog writes the same file, so re-read on opening rather
             // than trust what this menu was last showing.
-            settingsMenu.DropDownOpening += (s, e) => bridgeMode.Checked = SharedSettings.BridgeMode;
+            settingsMenu.DropDownOpening += (s, e) =>
+            {
+                bridgeMode.Checked = SharedSettings.BridgeMode;
+                quickTerm.Checked = SharedSettings.QuickTermHotkey;
+            };
 
             // memoQ's own dialog writes this file too, so the toolbar has to be
             // re-read when the window comes back to the front rather than trusted

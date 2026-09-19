@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Collections.Generic;
 using System.Globalization;
 using System.IO;
@@ -52,6 +52,7 @@ namespace Supervertaler.MemoQ.Core
         private const string DocumentContextKey = "usedocumentcontext";
         private const string ShowAllModelsKey = "showallmodels";
         private const string StructureContextKey = "structurecontext";
+        private const string QuickTermHotkeyKey = "quicktermhotkey";
         private const string PromptPathKey = "promptpath";
         private const string ApiKeyKey = "apikey";
         private const string SourceLangKey = "langsource";
@@ -223,6 +224,14 @@ namespace Supervertaler.MemoQ.Core
         /// a kill switch, read from the file only. Absent means on.
         /// </summary>
         public static bool StructureContext { get => BoolOr(StructureContextKey, true); set => Write(StructureContextKey, value ? "1" : "0"); }
+
+        /// <summary>
+        /// Whether Alt+Up in memoQ's grid collects a term for the project
+        /// termbase. On by default; the switch exists because this is the one
+        /// feature that watches the keyboard, and anything that does should be
+        /// possible to turn off without uninstalling it.
+        /// </summary>
+        public static bool QuickTermHotkey { get => BoolOr(QuickTermHotkeyKey, true); set => Write(QuickTermHotkeyKey, value ? "1" : "0"); }
 
 
         public static string PromptPath { get => Read(PromptPathKey); set => Write(PromptPathKey, value); }

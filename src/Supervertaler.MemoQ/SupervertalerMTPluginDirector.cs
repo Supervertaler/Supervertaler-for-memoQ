@@ -64,11 +64,17 @@ namespace Supervertaler.MemoQ
             // nothing to connect to, on exactly the projects where reading the
             // document matters most. Initialize runs whenever memoQ does.
             MemoQBridge.EnsureStarted();
+
+            // The same reasoning as the bridge above: Initialize runs whenever
+            // memoQ does, so the shortcut is there for every project rather than
+            // only the ones set to use this plugin for machine translation.
+            Core.QuickTerm.Start();
         }
 
         public void Cleanup()
         {
             _activated = false;
+            Core.QuickTerm.Stop();
             PluginLog.Write("Cleanup");
         }
 

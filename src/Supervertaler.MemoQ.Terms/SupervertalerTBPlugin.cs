@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Collections.Generic;
 using System.Drawing;
 using System.Linq;
@@ -143,49 +143,9 @@ namespace Supervertaler.MemoQ
 
             try
             {
-                var project = TermbaseSelection.CurrentProject;
-                var into = TermbaseSelection.ProjectTermbaseFor(project);
-                string outcome = "cancelled";
-
-                // Its own STA thread with its own message loop: memoQ may call
-                // this from a thread that cannot show a window, and even from its
-                // UI thread a dialog it did not open cannot be parented to it.
-                // Join blocks memoQ's thread until the dialog closes, which is
-                // what a modal quick-add should do.
-                var thread = new Thread(() =>
-                {
-                    try
-                    {
-                        using (var form = new QuickAddForm(sourceLang, targetLang, sourceTerm, targetTerm, into?.Name))
-                        {
-                            if (form.ShowDialog() != DialogResult.OK || into == null) return;
-
-                            // One row through Import rather than AddTerm: Import turns
-                            // the pair round when the termbase runs the other way from
-                            // the project, and refuses a pair already there either way.
-                            var row = new TermbaseFiles.Row
-                            {
-                                Source = form.Source, Target = form.Target,
-                                Forbidden = form.Forbidden, Notes = form.Notes
-                            };
-                            var result = TermbaseWriter.Import(into.Id, new[] { row }, sourceLang, targetLang);
-                            outcome = result.Added == 1
-                                ? "added to " + into.Name + (result.Reversed ? " (turned round for it)" : "")
-                                : "already in " + into.Name;
-                        }
-                    }
-                    catch (Exception ex)
-                    {
-                        outcome = "failed: " + ex.Message;
-                        MessageBox.Show(ex.Message, "Supervertaler – Add term", MessageBoxButtons.OK, MessageBoxIcon.Warning);
-                    }
-                });
-                thread.SetApartmentState(ApartmentState.STA);
-                thread.IsBackground = true;
-                thread.Start();
-                thread.Join();
-
-                PluginLog.Write("TB add term: " + outcome);
+                // The shortcut and this menu item are the same act, so they share
+                // one implementation - see TermQuickAdd.
+                PluginLog.Write("TB add term: " + TermQuickAdd.Show(sourceLang, targetLang, sourceTerm, targetTerm));
             }
             catch (Exception ex)
             {

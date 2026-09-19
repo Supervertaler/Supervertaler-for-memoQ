@@ -2,7 +2,7 @@ using System;
 using System.Drawing;
 using System.Windows.Forms;
 
-namespace Supervertaler.MemoQ
+namespace Supervertaler.MemoQ.Core
 {
     /// <summary>
     /// The dialog behind memoQ's own Add Term button when Supervertaler is the

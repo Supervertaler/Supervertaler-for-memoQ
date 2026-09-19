@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Collections.Generic;
 using System.Diagnostics;
 using System.Drawing;
@@ -46,6 +46,7 @@ namespace Supervertaler.MemoQ.Settings
         private readonly CheckBox _useTerminology = new CheckBox();
         private readonly CheckBox _useDocumentContext = new CheckBox();
         private readonly CheckBox _bridgeMode = new CheckBox();
+        private readonly CheckBox _quickTerm = new CheckBox();
         private readonly Button _test = new Button();
         private readonly Label _status = new Label();
         private readonly Label _storedInfo = new Label();
@@ -252,6 +253,25 @@ namespace Supervertaler.MemoQ.Settings
             Controls.Add(bridgeHint);
             y += 58;
 
+            // The one feature that watches the keyboard, so it has a switch. It
+            // is off nowhere else: the shortcut is swallowed only while memoQ is
+            // the window in front, and only with Alt held and nothing else.
+            _quickTerm.Text = "Alt+Up in the grid collects a term for the project termbase";
+            _quickTerm.Left = fieldX; _quickTerm.Top = y; _quickTerm.AutoSize = true;
+            Controls.Add(_quickTerm);
+            y += 20;
+
+            var quickTermHint = new Label
+            {
+                Text = "Select a word, press Alt+Up, select its translation, press Alt+Up again. "
+                     + "Outside memoQ the shortcut does nothing, so Alt+Up still opens the parent folder in Explorer. "
+                     + "Takes effect straight away; no restart.",
+                Left = fieldX + 18, Top = y, Width = fieldW - 18, Height = 50, AutoSize = false,
+                ForeColor = SystemColors.GrayText
+            };
+            Controls.Add(quickTermHint);
+            y += 58;
+
             // The shared prompt library, the same folder the Trados plugin reads.
             // Selecting one stores its path, not its text, so a prompt edited
             // anywhere takes effect here on the next segment.
@@ -450,6 +470,7 @@ namespace Supervertaler.MemoQ.Settings
             _useTerminology.Checked = SharedSettings.UseTerminologyContextOr(g.UseTerminologyContext);
             _useDocumentContext.Checked = SharedSettings.UseDocumentContextOr(g.UseDocumentContext);
             _bridgeMode.Checked = SharedSettings.BridgeModeOr(g.BridgeMode);
+            _quickTerm.Checked = SharedSettings.QuickTermHotkey;
 
             MemoryBankPicker.Fill(_memoryBank, SharedSettings.MemoryBank);
         }
@@ -1013,6 +1034,7 @@ namespace Supervertaler.MemoQ.Settings
             SharedSettings.UseTerminologyContext = _useTerminology.Checked;
             SharedSettings.UseDocumentContext = _useDocumentContext.Checked;
             SharedSettings.BridgeMode = _bridgeMode.Checked;
+            SharedSettings.QuickTermHotkey = _quickTerm.Checked;
             SharedSettings.ShowAllModels = _showAllModels.Checked;
             SharedSettings.WriteInstructions(_systemPrompt.ReadOnly ? _inlineInstructions : _systemPrompt.Text);
 
