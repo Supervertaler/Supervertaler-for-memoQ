@@ -84,8 +84,40 @@ namespace Supervertaler.MemoQ.Preview
             return System.Drawing.SystemIcons.Application;
         }
 
+        /// <summary>
+        /// Nothing but the resolver and a check, because every type below this
+        /// comes out of memoQ's Preview SDK and the runtime resolves the types a
+        /// method mentions when it compiles that method. Mentioning one here
+        /// would load it before the handler that knows where to find it exists,
+        /// which is why the real entry point is <see cref="Run"/>.
+        /// </summary>
         [STAThread]
         private static void Main(string[] args)
+        {
+            PreviewSdk.Install();
+
+            if (PreviewSdk.Directory == null)
+            {
+                Directory.CreateDirectory(DataDir);
+                Log("memoQ's Preview SDK was not found; the PDF Preview tool is not installed");
+
+                MessageBox.Show(
+                    "Supervertaler's live document link needs memoQ's own PDF Preview tool, which carries "
+                    + "the interface memoQ uses to talk to a preview tool." + Environment.NewLine + Environment.NewLine
+                    + "Install it from memoQ's site and start memoQ again:" + Environment.NewLine
+                    + PreviewSdk.Download + Environment.NewLine + Environment.NewLine
+                    + "Everything else in Supervertaler works without it.",
+                    "Supervertaler – memoQ PDF Preview is needed",
+                    MessageBoxButtons.OK, MessageBoxIcon.Information);
+                return;
+            }
+
+            Log("Preview SDK borrowed from " + PreviewSdk.Directory);
+            Run(args);
+        }
+
+        [System.Runtime.CompilerServices.MethodImpl(System.Runtime.CompilerServices.MethodImplOptions.NoInlining)]
+        private static void Run(string[] args)
         {
             // One instance. memoQ auto-starts the tool; the user may too.
             using (var mutex = new Mutex(true, "Supervertaler.MemoQ.Preview", out var first))

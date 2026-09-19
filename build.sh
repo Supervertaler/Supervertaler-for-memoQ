@@ -264,7 +264,22 @@ if [[ "$DEPLOY_OK" == "1" ]]; then
             echo "WARN  preview tool is running; not replaced (quit it from the tray and rerun)"
         else
             mkdir -p "$PREVIEW_DST"
-            cp "$PREVIEW_SRC"/*.dll "$PREVIEW_SRC"/*.exe "$PREVIEW_SRC"/*.config "$PREVIEW_DST/" 2>/dev/null || true
+
+            # The tool used to carry memoQ's Preview SDK and the four libraries
+            # that come with it. It borrows them from memoQ's PDF Preview tool
+            # now and ships none of them - but a copy left beside the exe is
+            # found by the runtime first, so an old deploy would go on working
+            # and hide the fact that the borrowing is broken. Named one by one:
+            # this deletes from the user's data folder.
+            for stale in MemoQ.PreviewInterfaces Newtonsoft.Json System.Web.Http                          System.Web.Http.SelfHost System.Net.Http.Formatting; do
+                rm -f "$PREVIEW_DST/$stale.dll"
+            done
+
+            # Named rather than globbed. Google Drive leaves "Supervertaler (1)
+            # .MemoQ.Preview.exe" in bin when it resolves a sync conflict, and a
+            # glob deploys that too - which is how one came to be sitting in the
+            # data folder looking current.
+            cp "$PREVIEW_SRC/Supervertaler.MemoQ.Preview.exe"                "$PREVIEW_SRC/Supervertaler.MemoQ.Preview.exe.config" "$PREVIEW_DST/" 2>/dev/null || true
             echo "OK  $(cygpath -w "$PREVIEW_DST")\Supervertaler.MemoQ.Preview.exe"
         fi
     fi

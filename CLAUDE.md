@@ -218,14 +218,30 @@ only write channel; the Preview SDK has no "set target text" call.
   from `AutoStartupCommand` and shows it under Options > External preview
   tools with "Auto-start with memoQ".
 
-**Blocker:** `MemoQ.PreviewInterfaces.dll` ships with preview tools, not with
-memoQ, and its redistribution terms are unknown. Adam has been asked for the
-SDK package; that is now a concrete, specific request: the assembly plus
-permission to reference it. Do not copy the DLL out of the PDF tool's folder
-into our repo. **Status 2026-09-17:** Ádám Gaugecz has forwarded the question
-to Gábor Nagy at memoQ and is arranging a call ("let me ask around who is
-interested and come back with some timeslots"). Still no answer on
-redistribution; still local-only until there is one.
+**Resolved 2026-09-19 without waiting for an answer: we ship none of it.**
+`MemoQ.PreviewInterfaces.dll` ships with memoQ's preview tools rather than with
+memoQ, and its redistribution terms are still unanswered - so the PDF Preview
+tool is now a **prerequisite** and `PreviewSdk.cs` loads the assembly, and the
+four libraries that come with it, out of wherever that tool installed
+(`C:\Program Files\memoQ\memoQ PDF Preview\`, found by search across both
+Program Files roots). Every reference in the preview csproj is `Private=false`:
+compiled against, never copied. The build output is our own exe and its config,
+nothing else. This is the same arrangement the add-in lives under for memoQ's
+own assemblies, it puts the download on memoQ's website where a memoQ component
+belongs, and it needs nothing from memoQ at all.
+
+Two consequences worth knowing. The resolver has to be installed before any SDK
+type is mentioned, so `Main` does that and calls a `NoInlining` `Run` - the
+runtime resolves the types a method names when it compiles that method, not when
+the line is reached. And `build.sh` explicitly deletes the five DLLs an older
+deploy left in the data folder, because a copy beside the exe is found first and
+would hide a broken resolver.
+
+Still worth asking memoQ for redistribution, since it spares the customer an
+install they may have no other use for - but it is now an improvement, not a
+dependency. See `D:\Google Drive\Skills\memoQ call brief 2026-09-19.md`.
+**Status 2026-09-17:** Ádám Gaugecz forwarded the question to Gábor Nagy and is
+arranging a call.
 
 **Privacy note:** the PDF tool's `%APPDATA%\MemoQ.PDFPreview\logs.txt`
 names every document it ever saw. Never paste from it.
