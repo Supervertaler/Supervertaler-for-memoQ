@@ -723,10 +723,19 @@ oversight, and it is not to be re-litigated.
 What follows from it is a rule about *writing*, not about code:
 
 - **A defect in the licensing or trial system, or anything else where the
-  write-up is a working recipe, does not go in a public issue tracker.** Use a
-  GitHub security advisory on the repository, which stays private until
-  published, or a private note. Link to it from a public issue by all means; the
-  stub can say what is being hardened without saying how to exploit it.
+  write-up is a working recipe, does not go anywhere public.** Not an issue, and
+  not a source comment, a commit message, a changelog bullet or a documentation
+  page either - every one of those is in a public repository. Use a GitHub
+  security advisory, which stays private until published, or a private note.
+  Link to it publicly by all means; a stub can say what is being hardened
+  without saying what the old behaviour permitted.
+- The issue tracker is only the obvious one. The Trados side drafted a code
+  comment explaining its licence fix that spelled out the trigger, the effect
+  and the delivery routes - the same recipe, in source, in the same public
+  repository, an hour after the issue came down - and caught it before
+  committing. **State the invariant, never the method:** "only a reply that says
+  active renews the window" says everything a maintainer needs and nothing an
+  attacker can use.
 - The distinction is between source and recipe. Publishing the code is
   transparency, and anyone reading it has to do the work. Publishing the trigger,
   the effect and the repeat interval removes that work for someone who would
