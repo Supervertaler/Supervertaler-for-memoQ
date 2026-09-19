@@ -126,5 +126,64 @@ Check (Finds 'ClO3' 'ClO3-') "and the plain-text spelling of the same thing"
 # one term.
 Check (-not (Finds $mno4m $mno4)) "a charged term is not found in an uncharged segment"
 
+
+# ---- 8. spaces and apostrophes, the commoner half of the fold -----------
+# Taken from the Trados side's lists on 2026-09-19, after a review found that
+# the first pass had adopted only the chemistry - which left every Trados term
+# containing a smart apostrophe unfindable here, in the same termbase, with
+# nothing to see. Far commoner in this work than any formula.
+$spaces = @('00A0','1680','2000','2001','2002','2003','2004','2005','2006','2007',
+            '2008','2009','200A','202F','205F','3000')
+foreach ($cp in $spaces) {
+    $s = 'a' + (U $cp) + 'b'
+    Check ((Fold $s) -eq 'a b') "U+$cp folds to an ordinary space"
+}
+
+# The range stops at U+200A on purpose: U+200B is a zero-width character, not a
+# space, and folding it to a space would be wrong. It is removed on write.
+$zwsp = 'a' + (U '200B') + 'b'
+Check ((Fold $zwsp) -eq $zwsp) "U+200B is NOT folded to a space"
+
+foreach ($cp in @('2018','2019','02BC','FF07')) {
+    $s = "don" + (U $cp) + "t"
+    Check ((Fold $s) -eq "don't") "U+$cp folds to an ordinary apostrophe"
+}
+
+$smart = "don" + (U '2019') + "t"
+Check ((Fold $smart).Length -eq $smart.Length) "and folding an apostrophe keeps the length"
+
+# ---- 9. the write path: what must never be stored -----------------------
+# A term picked up from a segment carries that segment's invisible characters.
+# A zero-width space survives Trim - it is not whitespace - and is not in the
+# fold, so a term stored with one can never match again, in either product,
+# with nothing on screen to explain it. Dead on arrival, permanently.
+$tt = $asm.GetType('Supervertaler.MemoQ.Core.TermText')
+$clean = $tt.GetMethod('Clean', $Static)
+function Clean($s) { return $clean.Invoke($null, [object[]]@($s)) }
+
+foreach ($cp in @('200B','2060','FEFF')) {
+    $dirty = 'draag' + (U $cp) + 'arm'
+    Check ((Clean $dirty) -eq 'draagarm') "U+$cp is removed on write: '$(Clean $dirty)'"
+    Check ((Clean $dirty).Length -eq 8) "and the term is whole again"
+}
+
+# Demonstrate what Trim alone did, which is why this class exists.
+$dirty = 'draag' + (U '200B') + 'arm'
+Check ($dirty.Trim() -eq $dirty) "Trim leaves a zero-width space untouched - the old behaviour"
+
+# Spaces of every kind become one ordinary space, runs collapse, ends go.
+Check ((Clean ('kandidaat' + (U '00A0') + 'koper')) -eq 'kandidaat koper') "a no-break space is stored as an ordinary one"
+Check ((Clean "  elektrische`tmodule  ") -eq 'elektrische module') "tabs and padding are tidied"
+Check ((Clean 'a    b') -eq 'a b') "a run of spaces collapses"
+Check ((Clean $null) -eq '') "null cleans to empty rather than throwing"
+Check ((Clean '   ') -eq '') "and so does whitespace alone"
+
+# What Clean must NOT do: the user's own spelling survives into the pane, the
+# prompt and any export. Folding is for matching, not for storage.
+$curly = "client" + (U '2019') + "s copy"
+Check ((Clean $curly) -eq $curly) "a smart apostrophe is stored as the user wrote it"
+$formula = 'ClO' + (U '2083') + (U '207B')
+Check ((Clean $formula) -eq $formula) "and so is a formula with real subscripts"
+
 Write-Host ''
 Write-Host "SCRIPT CHARS TEST COMPLETE - $fails failure(s)"

@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Collections.Generic;
 using System.IO;
 using Microsoft.Data.Sqlite;
@@ -215,8 +215,12 @@ namespace Supervertaler.MemoQ.Core
                     {
                         if (row == null) continue;
 
-                        var source = (row.Source ?? string.Empty).Trim();
-                        var target = (row.Target ?? string.Empty).Trim();
+                        // Cleaned, not merely trimmed: a term taken from a
+                        // segment can carry a zero-width character, which Trim
+                        // leaves in place and which would make the term
+                        // unmatchable for ever, here and in Trados alike.
+                        var source = TermText.Clean(row.Source);
+                        var target = TermText.Clean(row.Target);
                         if (result.Reversed) { var swap = source; source = target; target = swap; }
                         if (source.Length == 0 || target.Length == 0) continue;
 
@@ -279,8 +283,8 @@ namespace Supervertaler.MemoQ.Core
         /// </summary>
         internal static long AddTerm(long termbaseId, string source, string target, bool forbidden, string notes)
         {
-            var s = (source ?? string.Empty).Trim();
-            var t = (target ?? string.Empty).Trim();
+            var s = TermText.Clean(source);
+            var t = TermText.Clean(target);
             if (s.Length == 0 || t.Length == 0) throw new ArgumentException("A term needs both a source and a target.");
 
             using (var connection = Open())
@@ -327,8 +331,8 @@ namespace Supervertaler.MemoQ.Core
         /// </summary>
         internal static void UpdateTerm(long termId, string source, string target, bool forbidden, string notes)
         {
-            var s = (source ?? string.Empty).Trim();
-            var t = (target ?? string.Empty).Trim();
+            var s = TermText.Clean(source);
+            var t = TermText.Clean(target);
             if (s.Length == 0 || t.Length == 0) throw new ArgumentException("A term needs both a source and a target.");
 
             using (var connection = Open())

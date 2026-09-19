@@ -106,6 +106,9 @@
     <Compile Include="..\Supervertaler.MemoQ\Core\ScriptChars.cs">
       <Link>Core\ScriptChars.cs</Link>
     </Compile>
+    <Compile Include="..\Supervertaler.MemoQ\Core\TermText.cs">
+      <Link>Core\TermText.cs</Link>
+    </Compile>
     <Compile Include="..\Supervertaler.MemoQ\Core\SharedSettings.cs">
       <Link>Shared\SharedSettings.cs</Link>
     </Compile>
