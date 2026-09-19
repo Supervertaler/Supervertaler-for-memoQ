@@ -92,5 +92,39 @@ Check ((Whole $h2o2 $h2o2.IndexOf('O') ($h2o2.IndexOf('O') + 1))) `
 # A term that IS the whole formula is still found.
 Check ((Whole $foldedFormula 0 $foldedFormula.Length)) "the whole formula is a whole word"
 
+
+# ---- 7. the cases that regressed on the Trados side ---------------------
+# They made the charge signs and radical dots word characters, which turned
+# MnO₄⁻ into one token and stopped a termbase entry stored as the bare ion
+# matching a document that writes the charge. That is how every such term saved
+# before today is spelled, and how the Alt+Up shortcut still saves them, so it
+# is the commoner case rather than the exotic one.
+#
+# This matcher counts only letters, digits and underscore as word characters,
+# so the charge should fall outside the match and the bare ion should still be
+# found. Asserted rather than assumed: the whole point of the exchange was that
+# one of us had reasoned where we should have measured.
+function Finds($term, $segment) {
+    $t = Fold $term
+    $seg = Fold $segment
+    $at = $seg.IndexOf($t, [StringComparison]::OrdinalIgnoreCase)
+    if ($at -lt 0) { return $false }
+    return (Whole $seg $at ($at + $t.Length))
+}
+
+$mno4  = 'MnO' + (U '2084')
+$mno4m = 'MnO' + (U '2084') + (U '207B')
+
+Check (Finds $mno4m $mno4m) "a term carrying its own charge matches"
+Check (Finds $mno4 $mno4)   "a bare ion matches a bare ion"
+Check (Finds $mno4 $mno4m)  "a bare ion still matches when the document writes the charge"
+Check (Finds 'OH' ('OH' + (U '2219'))) "a bare radical still matches when the document writes the dot"
+Check (Finds 'ClO3' 'ClO3-') "and the plain-text spelling of the same thing"
+
+# The other direction is the one to be careful about: a term that carries the
+# charge must NOT be found in a segment that lacks it, or the two ions become
+# one term.
+Check (-not (Finds $mno4m $mno4)) "a charged term is not found in an uncharged segment"
+
 Write-Host ''
 Write-Host "SCRIPT CHARS TEST COMPLETE - $fails failure(s)"

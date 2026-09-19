@@ -1,4 +1,5 @@
-using System;
+﻿using System;
+using System.Collections.Generic;
 using System.IO;
 using System.Reflection;
 
@@ -63,17 +64,33 @@ namespace Supervertaler.MemoQ.Preview
             AppDomain.CurrentDomain.AssemblyResolve += Resolve;
         }
 
+        /// <summary>
+        /// Names currently being loaded by this handler.
+        ///
+        /// <para>Without it, a file that exists under the requested name but does
+        /// not satisfy the request - wrong identity, wrong architecture, a
+        /// truncated download - makes LoadFrom raise this same event for the same
+        /// name, which calls LoadFrom again, for ever. The process then dies of a
+        /// StackOverflowException, which cannot be caught and prints nothing, so
+        /// it looks exactly like being killed from outside.</para>
+        /// </summary>
+        private static readonly HashSet<string> InFlight = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+
         private static Assembly Resolve(object sender, ResolveEventArgs args)
         {
+            string name = null;
+
             try
             {
                 var directory = Directory;
                 if (directory == null) return null;
 
                 // The simple name: "MemoQ.PreviewInterfaces, Version=1.0.0.0, ..."
-                var name = new AssemblyName(args.Name).Name;
-                var path = Path.Combine(directory, name + ".dll");
+                name = new AssemblyName(args.Name).Name;
 
+                lock (InFlight) if (!InFlight.Add(name)) return null;
+
+                var path = Path.Combine(directory, name + ".dll");
                 return File.Exists(path) ? Assembly.LoadFrom(path) : null;
             }
             catch
@@ -81,6 +98,13 @@ namespace Supervertaler.MemoQ.Preview
                 // Returning null means "not mine", which is the right answer when
                 // we cannot tell. Throwing from here would take down the load.
                 return null;
+            }
+            finally
+            {
+                // In a finally, not after the load: an assembly that throws on
+                // load would otherwise leave its name blocked for the rest of the
+                // session, and the next honest request for it would be refused.
+                if (name != null) lock (InFlight) InFlight.Remove(name);
             }
         }
 
