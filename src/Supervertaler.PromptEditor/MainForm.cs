@@ -1700,14 +1700,31 @@ namespace Supervertaler.PromptEditor
                 var sources = (e.Source ?? "").Split(separator, StringSplitOptions.RemoveEmptyEntries);
                 var targets = (e.Target ?? "").Split(separator, StringSplitOptions.RemoveEmptyEntries);
 
+                // The note travels with every row a pair splits into. It is the
+                // only part of a prompt's term table that says WHY - "only in the
+                // claims", "never in this sense" - and a termbase built without it
+                // loses the reasoning while keeping the decision, which is the
+                // half that ages worst.
                 if (sources.Length > 1 && sources.Length == targets.Length)
                 {
                     for (var i = 0; i < sources.Length; i++)
-                        rows.Add(new TermbaseFiles.Row { Source = sources[i].Trim(), Target = targets[i].Trim(), Forbidden = e.Forbidden });
+                        rows.Add(new TermbaseFiles.Row
+                        {
+                            Source = sources[i].Trim(),
+                            Target = targets[i].Trim(),
+                            Forbidden = e.Forbidden,
+                            Notes = e.Note
+                        });
                 }
                 else
                 {
-                    rows.Add(new TermbaseFiles.Row { Source = e.Source, Target = e.Target, Forbidden = e.Forbidden });
+                    rows.Add(new TermbaseFiles.Row
+                    {
+                        Source = e.Source,
+                        Target = e.Target,
+                        Forbidden = e.Forbidden,
+                        Notes = e.Note
+                    });
                 }
             }
 
