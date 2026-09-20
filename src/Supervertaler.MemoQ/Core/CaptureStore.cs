@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Collections.Generic;
 using System.Linq;
 using MemoQ.MTInterfaces;
@@ -46,6 +46,29 @@ namespace Supervertaler.MemoQ.Core
 
             /// <summary>Same strings, for O(1) dedup of memoQ's repeat lookups.</summary>
             public HashSet<string> Seen = new HashSet<string>(StringComparer.Ordinal);
+
+            /// <summary>
+            /// memoQ's state for each row it asked about: not started,
+            /// pre-translated, partially edited, confirmed, proofread, machine
+            /// translated, rejected.
+            ///
+            /// <para>Keyed by the source text rather than held in a list beside
+            /// <see cref="Sources"/>, deliberately. A parallel list has to stay
+            /// aligned through every add, cap and copy, and the one that drifts
+            /// reports the wrong status for every row after it - which reads as
+            /// data rather than as a bug. A lookup cannot drift.</para>
+            ///
+            /// <para>Two rows with identical source text share one entry, which is
+            /// honest: a plugin is told nothing that distinguishes them.</para>
+            ///
+            /// <para>Why this is worth keeping at all: a translator cannot
+            /// otherwise tell a row that arrived pre-filled from a row nobody has
+            /// touched. On the first production job the pre-filled targets were
+            /// badly wrong and 231 rows of 799 needed changing, and the client's
+            /// standing instruction is to review every matched row - which was
+            /// unanswerable, because the plugin could not say which they were.</para>
+            /// </summary>
+            public Dictionary<string, int> StatusBySource = new Dictionary<string, int>(StringComparer.Ordinal);
         }
 
         private static readonly object _lock = new object();
@@ -61,6 +84,15 @@ namespace Supervertaler.MemoQ.Core
         private const int MaxDocuments = 50;
 
         public static void Record(EngineContext context, string taggedSource)
+        {
+            Record(context, taggedSource, null);
+        }
+
+        /// <summary>
+        /// As above, remembering memoQ's state for the row when the request
+        /// carried one. Only translation requests do; terminology lookups do not.
+        /// </summary>
+        public static void Record(EngineContext context, string taggedSource, int? status)
         {
             if (context == null || string.IsNullOrWhiteSpace(taggedSource)) return;
 
@@ -103,6 +135,10 @@ namespace Supervertaler.MemoQ.Core
                 {
                     if (doc.Sources.Count < MaxSourcesPerDocument)
                         doc.Sources.Add(taggedSource);
+
+                // Outside the cap deliberately: a row's state is worth knowing
+                // even once the source list is full, and it costs one entry.
+                if (status.HasValue) doc.StatusBySource[taggedSource] = status.Value;
                     else
                         doc.Seen.Remove(taggedSource);
                 }
@@ -197,7 +233,8 @@ namespace Supervertaler.MemoQ.Core
                 ProjectGuid = d.ProjectGuid,
                 LastSeenUtc = d.LastSeenUtc,
                 ViaTerminology = d.ViaTerminology,
-                Sources = new List<string>(d.Sources)
+                Sources = new List<string>(d.Sources),
+                StatusBySource = new Dictionary<string, int>(d.StatusBySource, StringComparer.Ordinal)
             };
         }
     }

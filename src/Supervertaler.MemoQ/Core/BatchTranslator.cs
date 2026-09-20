@@ -62,7 +62,8 @@ namespace Supervertaler.MemoQ.Core
             Func<Segment, int, CancellationToken, Task<TranslationResult>> translateOne,
             CancellationToken cancellationToken,
             Segment[] tmSources = null,
-            Segment[] tmTargets = null)
+            Segment[] tmTargets = null,
+            Func<int, int?> statusOf = null)
         {
             var results = new TranslationResult[segments.Length];
             var batchSize = Math.Max(1, Math.Min(100, context.General.BatchSize));
@@ -88,7 +89,7 @@ namespace Supervertaler.MemoQ.Core
             {
                 var i = pending[k];
                 var tagged = TagBridge.ToTaggedText(segments[i]);
-                CaptureStore.Record(context, tagged);
+                CaptureStore.Record(context, tagged, statusOf?.Invoke(i));
 
                 var staged = StagedTranslations.TryGet(tagged, langPair);
                 if (staged != null)

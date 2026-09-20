@@ -59,6 +59,8 @@ any release tooling that buckets on these headings works for both.
 
 ### Added
 
+- **Each captured row now says what memoQ’s state for it was**: not started, pre-translated, partially edited, confirmed, proofread, machine translated or rejected. Until now there was no way to tell a row that arrived pre-filled from a row nobody had touched – so when a client asked whether the matched rows had been checked, the honest answer was that the plugin could not say which they were. On the first production job the pre-filled targets were badly wrong and 231 rows of 799 needed changing, which is exactly the population this identifies. memoQ reports the state only on translation requests, so it appears on captured rows and not on the live view.
+
 - **One call that answers "did my translations land".** It compares the live grid against everything staged and reports, per document and in total, how many rows carry the staged translation, how many differ, how many are empty and how many have nothing staged – then lists the problem rows and says in a sentence which of those four things to worry about. Verifying a job previously meant reading every document, reading the staged list and joining the two by hand, three times over, and the staged list was too large to read at all.
 
 - **Staged translations are checked before they are stored.** Tags are compared with the source by the same rule the QA check uses, so a dropped placeholder is reported while the translation is still being handed over rather than after it has reached the translator’s file. Differences are reported, never refused: memoQ’s markup varies by file filter and a difference is not always a mistake.

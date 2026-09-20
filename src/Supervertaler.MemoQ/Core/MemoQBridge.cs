@@ -480,11 +480,22 @@ namespace Supervertaler.MemoQ.Core
             var slice = doc.Sources.Skip(offset).Take(limit).Select((source, i) =>
             {
                 var staged = StagedTranslations.TryGetPeek(source, pair);
+
+                // memoQ's own state for the row, when it told us. This is the
+                // only way to tell a row that arrived pre-filled from one nobody
+                // has touched, which is what a client asking "were the matches
+                // checked" actually wants to know.
+                int state;
+                var status = doc.StatusBySource.TryGetValue(source, out state)
+                    ? RowStatus.Describe(state)
+                    : null;
+
                 return new SegmentBody
                 {
                     Index = offset + i + 1,
                     Source = source,
                     Staged = staged?.Target,
+                    Status = status,
                 };
             }).ToArray();
 
@@ -2429,6 +2440,15 @@ namespace Supervertaler.MemoQ.Core
             [DataMember(Name = "target", EmitDefaultValue = false)] public string Target { get; set; }
             [DataMember(Name = "staged", EmitDefaultValue = false)] public string Staged { get; set; }
             [DataMember(Name = "isActive", EmitDefaultValue = false)] public bool? IsActive { get; set; }
+
+            /// <summary>
+            /// memoQ's state for the row, in words: not started, pre-translated,
+            /// partially edited, confirmed, proofread, machine translated,
+            /// rejected. Absent when memoQ did not say, which is every row of a
+            /// live-view document and every row captured through terminology
+            /// lookups rather than translation requests.
+            /// </summary>
+            [DataMember(Name = "status", EmitDefaultValue = false)] public string Status { get; set; }
         }
 
         [DataContract]

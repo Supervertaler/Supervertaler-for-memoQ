@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
@@ -85,7 +85,11 @@ namespace Supervertaler.MemoQ
                         segs, _context,
                         (segment, i, ct) => Task.FromResult(
                             TranslateOne(segment, At(tmSources, i), At(tmTargets, i), RowAt(metadata, i))),
-                        CancellationToken.None, tmSources, tmTargets))
+                        CancellationToken.None, tmSources, tmTargets,
+                        // memoQ's state for the row, recorded with the captured
+                        // source so a reader can tell a row that arrived
+                        // pre-filled from one nobody has touched.
+                        i => RowAt(metadata, i)?.SegmentStatus))
                     .GetAwaiter().GetResult();
             }
             catch (Exception ex)

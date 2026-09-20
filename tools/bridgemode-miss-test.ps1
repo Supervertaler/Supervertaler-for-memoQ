@@ -125,5 +125,37 @@ Check ((TagCount 'Log <spec_char val="&amp;"/> Export' 'Log <inline_tag id="0"/>
 Check ((TagCount 'plain text' 'gewone tekst') -eq 0) `
     "text without tags is never a complaint"
 
+# ---- 6. memoQ's row state is recorded with the captured source ----------
+# Without it a reader cannot tell a row that arrived pre-filled from one nobody
+# has touched. On the first production job the pre-filled targets were badly
+# wrong and 231 rows of 799 needed changing, and the client's standing
+# instruction is to review every matched row - which was unanswerable.
+#
+# Kept as a lookup by source text rather than a list beside the sources: a
+# parallel list has to stay aligned through every add, cap and copy, and the one
+# that drifts reports the wrong state for every row after it, which reads as data
+# rather than as a bug.
+$cs = $asm.GetType('Supervertaler.MemoQ.Core.CaptureStore')
+$capture = $cs.GetNestedType('DocumentCapture', $B)
+Check ($null -ne $capture.GetField('StatusBySource')) "a captured document carries a status per source"
+
+$rs = $asm.GetType('Supervertaler.MemoQ.Core.RowStatus')
+$describe3 = $rs.GetMethod('Describe', $B)
+function State($n) { return $describe3.Invoke($null, [object[]]@([int]$n)) }
+
+# memoQ's TranslationStates constants, recovered from the installed assembly.
+Check ((State 0) -match 'not started|started') "0 reads as not started: $(State 0)"
+Check ((State 1000) -match 'pre-?translated') "1000 reads as pre-translated: $(State 1000)"
+Check ((State 3000) -match 'confirm') "3000 reads as confirmed: $(State 3000)"
+Check ((State 6000) -match 'machine') "6000 reads as machine translated: $(State 6000)"
+
+# The distinction the client's question turns on: pre-translated is not the same
+# as untouched, and both must be nameable.
+Check ((State 0) -ne (State 1000)) "a pre-filled row is distinguishable from an untouched one"
+
+# Record still works without a status, which is how terminology lookups arrive.
+$record = $cs.GetMethods($B) | Where-Object { $_.Name -eq 'Record' }
+Check ($record.Count -eq 2) "Record still has its two-argument form for callers with no status ($($record.Count))"
+
 Write-Host ''
 Write-Host "BRIDGE MODE MISS TEST COMPLETE - $fails failure(s)"
