@@ -637,6 +637,29 @@ namespace Supervertaler.MemoQ.Core
                 return;
             }
 
+            // A part id, where one was given, decides the source text: the
+            // plugin has the row and can quote it exactly, so the caller is not
+            // asked to retype it. Unknown ids are reported rather than silently
+            // falling back, because a wrong id and a right one look identical in
+            // the reply otherwise.
+            var resolved = 0;
+            var unknownParts = new List<string>();
+
+            foreach (var p in req.Pairs)
+            {
+                if (string.IsNullOrEmpty(p.PartId)) continue;
+
+                var part = PreviewStore.GetPart(p.PartId);
+                if (part == null || string.IsNullOrEmpty(part.Source))
+                {
+                    unknownParts.Add(p.PartId);
+                    continue;
+                }
+
+                p.Source = part.Source;
+                resolved++;
+            }
+
             // Trailing whitespace is normalised to the source's BEFORE staging.
             // memoQ appends the source's trailing whitespace to whatever a
             // provider returns, so a target that already carries it arrives in the
@@ -670,6 +693,11 @@ namespace Supervertaler.MemoQ.Core
                 Message = accepted + " translation(s) staged. They reach the grid when the user runs "
                         + "Pre-translate or lands on the matching segments - matched by source text. "
                         + "Nothing is written into memoQ until then."
+                        + (resolved == 0 ? "" : " " + resolved + " of them took their source text from the row id given, "
+                            + "so no transcription was needed.")
+                        + (unknownParts.Count == 0 ? "" : " WARNING: " + unknownParts.Count
+                            + " pair(s) named a row id this plugin does not know (" + string.Join(", ", unknownParts.Take(3))
+                            + "); their source text was used as given, so check it.")
                         + (respaced == 0 ? "" : " " + respaced + " target(s) had their trailing whitespace matched to the source, "
                             + "which memoQ would otherwise have doubled.")
                         + (tagProblems == null ? "" : " WARNING: " + tagProblems)
@@ -2497,6 +2525,23 @@ namespace Supervertaler.MemoQ.Core
         [DataContract]
         internal class StagePairBody
         {
+            /// <summary>
+            /// Which row this is for, from get_segments. Optional.
+            ///
+            /// <para>When given, the plugin takes the source text from its own
+            /// copy of that row and ignores <see cref="Source"/> entirely, so the
+            /// caller never has to re-emit a string character for character. That
+            /// is the whole point: a source retyped with one character wrong is
+            /// accepted and then never matches anything, which on a production job
+            /// left four rows untranslated behind a clean confirmation.</para>
+            ///
+            /// <para>It does NOT fix a paragraph memoQ splits into several grid
+            /// rows. memoQ asks per sentence and a part is a paragraph, so a
+            /// paragraph staged under one id still matches none of its sentences.
+            /// Only staging each sentence does that.</para>
+            /// </summary>
+            [DataMember(Name = "partId")] public string PartId { get; set; }
+
             [DataMember(Name = "source")] public string Source { get; set; }
             [DataMember(Name = "target")] public string Target { get; set; }
         }

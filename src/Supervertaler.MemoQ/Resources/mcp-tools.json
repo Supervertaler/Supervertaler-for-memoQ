@@ -1,4 +1,4 @@
-{
+﻿{
   "schemaVersion": 1,
   "tools": [
     {
@@ -32,7 +32,7 @@
     {
       "name": "get_segments",
       "access": "read",
-      "description": "The document's segments. With the Supervertaler preview tool running this is the LIVE view from memoQ: rows in real order, each with source, current target text, a partId, and isActive on the cursor row. Without it, it is what the plugin has captured from translation requests (source only, in the order memoQ sent them). Tags appear as <b>...</b> or <t1>...</t1> markers - reproduce them exactly in translations. Use offset/limit to page through long documents.",
+      "description": "The document's segments. With the Supervertaler preview tool running this is the LIVE view from memoQ: rows in real order, each with source, current target text, a partId, and isActive on the cursor row. Without it, it is what the plugin has captured from translation requests (source only, in the order memoQ sent them). Use offset/limit to page through long documents. TAGS: Reproduce whatever markup arrives in the source, byte for byte, wherever it belongs in the target. The forms depend on memoQ's import filter and vary between projects: <inline_tag id=\"0\"/> and <spec_char val=\"&amp;\"/> are common, <b>...</b> and <t1>...</t1> occur, and an HTML element can arrive as several spec_char tags rather than one. Placeholders are not consistent either - {0} may arrive as a tag while %1 arrives as literal text - so never normalise or rewrite markup, and never assume a form you have seen before. GROUND TRUTH: after a Pre-translate, get_project lists a captured-requests document (origin 'translation requests'); get_segments on that key returns the exact strings memoQ asked for, each marked with whether it is staged. That is the only view that shows how memoQ actually split the text, and it is the view to verify against.",
       "inputSchema": {
         "type": "object",
         "properties": {
@@ -434,7 +434,7 @@
     {
       "name": "stage_translations",
       "access": "write",
-      "description": "Stage translations for memoQ segments. NOTHING is written into memoQ by this call: staged pairs wait until the user runs Pre-translate or lands on the segment, at which point memoQ asks the plugin and receives your staged text - matched by source text, so 'source' must be the segment's source EXACTLY as get_segments returned it, tags included. Reproduce every <tN>...</tN> tag in the target. Stage in batches; then tell the user to run Pre-translate to pull them in.",
+      "description": "Stage translations for memoQ segments. NOTHING is written into memoQ by this call: staged pairs wait until the user runs Pre-translate or lands on the segment. PREFER partId: give the row's partId from get_segments and the plugin takes the source text from its own copy, so you never retype it - a source with one character wrong is accepted and then never matches anything. Without partId, matching is by source text and 'source' must be EXACTLY as get_segments returned it. BEWARE PARAGRAPHS: get_segments on a live document returns paragraphs, and memoQ asks for a translation per GRID ROW, per sentence. A paragraph memoQ splits matches nothing, whichever way you stage it - it also splits on abbreviations, so a short label can become two rows. For any job beyond a few dozen segments: stage a first pass, have the user run Pre-translate once, then read get_segments on the captured-requests document (the key in get_project whose origin is 'translation requests') which shows the EXACT strings memoQ asks for and which are already staged, stage what is missing, and run Pre-translate again. Reproduce whatever markup arrives in the source, byte for byte, wherever it belongs in the target. The forms depend on memoQ's import filter and vary between projects: <inline_tag id=\"0\"/> and <spec_char val=\"&amp;\"/> are common, <b>...</b> and <t1>...</t1> occur, and an HTML element can arrive as several spec_char tags rather than one. Placeholders are not consistent either - {0} may arrive as a tag while %1 arrives as literal text - so never normalise or rewrite markup, and never assume a form you have seen before. The reply reports pairs whose source matches nothing, tag differences, and trailing whitespace it adjusted; read it.",
       "inputSchema": {
         "type": "object",
         "properties": {
@@ -444,13 +444,21 @@
             "items": {
               "type": "object",
               "properties": {
+                "partId": {
+                  "type": [
+                    "string",
+                    "null"
+                  ],
+                  "description": "The row's partId from get_segments. Strongly preferred: the plugin then quotes the source itself and no transcription can go wrong.",
+                  "default": null
+                },
                 "source": {
                   "type": "string",
-                  "description": "Segment source text, verbatim from get_segments."
+                  "description": "Segment source text, verbatim from get_segments. Ignored when partId is given."
                 },
                 "target": {
                   "type": "string",
-                  "description": "Your translation, tags reproduced."
+                  "description": "Your translation, with the source's markup reproduced exactly."
                 }
               },
               "required": [
@@ -484,14 +492,95 @@
     {
       "name": "get_staged",
       "access": "read",
-      "description": "List everything currently staged, with how many times memoQ has already pulled each one (timesServed > 0 means it reached the grid at least once).",
+      "description": "List what is staged, with how many times memoQ has pulled each one (timesServed > 0 means it reached the grid). Use neverServed=true after a Pre-translate to see only what did NOT land, and compact=true to leave out the targets you wrote yourself - the full list runs to six figures of characters on a real job and will overflow.",
       "inputSchema": {
         "type": "object",
-        "properties": {}
+        "properties": {
+          "offset": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "description": "Skip this many.",
+            "default": null
+          },
+          "limit": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "description": "At most this many (default 200, max 1000).",
+            "default": null
+          },
+          "neverServed": {
+            "type": [
+              "boolean",
+              "null"
+            ],
+            "description": "Only pairs memoQ has never pulled.",
+            "default": null
+          },
+          "sourceContains": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "Only pairs whose source contains this text.",
+            "default": null
+          },
+          "compact": {
+            "type": [
+              "boolean",
+              "null"
+            ],
+            "description": "Leave out target, label and time.",
+            "default": null
+          }
+        }
       },
       "method": "GET",
       "path": "/v1/staged",
-      "paramMap": {},
+      "paramMap": {
+        "offset": "offset",
+        "limit": "limit",
+        "neverServed": "neverServed",
+        "sourceContains": "sourceContains",
+        "compact": "compact"
+      },
+      "fixedQuery": {},
+      "fixedBody": {}
+    },
+    {
+      "name": "compare_staged_to_grid",
+      "access": "read",
+      "description": "Did the staged translations land? Compares the live grid against everything staged and reports, per document and in total, how many rows carry the staged translation, how many differ, how many are EMPTY, and how many have nothing staged - then lists the problem rows. Ask this before telling the user a job is ready to confirm. An empty row with a translation staged for it is the shape of a Pre-translate that cleared it. Note it compares PARAGRAPHS, so a paragraph memoQ split into sentences reads as not staged even when its sentences were staged individually; the note in the reply says which case you are looking at.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "document": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "One document key from get_project; omit for the whole project.",
+            "default": null
+          },
+          "limit": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "description": "At most this many problem rows (default 100, max 500).",
+            "default": null
+          }
+        }
+      },
+      "method": "GET",
+      "path": "/v1/staged/verify",
+      "paramMap": {
+        "document": "document",
+        "limit": "limit"
+      },
       "fixedQuery": {},
       "fixedBody": {}
     },

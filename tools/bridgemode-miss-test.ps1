@@ -157,5 +157,39 @@ Check ((State 0) -ne (State 1000)) "a pre-filled row is distinguishable from an 
 $record = $cs.GetMethods($B) | Where-Object { $_.Name -eq 'Record' }
 Check ($record.Count -eq 2) "Record still has its two-argument form for callers with no status ($($record.Count))"
 
+# ---- 7. the tool catalogue agents actually read -------------------------
+# These definitions live in this repo, not the Trados one - I had believed
+# otherwise and handed them off before checking. The descriptions are the only
+# instructions an agent gets, so a wrong one is a wrong result: the tag wording
+# below described <b> and <t1>, and a real job contained neither, being
+# inline_tag and spec_char throughout.
+$json = Get-Content 'D:\Google Drive\Dev\Sv\Supervertaler-for-memoQ\src\Supervertaler.MemoQ\Resources\mcp-tools.json' -Raw
+$cat = $json | ConvertFrom-Json
+$tools = if ($cat -is [array]) { $cat } else { $cat.tools }
+function Tool($n) { return $tools | Where-Object { $_.name -eq $n } }
+
+Check ($null -ne (Tool 'compare_staged_to_grid')) "the verification tool is published"
+Check ((Tool 'compare_staged_to_grid').path -eq '/v1/staged/verify') "and points at the endpoint that serves it"
+
+$stage = Tool 'stage_translations'
+Check ($null -ne $stage.inputSchema.properties.pairs.items.properties.partId) "a staged pair may name its row id"
+Check ($stage.description -match 'partId') "and the description tells the agent to prefer it"
+Check ($stage.description -match 'per GRID ROW|per sentence') "the paragraph-versus-row trap is stated"
+Check ($stage.description -match 'captured-requests') "and the two-phase procedure points at the ground truth"
+
+$seg = Tool 'get_segments'
+# Not "the string never appears" - <b> and <t1> DO occur and the description
+# lists them among the forms. What must be gone is the claim that they are THE
+# forms, which is what sent an agent looking for tags a job did not contain.
+Check ($seg.description -notmatch 'Tags appear as') "get_segments no longer claims tags appear as one fixed form"
+Check ($seg.description -match 'inline_tag' -and $seg.description -match 'spec_char') "it names the forms that actually occur"
+Check ($seg.description -match 'byte for byte') "and states the rule rather than enumerating"
+
+$gs = Tool 'get_staged'
+foreach ($p in 'offset','limit','neverServed','sourceContains','compact') {
+    Check ($null -ne $gs.inputSchema.properties.$p) "get_staged accepts $p"
+    Check ($gs.paramMap.$p -eq $p) "  and forwards it"
+}
+
 Write-Host ''
 Write-Host "BRIDGE MODE MISS TEST COMPLETE - $fails failure(s)"
