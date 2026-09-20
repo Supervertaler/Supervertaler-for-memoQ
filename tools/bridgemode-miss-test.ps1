@@ -78,5 +78,52 @@ $sentence = $describe.Invoke($null, [object[]]@(, $two))
 Check ($sentence -like '*2 of them*') "the sentence counts them: $($sentence.Substring(0, [Math]::Min(40, $sentence.Length)))..."
 Check ($sentence -like '*draagarm*') "and names them"
 
+# ---- 4. trailing whitespace, which memoQ doubles ------------------------
+# memoQ appends the source's trailing whitespace to whatever a provider returns.
+# A staged target that already carries it arrives in the grid with it twice, and
+# memoQ's own QA then flags the row. Observed on a production job.
+$pc = $asm.GetType('Supervertaler.MemoQ.Core.StagedPairCheck')
+$match = $pc.GetMethod('MatchTrailingWhitespace', $B)
+function Fix($s, $t) { return $match.Invoke($null, [object[]]@([string]$s, [string]$t)) }
+
+Check ((Fix 'Reinstall ' 'Opnieuw installeren ') -eq 'Opnieuw installeren ') "one trailing space in, one out"
+Check ((Fix 'Reinstall ' 'Opnieuw installeren') -eq 'Opnieuw installeren ') "a missing trailing space is added"
+Check ((Fix 'Reinstall' 'Opnieuw installeren ') -eq 'Opnieuw installeren') "an unwanted one is removed"
+Check ((Fix 'Reinstall' 'Opnieuw installeren') -eq 'Opnieuw installeren') "and a clean pair is untouched"
+
+# A target that is nothing but whitespace is not a translation; turning it into
+# the source's trailing run would invent content.
+Check ((Fix 'Reinstall ' '   ') -eq '   ') "an all-whitespace target is left alone"
+# PowerShell turns $null into "" for a [string] parameter, so this goes through Invoke directly.
+Check ($null -eq $match.Invoke($null, [object[]]@([string]'Reinstall ', $null))) "and a null target stays null"
+
+# ---- 5. tag differences are reported, not refused -----------------------
+# A difference is not always an error - memoQ's markup varies by file filter -
+# so these warn rather than refuse. The NAME is the identity, which is all memoQ
+# gives a plugin.
+#
+# Built inline with no helper function: PowerShell unrolls a collection at every
+# boundary it can, including a function's return, so each list is constructed and
+# passed in place.
+$problems = $pc.GetMethod('Problems', $B)
+$KV = [Collections.Generic.KeyValuePair[string,string]]
+
+function TagCount($sourceText, $targetText) {
+    $list = [Collections.Generic.List[Collections.Generic.KeyValuePair[string,string]]]::new()
+    $list.Add($KV::new($sourceText, $targetText))
+    $a = New-Object object[] 1
+    $a[0] = $list
+    return @($problems.Invoke($null, $a)).Count
+}
+
+Check ((TagCount 'About <inline_tag id="0"/> s' 'Ongeveer <inline_tag id="0"/> s') -eq 0) `
+    "a faithfully reproduced placeholder is no complaint"
+Check ((TagCount 'About <inline_tag id="0"/> s' 'Ongeveer s') -eq 1) `
+    "a DROPPED placeholder is reported"
+Check ((TagCount 'Log <spec_char val="&amp;"/> Export' 'Log <inline_tag id="0"/> Export') -eq 1) `
+    "so is a tag of the wrong kind, even when the counts are equal"
+Check ((TagCount 'plain text' 'gewone tekst') -eq 0) `
+    "text without tags is never a complaint"
+
 Write-Host ''
 Write-Host "BRIDGE MODE MISS TEST COMPLETE - $fails failure(s)"

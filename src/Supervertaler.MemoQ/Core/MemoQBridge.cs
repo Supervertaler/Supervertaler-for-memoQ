@@ -293,6 +293,7 @@ namespace Supervertaler.MemoQ.Core
                 case "POST /v1/terms": HandleTermAdd(ctx); return;
                 case "POST /v1/stage": HandleStage(ctx); return;
                 case "GET /v1/staged": HandleStagedList(ctx); return;
+                case "GET /v1/staged/verify": HandleStagedVerify(ctx); return;
                 case "POST /v1/staged/clear": HandleStagedClear(ctx); return;
                 case "GET /v1/prompts": HandlePromptList(ctx); return;
                 case "GET /v1/prompt": HandlePromptGet(ctx); return;
@@ -625,10 +626,23 @@ namespace Supervertaler.MemoQ.Core
                 return;
             }
 
-            var accepted = StagedTranslations.Stage(
-                req.Pairs.Select(p => new KeyValuePair<string, string>(p.Source, p.Target)),
-                pair,
-                req.Label ?? "Claude");
+            // Trailing whitespace is normalised to the source's BEFORE staging.
+            // memoQ appends the source's trailing whitespace to whatever a
+            // provider returns, so a target that already carries it arrives in the
+            // grid with it twice - which memoQ's own QA then flags.
+            var pairs = req.Pairs
+                .Select(p => new KeyValuePair<string, string>(
+                    p.Source, StagedPairCheck.MatchTrailingWhitespace(p.Source, p.Target)))
+                .ToList();
+
+            var respaced = req.Pairs.Count(p => StagedPairCheck.TrailingDiffers(p.Source, p.Target));
+
+            // Tags compared before anything is stored. The QA checks already do
+            // this, but only over a document Pre-translate has already written -
+            // by then a dropped placeholder is in the translator's file.
+            var tagProblems = StagedPairCheck.Describe(StagedPairCheck.Problems(pairs));
+
+            var accepted = StagedTranslations.Stage(pairs, pair, req.Label ?? "Claude");
 
             // Which of these can never match anything. Cheap, and it turns the
             // one failure staging cannot otherwise report into a sentence: a
@@ -645,6 +659,9 @@ namespace Supervertaler.MemoQ.Core
                 Message = accepted + " translation(s) staged. They reach the grid when the user runs "
                         + "Pre-translate or lands on the matching segments - matched by source text. "
                         + "Nothing is written into memoQ until then."
+                        + (respaced == 0 ? "" : " " + respaced + " target(s) had their trailing whitespace matched to the source, "
+                            + "which memoQ would otherwise have doubled.")
+                        + (tagProblems == null ? "" : " WARNING: " + tagProblems)
                         + (missing == null ? "" : " WARNING: " + missing)
             }));
         }
@@ -661,6 +678,43 @@ namespace Supervertaler.MemoQ.Core
         /// <c>compact=true</c> it answers in a few hundred bytes, because a pair
         /// that never fired does not need its target quoting back.</para>
         /// </summary>
+        /// <summary>
+        /// Did the staged translations land, and where did they not. One call, in
+        /// place of reading every document, reading the staged list and joining
+        /// the two by hand - which a real job needed three times.
+        /// </summary>
+        private void HandleStagedVerify(HttpListenerContext ctx)
+        {
+            Guid? only = null;
+            if (Guid.TryParse(ctx.Request.QueryString["document"], out var g)) only = g;
+
+            var max = Math.Min(500, Math.Max(1, ParseInt(ctx.Request.QueryString["limit"], 100)));
+            var r = StagingVerdict.Build(only, max);
+
+            TryWrite(ctx, 200, Json(new StagedVerifyBody
+            {
+                Rows = r.TotalRows,
+                Matches = r.TotalMatches,
+                Differs = r.TotalDiffers,
+                Empty = r.TotalEmpty,
+                NotStaged = r.TotalNotStaged,
+                Truncated = r.Truncated,
+                Note = StagingVerdict.Note(r),
+                Documents = r.Documents.Select(d => new StagedVerifyDocumentBody
+                {
+                    Name = d.Name,
+                    DocumentKey = d.Guid.ToString("D"),
+                    Rows = d.Rows, Matches = d.Matches, Differs = d.Differs,
+                    Empty = d.Empty, NotStaged = d.NotStaged
+                }).ToArray(),
+                Problems = r.Problems.Select(p => new StagedVerifyRowBody
+                {
+                    PartId = p.PartId, DocumentName = p.DocumentName,
+                    Source = p.Source, Verdict = p.Verdict
+                }).ToArray()
+            }));
+        }
+
         private void HandleStagedList(HttpListenerContext ctx)
         {
             var offset = Math.Max(0, ParseInt(ctx.Request.QueryString["offset"], 0));
@@ -2425,6 +2479,41 @@ namespace Supervertaler.MemoQ.Core
         {
             [DataMember(Name = "source")] public string Source { get; set; }
             [DataMember(Name = "target")] public string Target { get; set; }
+        }
+
+        [DataContract]
+        internal class StagedVerifyBody
+        {
+            [DataMember(Name = "rows")] public int Rows { get; set; }
+            [DataMember(Name = "matches")] public int Matches { get; set; }
+            [DataMember(Name = "differs")] public int Differs { get; set; }
+            [DataMember(Name = "empty")] public int Empty { get; set; }
+            [DataMember(Name = "notStaged")] public int NotStaged { get; set; }
+            [DataMember(Name = "truncated")] public bool Truncated { get; set; }
+            [DataMember(Name = "note")] public string Note { get; set; }
+            [DataMember(Name = "documents")] public StagedVerifyDocumentBody[] Documents { get; set; }
+            [DataMember(Name = "problems")] public StagedVerifyRowBody[] Problems { get; set; }
+        }
+
+        [DataContract]
+        internal class StagedVerifyDocumentBody
+        {
+            [DataMember(Name = "name")] public string Name { get; set; }
+            [DataMember(Name = "documentKey")] public string DocumentKey { get; set; }
+            [DataMember(Name = "rows")] public int Rows { get; set; }
+            [DataMember(Name = "matches")] public int Matches { get; set; }
+            [DataMember(Name = "differs")] public int Differs { get; set; }
+            [DataMember(Name = "empty")] public int Empty { get; set; }
+            [DataMember(Name = "notStaged")] public int NotStaged { get; set; }
+        }
+
+        [DataContract]
+        internal class StagedVerifyRowBody
+        {
+            [DataMember(Name = "partId")] public string PartId { get; set; }
+            [DataMember(Name = "documentName")] public string DocumentName { get; set; }
+            [DataMember(Name = "source")] public string Source { get; set; }
+            [DataMember(Name = "verdict")] public string Verdict { get; set; }
         }
 
         [DataContract]
