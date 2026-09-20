@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Threading;
@@ -112,10 +112,32 @@ namespace Supervertaler.MemoQ.Core
             // that is the whole job of this pass. Nothing goes to the model.
             if (context.General.BridgeMode)
             {
-                foreach (var i in pending)
-                    results[i] = new TranslationResult { Translation = Segment.Empty, Confidence = 0 };
+                // An ERROR for each, not an empty translation.
+                //
+                // This returned Segment.Empty until 2026-09-20, and memoQ does
+                // exactly what it is told: it writes the empty string into the
+                // target. So a row with no staged translation did not keep what
+                // was in it - a fuzzy match, an earlier pass, a human's work - it
+                // was silently cleared. Found on a live job where 32 rows came
+                // back blank, every one of which had content before the run.
+                //
+                // A result carrying an Exception is how this SDK says "nothing for
+                // this segment": memoQ shows the message under the grid and leaves
+                // the target alone. The same mechanism the per-segment failure
+                // path below already uses.
+                //
+                // Deliberately one message per row rather than silence. A
+                // pre-translate that quietly does nothing to 32 rows is how this
+                // went unnoticed until the rows were read one by one.
+                var reason = AsMemoQError(new InvalidOperationException(
+                    "No staged translation for this segment. Stage it over the Supervertaler MCP bridge, "
+                    + "or switch off \"Pre-translate only captures and delivers staged translations\" to translate it with the model."));
 
-                PluginLog.Write($"batch: bridge mode – captured {pending.Count} segment(s), not translated");
+                foreach (var i in pending)
+                    results[i] = new TranslationResult { Exception = reason };
+
+                PluginLog.Write($"batch: bridge mode - captured {pending.Count} segment(s), none staged, "
+                    + "reported as no-result so memoQ leaves those targets untouched");
                 return results;
             }
 

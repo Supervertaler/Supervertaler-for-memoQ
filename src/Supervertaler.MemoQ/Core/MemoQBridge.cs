@@ -630,27 +630,71 @@ namespace Supervertaler.MemoQ.Core
                 pair,
                 req.Label ?? "Claude");
 
+            // Which of these can never match anything. Cheap, and it turns the
+            // one failure staging cannot otherwise report into a sentence: a
+            // source re-emitted with a single character wrong is accepted
+            // silently and simply never fires.
+            var missing = StagedSourceCheck.Describe(
+                StagedSourceCheck.Unmatched(req.Pairs.Select(p => p.Source)));
+
+            if (missing != null) PluginLog.Write("stage: " + missing);
+
             TryWrite(ctx, 200, Json(new OkBody
             {
                 Ok = true,
                 Message = accepted + " translation(s) staged. They reach the grid when the user runs "
-                        + "Pre-translate or lands on the matching segments – matched by source text. "
+                        + "Pre-translate or lands on the matching segments - matched by source text. "
                         + "Nothing is written into memoQ until then."
+                        + (missing == null ? "" : " WARNING: " + missing)
             }));
         }
 
+        /// <summary>
+        /// The staged pairs, paged and filtered.
+        ///
+        /// <para>This returned every pair with both texts, on one line. On a real
+        /// job of 713 pairs that was 116,000 characters and overflowed the caller's
+        /// output limit, so the one question it exists to answer - which of my
+        /// translations did not land - could not be asked of it at all.</para>
+        ///
+        /// <para><c>neverServed=true</c> alone answers that, and with
+        /// <c>compact=true</c> it answers in a few hundred bytes, because a pair
+        /// that never fired does not need its target quoting back.</para>
+        /// </summary>
         private void HandleStagedList(HttpListenerContext ctx)
         {
-            var entries = StagedTranslations.Snapshot(null);
+            var offset = Math.Max(0, ParseInt(ctx.Request.QueryString["offset"], 0));
+            var limit = Math.Min(1000, Math.Max(1, ParseInt(ctx.Request.QueryString["limit"], 200)));
+            var compact = ctx.Request.QueryString["compact"] == "1" || ctx.Request.QueryString["compact"] == "true";
+            var neverServed = ctx.Request.QueryString["neverServed"] == "1" || ctx.Request.QueryString["neverServed"] == "true";
+            var contains = ctx.Request.QueryString["sourceContains"];
+
+            var all = StagedTranslations.Snapshot(null);
+            var total = all.Count;
+
+            var filtered = all.AsEnumerable();
+            if (neverServed) filtered = filtered.Where(e => e.TimesServed == 0);
+            if (!string.IsNullOrEmpty(contains))
+                filtered = filtered.Where(e => (e.Source ?? "").IndexOf(contains, StringComparison.OrdinalIgnoreCase) >= 0);
+
+            var matched = filtered.ToList();
+            var page = matched.Skip(offset).Take(limit).ToList();
+
             TryWrite(ctx, 200, Json(new StagedListBody
             {
-                Staged = entries.Select(e => new StagedEntryBody
+                Total = total,
+                Matched = matched.Count,
+                Offset = offset,
+                Returned = page.Count,
+                Staged = page.Select(e => new StagedEntryBody
                 {
                     Source = e.Source,
-                    Target = e.Target,
-                    Label = e.Label,
+                    // Compact drops the target, which is the bulk of the payload
+                    // and the half the caller already knows: it wrote it.
+                    Target = compact ? null : e.Target,
+                    Label = compact ? null : e.Label,
                     TimesServed = e.TimesServed,
-                    StagedUtc = e.StagedUtc.ToString("o")
+                    StagedUtc = compact ? null : e.StagedUtc.ToString("o")
                 }).ToArray()
             }));
         }
@@ -2386,6 +2430,10 @@ namespace Supervertaler.MemoQ.Core
         [DataContract]
         internal class StagedListBody
         {
+            [DataMember(Name = "total")] public int Total { get; set; }
+            [DataMember(Name = "matched")] public int Matched { get; set; }
+            [DataMember(Name = "offset")] public int Offset { get; set; }
+            [DataMember(Name = "returned")] public int Returned { get; set; }
             [DataMember(Name = "staged")] public StagedEntryBody[] Staged { get; set; }
         }
 
