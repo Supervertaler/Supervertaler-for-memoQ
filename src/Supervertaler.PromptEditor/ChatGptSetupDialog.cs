@@ -23,7 +23,24 @@ namespace Supervertaler.PromptEditor
     internal sealed class ChatGptSetupDialog : Form
     {
         private readonly Button _setUp;
+        private readonly Button _claude;
         private readonly Label _status;
+
+        /// <summary>
+        /// The Claude Desktop extension, which the installer puts beside this
+        /// executable. Found relative to ourselves rather than by an absolute
+        /// path, because memoQ's add-ins folder carries the version number of
+        /// whichever memoQ is installed.
+        /// </summary>
+        private static string BundlePath
+        {
+            get
+            {
+                var here = Path.GetDirectoryName(
+                    System.Reflection.Assembly.GetExecutingAssembly().Location);
+                return Path.Combine(here ?? "", "Supervertaler-for-memoQ-MCP-Server.mcpb");
+            }
+        }
 
         /// <summary>
         /// Where the Claude Desktop extension file and its instructions live.
@@ -149,36 +166,36 @@ namespace Supervertaler.PromptEditor
 
             Paragraph("Claude Desktop", bold: true);
 
-            // "Claude Desktop installs itself" was the first wording, and it was
-            // reported as confusing on sight: it says nothing about what the
-            // reader is meant to do, and it leaves the obvious question - why
-            // does one of these have a button and the other not - unanswered.
-            // Say what to do, then why there is no button, then where the file
-            // comes from, which is the question the old text walked straight
-            // past.
+            // This half has been through three wordings. "Claude Desktop installs
+            // itself" said nothing about what to do. Explaining the steps and
+            // linking to a page was better, but still left the reader to find a
+            // file and work an Extensions dialog - while the other half of this
+            // window was one button. The extension now ships with Supervertaler,
+            // so the honest answer is a second button, and the asymmetry that
+            // needed explaining is gone.
             Paragraph(
-                "Claude Desktop adds connections from a file you choose yourself, so there is no " +
-                "button for it here. In Claude Desktop, open Settings, then Extensions, then " +
-                "Advanced settings, then Install extension, and pick the Supervertaler for memoQ " +
-                "file.");
+                "Press the button and Claude Desktop takes over: it asks you to confirm, and the " +
+                "extension is installed. Nothing is downloaded – the file came with Supervertaler.");
+
+            _claude = new Button
+            {
+                Text = "Install in Claude Desktop",
+                Location = new Point(margin, y),
+                AutoSize = true,
+                AutoSizeMode = AutoSizeMode.GrowAndShrink,
+            };
+            _claude.Click += (s, e) => InstallInClaude();
+            Controls.Add(_claude);
+            y += _claude.PreferredSize.Height + 8;
 
             var where = new LinkLabel
             {
-                Text = "Where to get that file, with pictures",
+                Text = "Doing it by hand, with pictures",
                 AutoSize = true,
                 MaximumSize = new Size(inner, 0),
                 Location = new Point(margin, y),
             };
-            where.LinkClicked += (s, e) =>
-            {
-                try { System.Diagnostics.Process.Start(DocsUrl); }
-                catch (Exception ex)
-                {
-                    MessageBox.Show(this, "The page could not be opened: " + ex.Message +
-                        Environment.NewLine + Environment.NewLine + DocsUrl,
-                        "Connect AI assistant", MessageBoxButtons.OK, MessageBoxIcon.Warning);
-                }
-            };
+            where.LinkClicked += (s, e) => Open(DocsUrl, "The page could not be opened");
             where.Size = where.PreferredSize;
             Controls.Add(where);
             y += where.Height + 12;
@@ -197,6 +214,72 @@ namespace Supervertaler.PromptEditor
 
             CancelButton = close;
             ClientSize = new Size(width, close.Bottom + margin);
+        }
+
+        /// <summary>
+        /// Hands the extension to Claude Desktop, which owns the rest: it shows
+        /// its own confirmation and installs it.
+        ///
+        /// <para>Three things can go wrong and each is said plainly rather than
+        /// as a shell error. The file can be missing, if someone copied the
+        /// add-in by hand instead of running the installer. Claude Desktop may
+        /// not be installed, or may not have claimed this kind of file - in
+        /// which case the folder is opened with the file selected, so the user
+        /// can drag it in themselves rather than be told no.</para>
+        /// </summary>
+        private void InstallInClaude()
+        {
+            var bundle = BundlePath;
+            if (!File.Exists(bundle))
+            {
+                MessageBox.Show(this,
+                    "The Claude Desktop extension is not beside Supervertaler." + Environment.NewLine +
+                    Environment.NewLine +
+                    "It is placed there by the installer. If Supervertaler was copied into memoQ's " +
+                    "add-ins folder by hand, the extension can be downloaded instead – the link " +
+                    "below the button has the instructions.",
+                    "Install in Claude Desktop", MessageBoxButtons.OK, MessageBoxIcon.Warning);
+                return;
+            }
+
+            try
+            {
+                System.Diagnostics.Process.Start(bundle);
+            }
+            catch
+            {
+                // Nothing on this machine opens a .mcpb, so show them the file
+                // instead of an error they can do nothing with.
+                try
+                {
+                    System.Diagnostics.Process.Start("explorer.exe", "/select,\"" + bundle + "\"");
+                    MessageBox.Show(this,
+                        "Claude Desktop did not open the file, so it is selected in the folder " +
+                        "instead." + Environment.NewLine + Environment.NewLine +
+                        "In Claude Desktop, open Settings, then Extensions, then Advanced settings, " +
+                        "then Install extension, and choose that file.",
+                        "Install in Claude Desktop", MessageBoxButtons.OK, MessageBoxIcon.Information);
+                }
+                catch (Exception ex)
+                {
+                    MessageBox.Show(this,
+                        "The extension could not be opened: " + ex.Message + Environment.NewLine +
+                        Environment.NewLine + bundle,
+                        "Install in Claude Desktop", MessageBoxButtons.OK, MessageBoxIcon.Warning);
+                }
+            }
+        }
+
+        /// <summary>Opens a link, saying so plainly when it cannot.</summary>
+        private void Open(string url, string whenItFails)
+        {
+            try { System.Diagnostics.Process.Start(url); }
+            catch (Exception ex)
+            {
+                MessageBox.Show(this, whenItFails + ": " + ex.Message +
+                    Environment.NewLine + Environment.NewLine + url,
+                    "Connect AI assistant", MessageBoxButtons.OK, MessageBoxIcon.Warning);
+            }
         }
 
         /// <summary>Where things stand right now, in one line under the button.</summary>

@@ -85,13 +85,24 @@ Name: "english"; MessagesFile: "compiler:Default.isl"
 ; INSIDE memoQ. Installing alone does nothing visible, which is the classic way
 ; a new user concludes a plugin is broken.
 ReadyLabel2a=Supervertaler will be installed into memoQ's own add-ins folder.%n%nmemoQ must be closed. After installing you will need to switch Supervertaler on inside memoQ, which takes a minute and is explained at the end.
-FinishedLabel=Supervertaler is installed, but memoQ does not use it yet.%n%nStart memoQ, then:%n%n    1.  Options, Terminology plugins: tick "Perform terminology plugin lookups while working in the translation grid", find Supervertaler terms and tick Enable plugin.%n%n    2.  Project home, Settings, MT settings: edit your machine translation settings and choose Supervertaler.%n%nThen restart memoQ once. The full instructions are at docs.supervertaler.com/memoq.
+FinishedLabel=Supervertaler is installed, but memoQ does not use it yet.%n%nStart memoQ, then:%n%n    1.  Options, Terminology plugins: tick "Perform terminology plugin lookups while working in the translation grid", find Supervertaler terms and tick Enable plugin.%n%n    2.  Options, Default resources, MT settings: tick Supervertaler and say Yes to all languages. Every new project then uses it. For a project you already have open, choose it under Project home, Settings, MT settings instead.%n%nThen restart memoQ once. The full instructions are at docs.supervertaler.com/memoq.
 
 [Files]
 ; Into memoQ's Addins folder. {code:MemoQAddins} resolves at install time.
 Source: "{#SrcRoot}\Supervertaler.MemoQ\bin\Release\Supervertaler.MemoQ.dll";       DestDir: "{code:MemoQAddins}"; Flags: ignoreversion
 Source: "{#SrcRoot}\Supervertaler.MemoQ.Terms\bin\Release\Supervertaler.MemoQ.Terms.dll"; DestDir: "{code:MemoQAddins}"; Flags: ignoreversion
 Source: "{#SrcRoot}\Supervertaler.PromptEditor\bin\Release\Supervertaler.PromptEditor.exe"; DestDir: "{code:MemoQAddins}"; Flags: ignoreversion
+
+; The Claude Desktop extension, beside the editor because that is where the
+; editor looks for it - the Connect AI assistant dialog opens it for the user
+; rather than sending them to a download page. memoQ ignores it: it scans this
+; folder for assemblies carrying a Module attribute, and this is a zip.
+;
+; It is an order of magnitude larger than everything else here put together.
+; That is the trade accepted on purpose: Claude Desktop is the route most users
+; take, and an installer that carries it works with no network, no GitHub and no
+; release to point at.
+Source: "..\dist\Supervertaler-for-memoQ-MCP-Server.mcpb"; DestDir: "{code:MemoQAddins}"; Flags: ignoreversion
 
 ; The live document link, in our own folder.
 Source: "{#SrcRoot}\Supervertaler.MemoQ.Preview\bin\Release\Supervertaler.MemoQ.Preview.exe";        DestDir: "{app}"; Flags: ignoreversion

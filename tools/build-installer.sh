@@ -22,6 +22,23 @@ for f in "$PLUGIN" "$TERMS" "$EDITOR" "$PREVIEW"; do
     [[ -f "$f" ]] || { echo "ERROR: not built: $f" >&2; echo "       Run: bash build.sh --no-deploy" >&2; exit 1; }
 done
 
+# The Claude Desktop extension is shipped inside the installer rather than
+# downloaded, so it has to exist before the installer is built - and it has to be
+# NEWER than the plugin, or the installer quietly carries a bundle built against
+# an older server. Not built here: packing it publishes the server out of the
+# Trados checkout and takes minutes, which does not belong in every installer
+# build.
+BUNDLE="$ROOT/dist/Supervertaler-for-memoQ-MCP-Server.mcpb"
+[[ -f "$BUNDLE" ]] || { echo "ERROR: the Claude Desktop extension is missing: $BUNDLE" >&2
+                        echo "       Run: python tools/build_mcpb.py --version 0.1.0" >&2; exit 1; }
+
+if [[ "$PLUGIN" -nt "$BUNDLE" ]]; then
+    echo "ERROR: the Claude Desktop extension is older than the plugin." >&2
+    echo "       Shipping it would put a stale server in front of users." >&2
+    echo "       Run: python tools/build_mcpb.py --version 0.1.0" >&2
+    exit 1
+fi
+
 # The version comes from the assembly rather than from a number typed here, so
 # the installer and the plugin can never disagree about what this is.
 VERSION="$(powershell.exe -NoProfile -Command \
@@ -38,12 +55,28 @@ powershell.exe -NoProfile -File "$(cygpath -w "$ROOT/tools/make-wizard-images.ps
 
 # --- the installer ----------------------------------------------------------
 mkdir -p "$ROOT/dist"
+SETUP="$ROOT/dist/Supervertaler-for-memoQ-$VERSION.exe"
+
+# Removed before the build, so a compile that fails cannot leave the PREVIOUS
+# installer sitting there looking like the answer. That happened twice in one
+# evening: the output file was open on screen, Inno could not overwrite it, and
+# the existence check below passed against a build from ten minutes earlier.
+rm -f "$SETUP"
+
 MSYS2_ARG_CONV_EXCL="/D" "$ISCC" \
     "/DAppVersion=$VERSION" \
     "$(cygpath -w "$ROOT/installer/Supervertaler-for-memoQ.iss")" \
     | grep -E "^Successful|error|Error" || true
 
-SETUP="$ROOT/dist/Supervertaler-for-memoQ-$VERSION.exe"
+# PIPESTATUS, not $?, which belongs to grep and is happy whatever Inno did.
+ISCC_STATUS=${PIPESTATUS[0]}
+if [[ $ISCC_STATUS -ne 0 ]]; then
+    echo "ERROR: Inno Setup failed (exit $ISCC_STATUS)" >&2
+    echo "       If it could not write the output file, close any installer window" >&2
+    echo "       that is still open and run this again." >&2
+    exit 1
+fi
+
 [[ -f "$SETUP" ]] || { echo "ERROR: the installer was not produced" >&2; exit 1; }
 
 # --- the zip, installer plus the loose files --------------------------------
