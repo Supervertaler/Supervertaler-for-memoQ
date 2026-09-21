@@ -134,6 +134,39 @@ Check ($replaced -notmatch 'Somewhere\\Old') 'the old server path is gone'
 Check ($replaced -match '\[mcp_servers\.kept\]') 'the block after it is kept'
 Check ($replaced -match 'C:\\kept\.exe') 'with its contents'
 
+# ---- 8. the same shared code, shaped the way Trados uses it ---------------
+# Trados has its own copy for the moment and adopts the shared one when it
+# suits them. These are the cases their data reaches and memoQ's never does -
+# no environment at all, and a block name that is a PREFIX of memoQ's. Pinned
+# here rather than in a second harness, since it is the same two functions.
+$optType = $asm.GetType('Supervertaler.Core.ChatGptMcpSetup+Options')
+$trados = [Activator]::CreateInstance($optType)
+$trados.ProductName = 'Trados'
+$trados.BlockName = 'mcp_servers.supervertaler'
+$trados.ServerDir = 'D:\Supervertaler\trados\mcp'
+$trados.Environment = $null
+$trados.BlockComment = '# Supervertaler for Trados.'
+
+$tblock = $buildBlock.Invoke($null, [object[]]@($trados))
+Check ($tblock -notmatch '(?m)^env = ') 'a product with no environment gets no env line at all'
+Check ($tblock -match '(?m)^\[mcp_servers\.supervertaler\]$') 'and its own block header'
+Check ($tblock -match 'trados\\mcp\\SupervertalerMcpServer\.exe') 'pointing at its own server'
+
+# The prefix trap from the other side: removing the SHORTER name must not take
+# the longer one with it. This is the direction that would actually happen -
+# Trados rewrites its block on a machine where memoQ is also registered.
+$both = (Apply $existing)
+$tradosRemoved = $removeOurs.Invoke($null, [object[]]@($both, $trados.BlockName))
+Check ($tradosRemoved -match '\[mcp_servers\.supervertaler_memoq\]') `
+      'a Trados rewrite leaves the memoQ block alone, although its name starts the same'
+# Plain apostrophes only inside a single-quoted string: PowerShell accepts the
+# curly ones, U+2018 and U+2019, as string delimiters too, so a typographic
+# apostrophe here ends the string and the parser then blames a line further
+# down that is perfectly fine.
+Check ($tradosRemoved -match 'SUPERVERTALER_HOST') 'including the line that says which CAT tool it is for'
+Check ($tradosRemoved -notmatch '(?m)^\[mcp_servers\.supervertaler\]$') 'and removes its own'
+Check ($tradosRemoved -match '\[mcp_servers\.someone_elses\]') "and still nobody else's"
+
 Write-Host ''
 if ($fails -gt 0) { Write-Host "$fails failed"; exit 1 }
 Write-Host 'all passed'
