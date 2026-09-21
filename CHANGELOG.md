@@ -29,7 +29,7 @@ any release tooling that buckets on these headings works for both.
 
 ### Fixed
 
-- **The OK and Cancel buttons were cut off in the New termbase dialog.** Its height was a fixed number and the buttons were placed a fixed distance up from the bottom, with nothing setting how tall a button is – so at a larger interface font the buttons grew past the edge they had been measured against. The dialog is now as tall as its contents turn out to be, and the buttons are as wide and as tall as their text needs.
+- **Buttons were cut off, and a long caption ran off the edge, in the New termbase and New memory bank dialogs.** Both set a fixed size and placed their buttons a fixed distance up from the bottom without saying how tall a button is – so at a larger interface font the buttons grew past the edge they had been measured against. The caption was a label that could not wrap, so a sentence longer than the dialog simply disappeared off the right. Both dialogs are now as tall as their contents turn out to be, captions wrap, and buttons are as wide and as tall as their text needs. A test now builds each dialog and measures whether anything sticks out past its own edge, at whatever font the machine is set to.
 
 - **A trailing space was doubled.** memoQ appends the source’s trailing whitespace to whatever a translation provider returns, so a staged target that already carried it arrived in the grid with it twice – which memoQ’s own QA then flagged. Staged targets now have their trailing whitespace matched to the source, and the reply says how many were adjusted.
 

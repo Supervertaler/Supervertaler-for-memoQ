@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Collections.Generic;
 using System.Drawing;
 using System.Windows.Forms;
@@ -27,39 +27,53 @@ namespace Supervertaler.PromptEditor
             MaximizeBox = false;
             ShowInTaskbar = false;
             AppIcon.Apply(this);
-            ClientSize = new Size(420, 118);
 
+            // Width is a choice; height is measured. This was a fixed 420 by 118
+            // with the buttons at a fixed y and no height set on them, so a
+            // larger interface font pushed them through the bottom edge and a
+            // caption of more than a few words ran off the right. Both reported.
+            var width = 460;
+            var margin = 12;
+            var inner = width - margin * 2;
+
+            // AutoSize with a MaximumSize wraps, and the height it reports is the
+            // wrapped height - which is what the rest of the layout is built on,
+            // so a two-sentence caption pushes the box down instead of running
+            // off the edge.
             var caption = new Label
             {
                 Text = label,
                 AutoSize = true,
-                Location = new Point(12, 14)
+                MaximumSize = new Size(inner, 0),
+                Location = new Point(margin, 14)
             };
+            caption.Size = caption.PreferredSize;
+
+            var y = caption.Bottom + 8;
 
             _box = new TextBox
             {
                 Text = initial ?? "",
-                Location = new Point(12, 36),
-                Width = ClientSize.Width - 24,
+                Location = new Point(margin, y),
+                Width = inner,
                 Anchor = AnchorStyles.Top | AnchorStyles.Left | AnchorStyles.Right
             };
             _box.SelectAll();
 
-            var ok = new Button
-            {
-                Text = "OK",
-                DialogResult = DialogResult.OK,
-                Location = new Point(ClientSize.Width - 178, 74),
-                Width = 80
-            };
+            y = _box.Bottom + 14;
 
-            var cancel = new Button
-            {
-                Text = "Cancel",
-                DialogResult = DialogResult.Cancel,
-                Location = new Point(ClientSize.Width - 92, 74),
-                Width = 80
-            };
+            var ok = new Button { Text = "OK", DialogResult = DialogResult.OK };
+            var cancel = new Button { Text = "Cancel", DialogResult = DialogResult.Cancel };
+
+            var buttonWidth = Math.Max(80, Math.Max(ok.PreferredSize.Width, cancel.PreferredSize.Width) + 16);
+            var buttonHeight = Math.Max(26, Math.Max(ok.PreferredSize.Height, cancel.PreferredSize.Height));
+
+            ok.Size = new Size(buttonWidth, buttonHeight);
+            cancel.Size = new Size(buttonWidth, buttonHeight);
+            cancel.Location = new Point(width - margin - buttonWidth, y);
+            ok.Location = new Point(cancel.Left - 6 - buttonWidth, y);
+
+            ClientSize = new Size(width, y + buttonHeight + margin);
 
             Controls.AddRange(new Control[] { caption, _box, ok, cancel });
             AcceptButton = ok;
