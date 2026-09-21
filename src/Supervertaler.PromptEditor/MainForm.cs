@@ -313,6 +313,18 @@ namespace Supervertaler.PromptEditor
             };
             settingsMenu.DropDownItems.Add(quickTerm);
 
+            settingsMenu.DropDownItems.Add(new ToolStripSeparator());
+
+            // Claude Desktop installs its own bundle and needs nothing from us.
+            // ChatGPT has no equivalent, so this is where that gap is filled -
+            // and it belongs on the same menu as the bridge switch, since the two
+            // are the same subject: which assistant is driving memoQ.
+            settingsMenu.DropDownItems.Add(new ToolStripMenuItem("&Connect AI assistant…", null, (s, e) => ConnectAiAssistant())
+            {
+                ToolTipText = "Set up ChatGPT desktop to see the project open in memoQ. "
+                            + "Claude Desktop installs itself and is not set up here."
+            });
+
             // memoQ's dialog writes the same file, so re-read on opening rather
             // than trust what this menu was last showing.
             settingsMenu.DropDownOpening += (s, e) =>
@@ -1378,6 +1390,17 @@ namespace Supervertaler.PromptEditor
         /// half-made change should not be visible to it. It is written once, on
         /// OK.</para>
         /// </summary>
+        /// <summary>
+        /// Connecting an AI assistant. Only ChatGPT needs anything done to it;
+        /// the dialog says so rather than leaving someone hunting for a Claude
+        /// button that does not exist.
+        /// </summary>
+        private void ConnectAiAssistant()
+        {
+            using (var dialog = new ChatGptSetupDialog())
+                dialog.ShowDialog(this);
+        }
+
         private void ShowTermbases()
         {
             using (var dialog = new TermbasesDialog())

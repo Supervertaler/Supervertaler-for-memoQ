@@ -665,6 +665,25 @@ locates the current memoQ directory is a real requirement, not a nicety.
     Verified over stdio: 19 memoQ tools, no instance tools, get_project
     answered. One server, two thin bundles. `dist/` is gitignored (29 MB).
 
+    **ChatGPT desktop, 2026-09-21.** Same server again, registered a different
+    way: ChatGPT has no equivalent of Claude Desktop's one-click bundle, so the
+    editor writes a block into `~/.codex/config.toml`, the file ChatGPT desktop
+    shares with Codex CLI and the Codex IDE extension. The work is
+    `core/src/ChatGptMcpSetup.cs` - ported from the Trados plugin with core's
+    owner's agreement, parameterised by a small options object - and the memoQ
+    side is `ChatGptSetupDialog`, on Settings > Connect AI assistant.
+
+    Three things about it worth not rediscovering. The block name carries the
+    product (`mcp_servers.supervertaler_memoq`), so both products register side
+    by side rather than overwriting each other. The environment goes in as an
+    INLINE table, never a `[<block>.env]` section: a sub-table is a table
+    header, and the remover ends our block at the next one, so an env section
+    would survive a rewrite and reattach itself to whatever came after. And the
+    server executable is published only with the **Trados** releases, resolved
+    by asset name against `releases/latest` rather than a pinned tag - a
+    dependency memoQ cannot enforce, and the reason the server eventually wants
+    its own repository. `tools/codex-config-test.ps1` pins all three.
+
 12. ~~Export glossary from a prompt~~ — shipped 2026-09-02. Core's
     `PromptGlossaryExtractor` reads every source/target table in a prompt
     (AutoPrompt's locked-terms table, or any laid out the same way), turns
