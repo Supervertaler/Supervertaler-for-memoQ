@@ -48,7 +48,11 @@ namespace Supervertaler.PromptEditor
         /// The dialog cannot fetch that one, so the least it can do is not leave
         /// the reader to search for it.
         /// </summary>
-        private const string DocsUrl = "https://docs.supervertaler.com/memoq/mcp-server/";
+        /// Anchored at the section that answers the question, not the top of the
+        /// page: someone who presses a link called "how to do it by hand" wants
+        /// the steps, not a page about MCP servers to scroll through.
+        private const string DocsUrl =
+            "https://docs.supervertaler.com/memoq/mcp-server/#setting-it-up";
 
         /// <summary>
         /// What this product is, as far as the shared setup is concerned. The
