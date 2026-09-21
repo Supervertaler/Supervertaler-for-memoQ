@@ -76,7 +76,7 @@ function DrawMark($g, $left, $top, $size) {
     } finally { $fS.Dispose(); $fv.Dispose(); $white.Dispose(); $fam.Dispose() }
 }
 
-function Draw($width, $height, $markSize, $path, $format) {
+function Draw($width, $height, $markSize, $path, $format, $markLeft = $null) {
     $bmp = New-Object System.Drawing.Bitmap($width, $height)
     $g = [System.Drawing.Graphics]::FromImage($bmp)
     try {
@@ -91,7 +91,8 @@ function Draw($width, $height, $markSize, $path, $format) {
         $g.SmoothingMode = [System.Drawing.Drawing2D.SmoothingMode]::AntiAlias
         $g.TextRenderingHint = [System.Drawing.Text.TextRenderingHint]::AntiAliasGridFit
 
-        DrawMark $g (($width - $markSize) / 2) (($height - $markSize) / 2) $markSize
+        $left = if ($null -eq $markLeft) { ($width - $markSize) / 2 } else { $markLeft }
+        DrawMark $g $left (($height - $markSize) / 2) $markSize
 
         $bmp.Save($path, $format)
     } finally { $g.Dispose(); $bmp.Dispose() }
@@ -103,7 +104,23 @@ $png = [System.Drawing.Imaging.ImageFormat]::Png
 
 Write-Host 'wizard images:'
 Draw 164 314 128 (Join-Path $out 'wizard-large.bmp') $bmp   # the tall panel on the first and last pages
-Draw  55  58  48 (Join-Path $out 'wizard-small.bmp') $bmp   # the corner mark on every other page
+# The header mark, drawn at the size of the slot Inno puts it in rather than the
+# 55x58 the documentation suggests, and with the mark against the LEFT of it.
+#
+# Both of those are the fix for the same complaint: Inno right-aligns this slot
+# hard against the window edge, so the mark sat closer to its edge than the page
+# title sits to the other one. The first attempt moved Inno's own image control
+# from [Code], which worked arithmetically and left a slice of the circle
+# unpainted and a line trailing out of it - reported twice before it was
+# believed. Moving a control Inno has already laid out is not worth the fight.
+#
+# So the white space goes in the bitmap instead and Inno positions nothing. A
+# probe installer reports the slot as 73x77 with Stretch on, which is where these
+# numbers come from - matching it exactly also means no resampling, so the mark
+# is sharper than it was. The mark is smaller than it would be centred, because
+# the slack in a 73-wide slot is all there is to give: the alternative is moving
+# the control, and that is what left a hole in it.
+Draw  73  77  48 (Join-Path $out 'wizard-small.bmp') $bmp 0
 
 # The MCP bundle's icon, which Claude Desktop shows beside the extension. It was
 # sv-icon-512.png - the blue one - for the same reason the wizard was.

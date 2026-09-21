@@ -2643,24 +2643,46 @@ namespace Supervertaler.MemoQ.Core
             [DataMember(Name = "app")] public string App { get; set; }
         }
 
+        // Shown whenever the user asks what they can do, so it is the one piece
+        // of text in the product that describes the whole feature set - and the
+        // one most likely to go quietly out of date, because nothing breaks when
+        // it does. It had been written before the live document link, the QA
+        // checks and the termbases existed, so it still said the cursor could
+        // not be moved and that terms went into a glossary that no longer
+        // exists. An assistant reading both this and the tool list noticed the
+        // contradiction and told the user the help was outdated, which is a
+        // better outcome than being believed, but not one to rely on.
+        //
+        // If a tool is added or removed, this changes in the same commit.
+        // tools/help-card-test.ps1 fails when it names something that is not a
+        // tool, or misses a capability the tool list claims.
         private const string HelpCard = @"# Supervertaler for memoQ – what you can ask
 
-**Reading the project** (the plugin sees what memoQ sends it – after one Pre-translate pass it has the whole document):
-- *What is this project about?* – languages, client, domain, captured documents
-- *Show me the segments* – the captured source text, with anything already staged
-- *What has the translator confirmed so far?* – human-approved pairs, the gold standard for style and terminology
+**Reading the project** (after one Pre-translate pass the plugin has seen the whole document):
+- *What is this project about?* – languages, client, domain, documents
+- *Show me the segments* – source and, with the preview tool running, the current target text too
+- *What has the translator confirmed so far?* – human-approved pairs, the best guide to this job's style and terminology
+
+**Where the translator is** (needs the Supervertaler preview tool, which memoQ starts by itself once it is registered):
+- *What segment am I on?* – the paragraph and the sentence within it that is selected
+- *Take me to segment 42* – moves the cursor in memoQ, to a row or to one sentence of a paragraph
 
 **Terminology:**
-- *Look up a term* – search the Supervertaler glossary
-- *Add a term* – appended to the glossary; memoQ's terminology pane and every later translation request pick it up
+- *Look up a term* – searches the termbases this project reads
+- *Add a term* – written to the project's termbase, so memoQ's terminology pane and every later translation request pick it up
+
+**Checking a translation** (needs the preview tool, since it reads the target text):
+- *Check the numbers / the tags / the non-breaking spaces / the terminology*
+- *Find inconsistencies* – the same source translated two different ways
 
 **Translating (the memoQ way):**
-- *Translate these segments* – translations are **staged**, not written. They reach the grid when the user runs Pre-translate or lands on the segment: memoQ asks the plugin, and the plugin serves your staged text. Nothing changes in memoQ until the user acts.
-- *What's staged?* / *Clear the staging area*
+- *Translate these segments* – translations are **staged**, not written. They reach the grid when the user runs Pre-translate or lands on the segment: memoQ asks the plugin, and the plugin serves the staged text. Nothing changes in memoQ until the user acts.
+- *What's staged?* / *Which of my translations actually landed?* / *Clear the staging area*
 
-**Prompts:**
-- *List / read / save prompts* in the shared Supervertaler library. Draft a project-specific prompt, save it, and the user selects it under Resources > Settings > MT > Supervertaler.
+**Prompts and memory:**
+- *List / read / save prompts* in the shared Supervertaler library. Draft a prompt for this job, save it, and the user selects it under Resources > Settings > MT > Supervertaler.
+- *What do we know about this client?* – the SuperMemory banks: instructions, style preferences and past decisions.
 
-**What this bridge cannot do:** move the cursor, edit segments directly, confirm anything, or read memoQ's own TMs and termbases – memoQ gives plugins no API for any of that. The translator stays the hands.";
+**What this bridge cannot do:** type into the grid, confirm a segment, or read memoQ's own translation memories – memoQ gives plugins no API for any of that. The translator stays the hands.";
     }
 }
