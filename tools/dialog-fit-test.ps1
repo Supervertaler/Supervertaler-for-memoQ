@@ -1,4 +1,4 @@
-﻿# Does anything in a dialog stick out past its own edge?
+# Does anything in a dialog stick out past its own edge?
 #
 # Two clipping reports in one day, both the same shape: a fixed ClientSize with
 # controls placed at fixed offsets from it, and no height set on the buttons - so
@@ -174,7 +174,18 @@ try {
     # check - it is the specific sentence that said nothing about what to do.
     $texts = @($dlg.Controls | ForEach-Object { $_.Text }) -join ' '
     Check ($texts -notmatch 'installs itself') 'the dialog does not say an assistant "installs itself"'
-    Check ($texts -match 'no button') 'it says why one assistant has no button'
+    # This used to assert the dialog EXPLAINED why one assistant had no button.
+    # It has one now, so that sentence had to go, and the check with it - the
+    # harness flagged the stale assertion on the first run after the change,
+    # which is the whole reason it pins wording as well as geometry.
+    #
+    # What matters now is that neither half sends the user off to find a file:
+    # both are a single press.
+    Check ($texts -notmatch 'no button') 'neither assistant is described as having no button'
+
+    $buttons = @($dlg.Controls | Where-Object { $_ -is [Windows.Forms.Button] } | ForEach-Object { $_.Text })
+    Check ($buttons -contains 'Set up ChatGPT desktop') 'ChatGPT has its button'
+    Check ($buttons -contains 'Install in Claude Desktop') 'and Claude Desktop has one too'
 
     foreach ($b in @($dlg.Controls | Where-Object { $_ -is [Windows.Forms.Button] })) {
         Check ($b.Bottom -le $dlg.ClientSize.Height) "$($b.Text) sits inside the bottom edge ($($b.Bottom) of $($dlg.ClientSize.Height))"

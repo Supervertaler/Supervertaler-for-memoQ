@@ -88,6 +88,23 @@ try {
         Say "--  prompt editor not staged; skipped"
     }
 
+    # The Claude Desktop extension, which the editor's Connect AI assistant
+    # button hands to Claude. The installer puts it here; a developer deploy has
+    # to as well, or that button reports the file missing on the one machine
+    # where it is most likely to be pressed. memoQ ignores it - it scans this
+    # folder for assemblies carrying a Module attribute, and this is a zip.
+    #
+    # Not fatal when absent: it is built by tools/build_mcpb.py, which publishes
+    # the server out of the Trados checkout and takes minutes, so it is not part
+    # of an ordinary build.
+    $bundle = Join-Path $stage 'Supervertaler-for-memoQ-MCP-Server.mcpb'
+    if (Test-Path -LiteralPath $bundle) {
+        Deploy $bundle (Join-Path $addins 'Supervertaler-for-memoQ-MCP-Server.mcpb')
+    }
+    else {
+        Say "--  Claude Desktop extension not staged; skipped"
+    }
+
     exit 0
 }
 catch {

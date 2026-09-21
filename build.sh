@@ -241,6 +241,15 @@ mkdir -p "$STAGE"
 cp "$OUTPUT" "$OUTPUT_TB" "$OUTPUT_ED" "$STAGE/"
 cp "$ROOT/tools/deploy.ps1" "$STAGE/"
 
+# The Claude Desktop extension, when it has been built. The installer ships it
+# beside the editor and the editor's Connect AI assistant button looks for it
+# there, so a developer deploy that leaves it out is a machine where that button
+# reports the file missing - the one machine where it gets pressed most. Copied
+# rather than built: building it publishes the server out of the Trados checkout
+# and takes minutes.
+BUNDLE="$ROOT/dist/Supervertaler-for-memoQ-MCP-Server.mcpb"
+[[ -f "$BUNDLE" ]] && cp "$BUNDLE" "$STAGE/"
+
 echo
 powershell.exe -NoProfile -ExecutionPolicy Bypass -Command "
 \$p = Start-Process powershell.exe -ArgumentList '-NoProfile -ExecutionPolicy Bypass -File C:\Temp\sv-deploy\deploy.ps1 -PluginDll C:\Temp\sv-deploy\Supervertaler.MemoQ.dll -LogFile C:\Temp\sv-deploy\deploy.log' -Verb RunAs -Wait -PassThru -WindowStyle Hidden
@@ -256,7 +265,7 @@ DEPLOY_LOG=""
 # on the DLLs' own OK lines and declared success.
 DEPLOY_OK=1
 MISSING=""
-for f in Supervertaler.MemoQ.dll Supervertaler.MemoQ.Terms.dll Supervertaler.PromptEditor.exe; do
+for f in Supervertaler.MemoQ.dll Supervertaler.MemoQ.Terms.dll Supervertaler.PromptEditor.exe          Supervertaler-for-memoQ-MCP-Server.mcpb; do
     staged="$STAGE/$f"
     landed="$ADDINS/$f"
     [[ -f "$staged" ]] || continue

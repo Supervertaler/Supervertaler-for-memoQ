@@ -91,8 +91,34 @@ cp "$PLUGIN" "$TERMS" "$EDITOR" "$STAGE/"
 
 ZIP="$ROOT/dist/Supervertaler-for-memoQ-$VERSION.zip"
 rm -f "$ZIP"
-powershell.exe -NoProfile -Command \
-    "Compress-Archive -Path '$(cygpath -w "$STAGE")\*' -DestinationPath '$(cygpath -w "$ZIP")' -Force"
+
+# Compress-Archive has been refused access to the installer seconds after Inno
+# wrote it, which is what a scanner holding a newly created executable looks
+# like. It leaves a partial zip behind when that happens - 0.7 MB where 30 was
+# expected - so a retry and a size check are both worth having. Without them the
+# build reported OK and the zip beside the installer was a stub.
+ZIP_OK=0
+for attempt in 1 2 3; do
+    if powershell.exe -NoProfile -Command \
+        "\$ErrorActionPreference='Stop'; Compress-Archive -Path '$(cygpath -w "$STAGE")\*' -DestinationPath '$(cygpath -w "$ZIP")' -Force" \
+        >/dev/null 2>&1 && [[ -f "$ZIP" ]]; then
+        ZIP_OK=1
+        break
+    fi
+    echo "  the zip could not be written (attempt $attempt); waiting and trying again" >&2
+    rm -f "$ZIP"
+    sleep 3
+done
+
+[[ $ZIP_OK -eq 1 ]] || { echo "ERROR: the zip could not be written. Something is holding the" >&2
+                         echo "       installer open - a scanner, or an installer window." >&2; exit 1; }
+
+# It carries the installer, so it cannot be much smaller than it.
+SETUP_KB=$(( $(stat -c%s "$SETUP") / 1024 ))
+ZIP_KB=$(( $(stat -c%s "$ZIP") / 1024 ))
+[[ $ZIP_KB -ge $(( SETUP_KB / 2 )) ]] || {
+    echo "ERROR: the zip is ${ZIP_KB} KB against an installer of ${SETUP_KB} KB." >&2
+    echo "       It is a partial write, not a smaller archive." >&2; exit 1; }
 
 rm -rf "$STAGE"
 
