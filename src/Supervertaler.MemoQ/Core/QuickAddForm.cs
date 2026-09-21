@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Drawing;
 using System.Windows.Forms;
 
@@ -25,6 +25,8 @@ namespace Supervertaler.MemoQ.Core
         private readonly CheckBox _forbidden = new CheckBox { Text = "Forbidden – this rendering must not be used", AutoSize = true };
         private readonly TextBox _notes = new TextBox();
         private readonly Label _into = new Label { AutoSize = false };
+        private readonly Label _guessedNote = new Label { AutoSize = false };
+        private readonly Label _swapped = new Label { AutoSize = false };
         private readonly Button _add = new Button { Text = "Add", DialogResult = DialogResult.OK, Width = 84, Height = 26 };
 
         public string Source => _source.Text.Trim();
@@ -34,6 +36,17 @@ namespace Supervertaler.MemoQ.Core
 
         /// <param name="termbaseName">Where the term will go, or null when no project termbase is ticked.</param>
         internal QuickAddForm(string sourceLang, string targetLang, string source, string target, string termbaseName)
+            : this(sourceLang, targetLang, source, target, termbaseName, false) { }
+
+        /// <summary>
+        /// <paramref name="guessed"/> means the two halves were inferred rather
+        /// than read off the segment, so they may be the wrong way round. The
+        /// dialog then says so, in colour, and Swap is one click - because a term
+        /// stored backwards matches nothing ever again and looks like a term that
+        /// is simply never used.
+        /// </summary>
+        internal QuickAddForm(string sourceLang, string targetLang, string source, string target,
+                              string termbaseName, bool guessed)
         {
             Font = SystemFonts.MessageBoxFont;
             AutoScaleDimensions = new SizeF(96F, 96F);
@@ -63,7 +76,48 @@ namespace Supervertaler.MemoQ.Core
             _target.Location = new Point(246, y); _target.Width = 222;
             Controls.Add(_source);
             Controls.Add(_target);
-            y += _source.Height + 10;
+
+            // Between the two boxes, where it reads as "these two, the other way
+            // round" rather than as an action on the dialog.
+            var swap = new Button
+            {
+                Text = "\u21c4",
+                Width = 26,
+                Height = _source.Height,
+                Location = new Point(234, y),
+                TabStop = false
+            };
+            swap.Click += (s2, e2) =>
+            {
+                var was = _source.Text;
+                _source.Text = _target.Text;
+                _target.Text = was;
+                _swapped.Visible = true;
+            };
+            new ToolTip().SetToolTip(swap, "Swap: put the " + Heading(sourceLang) + " term on the left.");
+            Controls.Add(swap);
+
+            y += _source.Height + 4;
+
+            // Said only when it is true. A warning on every add is a warning
+            // nobody reads, and most adds are read off the segment with certainty.
+            _guessedNote.Location = new Point(12, y);
+            _guessedNote.Width = 456;
+            _guessedNote.Height = line + 2;
+            _guessedNote.ForeColor = Color.Firebrick;
+            _guessedNote.Text = "Which word is which was inferred, not read from the segment - check the order.";
+            _guessedNote.Visible = guessed;
+            Controls.Add(_guessedNote);
+
+            _swapped.Location = new Point(12, y);
+            _swapped.Width = 456;
+            _swapped.Height = line + 2;
+            _swapped.ForeColor = SystemColors.GrayText;
+            _swapped.Text = "Swapped.";
+            _swapped.Visible = false;
+            Controls.Add(_swapped);
+
+            y += line + 8;
 
             _forbidden.Location = new Point(12, y);
             Controls.Add(_forbidden);

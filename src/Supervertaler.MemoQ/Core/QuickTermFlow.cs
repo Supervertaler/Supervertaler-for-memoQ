@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 
 namespace Supervertaler.MemoQ.Core
 {
@@ -30,6 +30,12 @@ namespace Supervertaler.MemoQ.Core
 
         public string Source;
         public string Target;
+
+        /// <summary>
+        /// The sides were inferred rather than read off the segment, so the pair
+        /// may be the wrong way round and the dialog should say so.
+        /// </summary>
+        public bool Guessed;
     }
 
     /// <summary>
@@ -57,6 +63,7 @@ namespace Supervertaler.MemoQ.Core
 
         private string _held;
         private TermSide _heldSide;
+        private bool _heldStrong;
         private DateTime _heldAtUtc;
 
         /// <summary>Whatever is half-finished, dropped. Used when the project changes.</summary>
@@ -70,6 +77,18 @@ namespace Supervertaler.MemoQ.Core
 
         public QuickTermOutcome Press(string text, TermSide side, DateTime nowUtc)
         {
+            return Press(text, side, true, nowUtc);
+        }
+
+        /// <summary>
+        /// <paramref name="strong"/> is false when the side was inferred rather
+        /// than read: the word occurs on both sides of the segment, or on
+        /// neither. A weak side is still a side - it is better evidence than the
+        /// order somebody happened to press in - but two weak ones mark the
+        /// result as guessed so the dialog can say so.
+        /// </summary>
+        public QuickTermOutcome Press(string text, TermSide side, bool strong, DateTime nowUtc)
+        {
             if (string.IsNullOrWhiteSpace(text))
                 return new QuickTermOutcome { Step = QuickTermStep.Nothing, Held = _held };
 
@@ -80,12 +99,24 @@ namespace Supervertaler.MemoQ.Core
             // Two presses on the same side are not a term: the user has changed
             // their mind about that half. Replace it rather than pairing a word
             // with itself.
-            if (holding && side != TermSide.Unknown && side == _heldSide) holding = false;
+            //
+            // Unless one of them is only a guess. Then the confident one keeps
+            // the side and the guess takes the other, which is what rescues the
+            // common real case: a word that appears in the source AND the target
+            // of the same segment, pressed alongside one the live view has not
+            // caught up with yet.
+            if (holding && side != TermSide.Unknown && side == _heldSide)
+            {
+                if (strong && !_heldStrong) { _heldSide = Other(side); }
+                else if (!strong && _heldStrong) { side = Other(side); strong = false; }
+                else holding = false;
+            }
 
             if (!holding)
             {
                 _held = text;
                 _heldSide = side;
+                _heldStrong = strong;
                 _heldAtUtc = nowUtc;
 
                 return new QuickTermOutcome
@@ -111,9 +142,16 @@ namespace Supervertaler.MemoQ.Core
                 target = text;
             }
 
+            var guessed = !strong || !_heldStrong;
             Forget();
 
-            return new QuickTermOutcome { Step = QuickTermStep.Ready, Source = source, Target = target };
+            return new QuickTermOutcome
+            {
+                Step = QuickTermStep.Ready,
+                Source = source,
+                Target = target,
+                Guessed = guessed
+            };
         }
 
         /// <summary>
@@ -124,14 +162,48 @@ namespace Supervertaler.MemoQ.Core
         /// </summary>
         public static TermSide Classify(string text, string segmentSource, string segmentTarget)
         {
+            bool strong;
+            return Classify(text, segmentSource, segmentTarget, out strong);
+        }
+
+        /// <summary>
+        /// Which half a selected word came from, and how sure that is.
+        ///
+        /// <para>Found on one side only, it is that side, and <paramref name="strong"/>
+        /// is true. The two uncertain cases are not equally uninformative and are
+        /// no longer both thrown away as Unknown:</para>
+        ///
+        /// <list type="bullet">
+        /// <item>On BOTH sides - an English term left untranslated in the target,
+        /// which is routine in medical and technical work - it is still a word of
+        /// the source. Weakly the source.</item>
+        /// <item>On NEITHER - almost always because the live view has not caught
+        /// up with the cell being edited, and the cell being edited is the target.
+        /// Weakly the target.</item>
+        /// </list>
+        ///
+        /// <para>Both of those happened at once on 2026-09-21: "Coronary Artery
+        /// Disease" appeared in the source and in the target, the Dutch rendering
+        /// beside it had just been typed, and the pair came out backwards because
+        /// nothing was left but the order the keys were pressed in.</para>
+        /// </summary>
+        public static TermSide Classify(string text, string segmentSource, string segmentTarget, out bool strong)
+        {
+            strong = false;
             if (string.IsNullOrWhiteSpace(text)) return TermSide.Unknown;
 
             var inSource = Contains(segmentSource, text);
             var inTarget = Contains(segmentTarget, text);
 
-            if (inSource && !inTarget) return TermSide.Source;
-            if (inTarget && !inSource) return TermSide.Target;
-            return TermSide.Unknown;
+            if (inSource && !inTarget) { strong = true; return TermSide.Source; }
+            if (inTarget && !inSource) { strong = true; return TermSide.Target; }
+
+            // Nothing to compare against at all: no live document. Then press
+            // order really is all there is, and the caller is told it guessed.
+            if (string.IsNullOrEmpty(segmentSource) && string.IsNullOrEmpty(segmentTarget))
+                return TermSide.Unknown;
+
+            return inSource ? TermSide.Source : TermSide.Target;
         }
 
         private static bool Contains(string haystack, string needle)

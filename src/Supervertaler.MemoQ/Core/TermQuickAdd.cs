@@ -22,6 +22,12 @@ namespace Supervertaler.MemoQ.Core
         /// </summary>
         public static string Show(string sourceLang, string targetLang, string source, string target)
         {
+            return Show(sourceLang, targetLang, source, target, false);
+        }
+
+        /// <summary><paramref name="guessed"/> is passed through so the dialog can warn.</summary>
+        public static string Show(string sourceLang, string targetLang, string source, string target, bool guessed)
+        {
             var project = TermbaseSelection.CurrentProject;
             var into = TermbaseSelection.ProjectTermbaseFor(project);
             var outcome = "cancelled";
@@ -35,7 +41,7 @@ namespace Supervertaler.MemoQ.Core
             {
                 try
                 {
-                    using (var form = new QuickAddForm(sourceLang, targetLang, source, target, into?.Name))
+                    using (var form = new QuickAddForm(sourceLang, targetLang, source, target, into?.Name, guessed))
                     {
                         if (form.ShowDialog() != DialogResult.OK || into == null) return;
 

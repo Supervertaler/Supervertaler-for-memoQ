@@ -1,4 +1,4 @@
-# Two presses of Alt+Up make a term. This is the deciding, with no keyboard,
+﻿# Two presses of Alt+Up make a term. This is the deciding, with no keyboard,
 # no clipboard and no memoQ: which half a selected word came from, and what a
 # press does with the half already held.
 #
@@ -18,8 +18,10 @@ $flowType = $asm.GetType('Supervertaler.MemoQ.Core.QuickTermFlow')
 $sideType = $asm.GetType('Supervertaler.MemoQ.Core.TermSide')
 $stepType = $asm.GetType('Supervertaler.MemoQ.Core.QuickTermStep')
 
-$classify = $flowType.GetMethod('Classify', $Static)
-$press    = $flowType.GetMethod('Press', $Inst)
+# Both have overloads now, so they are picked by parameter count rather than by
+# name - GetMethod throws on an ambiguous match.
+$classify = $flowType.GetMethods($Static) | Where-Object { $_.Name -eq 'Classify' -and $_.GetParameters().Count -eq 3 }
+$press    = $flowType.GetMethods($Inst)   | Where-Object { $_.Name -eq 'Press'    -and $_.GetParameters().Count -eq 3 }
 
 $SOURCE  = [Enum]::Parse($sideType, 'Source')
 $TARGET  = [Enum]::Parse($sideType, 'Target')
@@ -47,10 +49,19 @@ Check ((Classify 'support arm' $SRC $TGT) -eq $TARGET) "an English one is placed
 Check ((Classify 'DRAAGARM' $SRC $TGT) -eq $SOURCE) "case does not matter"
 Check ((Classify '  draagarm  ' $SRC $TGT) -eq $SOURCE) "nor does surrounding space"
 
-# The honest answer when the segment cannot tell them apart. "module" is spelled
-# the same in both, which is exactly the case that would otherwise be guessed at.
-Check ((Classify 'module' $SRC $TGT) -eq $UNKNOWN) "a word on both sides is left unplaced"
-Check ((Classify 'nowhere' $SRC $TGT) -eq $UNKNOWN) "a word on neither side is left unplaced"
+# The two uncertain cases. Both used to come back Unknown, which threw away the
+# difference between them and left press order to decide - and press order put a
+# real term in backwards on 2026-09-21. They are now placed weakly instead, and
+# section 8 covers the case that produced the bug.
+#
+# "module" is spelled the same in both languages, so it is on both sides: still a
+# word of the source. "nowhere" is on neither, which in practice means the live
+# view has not caught up with the cell being edited, and that cell is the target.
+Check ((Classify 'module' $SRC $TGT) -eq $SOURCE) "a word on both sides is taken as the source"
+Check ((Classify 'nowhere' $SRC $TGT) -eq $TARGET) "a word on neither side is taken as the target"
+
+# With no segment at all there is genuinely nothing to reason from, and that
+# remains Unknown rather than being dressed up as a placement.
 Check ((Classify 'draagarm' $null $null) -eq $UNKNOWN) "with no segment to consult, nothing is claimed"
 Check ((Classify '' $SRC $TGT) -eq $UNKNOWN) "an empty selection is unplaced"
 
@@ -129,6 +140,62 @@ $null = Press $f 'draagarm' $SOURCE $NOW
 $f.GetType().GetMethod('Forget', $Inst).Invoke($f, @())
 Check (-not $f.GetType().GetProperty('IsHolding', $Inst).GetValue($f)) "Forget drops the half-finished term"
 Check ((Step (Press $f 'support arm' $TARGET $NOW)) -eq 'Awaiting') "so the next press starts a new one"
+
+# ---- 8. the case that put a term in backwards -------------------------
+# 2026-09-21, a live job. The source cell read "Coronary Artery Disease, DCB:"
+# and the target "Coronary Artery Disease (kransslagaderaandoening), DCB:". So
+# the English term appeared on BOTH sides, and the Dutch one had just been typed
+# and had not reached the live view, so it appeared on NEITHER. Both came back
+# unplaced, press order decided, Michael works target-first, and the pair went in
+# reversed.
+#
+# Neither of those two cases is uninformative, and they are no longer treated
+# alike: on both sides it is still a word of the source; on neither side the
+# live view is stale, and the cell being edited is the target.
+$classify4 = $flowType.GetMethods($Static) | Where-Object { $_.Name -eq 'Classify' -and $_.GetParameters().Count -eq 4 }
+
+function Place($text, $src, $tgt) {
+    $a = New-Object object[] 4
+    $a[0] = $text; $a[1] = $src; $a[2] = $tgt; $a[3] = $false
+    $side = $classify4.Invoke($null, $a)
+    return @{ Side = $side; Strong = $a[3] }
+}
+
+$SRC2 = 'Coronary Artery Disease, DCB:'
+$TGT2 = 'Coronary Artery Disease (kransslagaderaandoening), DCB:'
+
+$both = Place 'Coronary Artery Disease' $SRC2 $TGT2
+Check ($both.Side -eq $SOURCE) "a word on BOTH sides is taken as the source"
+Check (-not $both.Strong) "  but weakly, since the segment did not settle it"
+
+$neither = Place 'kransslagaderaandoening' $SRC2 ''
+Check ($neither.Side -eq $TARGET) "a word on NEITHER side is taken as the target - the stale cell is the one being edited"
+Check (-not $neither.Strong) "  also weakly"
+
+# A word on one side only is still read, and confidently.
+Check ((Place 'DCB' $SRC2 '').Side -eq $SOURCE) "a word only in the source is still the source"
+Check ((Place 'DCB' $SRC2 '').Strong) "  and confidently"
+
+# And the pair now comes out the right way round in the order he actually works.
+$f = NewFlow
+$press4 = $flowType.GetMethods($Inst) | Where-Object { $_.Name -eq 'Press' -and $_.GetParameters().Count -eq 4 }
+function Press4($flow, $text, $side, $strong, $at) {
+    return $press4.Invoke($flow, [object[]]@($text, $side, [bool]$strong, $at))
+}
+
+$null = Press4 $f 'kransslagaderaandoening' $TARGET $false $NOW
+$b = Press4 $f 'Coronary Artery Disease' $SOURCE $false $NOW
+Check ((Step $b) -eq 'Ready') "target-first still completes the term"
+Check ((Val $b 'Source') -eq 'Coronary Artery Disease' -and (Val $b 'Target') -eq 'kransslagaderaandoening') `
+    "and the right way round this time: $(Val $b 'Source') -> $(Val $b 'Target')"
+Check ((Val $b 'Guessed')) "flagged as inferred, so the dialog warns and offers to swap"
+
+# A pair read confidently off the segment is NOT flagged, or the warning would
+# appear on every add and stop being read.
+$f = NewFlow
+$null = Press4 $f 'draagarm' $SOURCE $true $NOW
+$b = Press4 $f 'support arm' $TARGET $true $NOW
+Check (-not (Val $b 'Guessed')) "a pair read from the segment is not flagged as a guess"
 
 Write-Host ''
 Write-Host "QUICK TERM TEST COMPLETE - $fails failure(s)"

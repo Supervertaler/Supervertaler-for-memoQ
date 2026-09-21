@@ -60,13 +60,14 @@ namespace Supervertaler.MemoQ.Core
             string segmentSource = null, segmentTarget = null, sourceLang = null, targetLang = null;
             ReadSegment(ref segmentSource, ref segmentTarget, ref sourceLang, ref targetLang);
 
-            var side = QuickTermFlow.Classify(text, segmentSource, segmentTarget);
-            var outcome = Flow.Press(text, side, DateTime.UtcNow);
+            bool strong;
+            var side = QuickTermFlow.Classify(text, segmentSource, segmentTarget, out strong);
+            var outcome = Flow.Press(text, side, strong, DateTime.UtcNow);
 
             if (outcome.Step == QuickTermStep.Awaiting)
             {
                 Toast.Show(Caught(outcome));
-                PluginLog.Write("Quick term: holding " + Describe(side) + " \"" + text + "\"");
+                PluginLog.Write("Quick term: holding " + Describe(side, strong) + " \"" + text + "\"");
                 return;
             }
 
@@ -79,12 +80,12 @@ namespace Supervertaler.MemoQ.Core
                 return;
             }
 
-            PluginLog.Write("Quick term: offering \"" + outcome.Source + "\" → \"" + outcome.Target + "\"");
+            PluginLog.Write("Quick term: offering \"" + outcome.Source + "\" → \"" + outcome.Target + "\"" + (outcome.Guessed ? " (sides inferred, not read)" : ""));
 
             var result = TermQuickAdd.Show(
                 sourceLang ?? SharedSettings.SourceLang,
                 targetLang ?? SharedSettings.TargetLang,
-                outcome.Source, outcome.Target);
+                outcome.Source, outcome.Target, outcome.Guessed);
 
             PluginLog.Write("Quick term: " + result);
             if (result != null && result.StartsWith("added", StringComparison.Ordinal)) Toast.Show(result);
@@ -130,6 +131,11 @@ namespace Supervertaler.MemoQ.Core
         private static string Describe(TermSide side)
         {
             return side == TermSide.Source ? "source" : side == TermSide.Target ? "target" : "an unplaced";
+        }
+
+        private static string Describe(TermSide side, bool strong)
+        {
+            return Describe(side) + (strong ? "" : " (inferred)");
         }
     }
 }

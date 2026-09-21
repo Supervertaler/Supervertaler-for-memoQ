@@ -29,6 +29,10 @@ any release tooling that buckets on these headings works for both.
 
 ### Fixed
 
+- **Alt+Up could put a term in backwards, and said nothing.** When neither word could be placed – because the English term appeared in the target as well as the source, and the Dutch one had just been typed and had not reached the live view – the plugin fell back on the order the keys were pressed in and assumed the source came first. Working target-first therefore produced a reversed pair, which matches nothing ever again and looks exactly like a term that is simply never used.
+
+  The two uncertain cases are no longer treated alike. A word appearing on **both** sides is still a word of the source. A word appearing on **neither** means the live view has not caught up with the cell being edited, and that cell is the target. Where the order still has to be inferred, the dialog now says so in red and a swap button puts the pair the other way round in one click.
+
 - **Buttons were cut off, and a long caption ran off the edge, in the New termbase and New memory bank dialogs.** Both set a fixed size and placed their buttons a fixed distance up from the bottom without saying how tall a button is – so at a larger interface font the buttons grew past the edge they had been measured against. The caption was a label that could not wrap, so a sentence longer than the dialog simply disappeared off the right. Both dialogs are now as tall as their contents turn out to be, captions wrap, and buttons are as wide and as tall as their text needs. A test now builds each dialog and measures whether anything sticks out past its own edge, at whatever font the machine is set to.
 
 - **A trailing space was doubled.** memoQ appends the source’s trailing whitespace to whatever a translation provider returns, so a staged target that already carried it arrived in the grid with it twice – which memoQ’s own QA then flagged. Staged targets now have their trailing whitespace matched to the source, and the reply says how many were adjusted.
