@@ -1,4 +1,4 @@
-# Does anything in a dialog stick out past its own edge?
+﻿# Does anything in a dialog stick out past its own edge?
 #
 # Two clipping reports in one day, both the same shape: a fixed ClientSize with
 # controls placed at fixed offsets from it, and no height set on the buttons - so
@@ -185,7 +185,13 @@ try {
 
     $buttons = @($dlg.Controls | Where-Object { $_ -is [Windows.Forms.Button] } | ForEach-Object { $_.Text })
     Check ($buttons -contains 'Set up ChatGPT desktop') 'ChatGPT has its button'
-    Check ($buttons -contains 'Install in Claude Desktop') 'and Claude Desktop has one too'
+    Check ($buttons -contains 'Show me the extension') 'and Claude Desktop has one too'
+
+    # The button says what it does. It used to say "Install in Claude Desktop" and could
+    # not install anything: Claude Desktop does that from inside its own settings, and the
+    # file association for extensions offers three identical unlabelled entries on a machine
+    # that has updated Claude a few times.
+    Check ($texts -notmatch 'takes over') 'and does not promise that Claude Desktop takes over'
 
     foreach ($b in @($dlg.Controls | Where-Object { $_ -is [Windows.Forms.Button] })) {
         Check ($b.Bottom -le $dlg.ClientSize.Height) "$($b.Text) sits inside the bottom edge ($($b.Bottom) of $($dlg.ClientSize.Height))"

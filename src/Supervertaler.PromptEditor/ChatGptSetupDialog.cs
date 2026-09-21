@@ -1,7 +1,8 @@
-using System;
+﻿using System;
 using System.Collections.Generic;
 using System.Drawing;
 using System.IO;
+using System.Text;
 using System.Windows.Forms;
 using Supervertaler.Core;
 
@@ -179,14 +180,14 @@ namespace Supervertaler.PromptEditor
             // Supervertaler, and a dialog that promises the good case makes the
             // ordinary case read as a failure.
             Paragraph(
-                "Press the button and Supervertaler hands the extension to Claude Desktop, which " +
-                "asks you to confirm it. If Claude will not take it directly, the file is shown to " +
-                "you in its folder with the three steps to add it by hand. Nothing is downloaded " +
-                "either way – the file came with Supervertaler.");
+                "Claude Desktop installs extensions from inside its own settings: Settings, " +
+                "Extensions, Advanced settings, Install extension. The button copies the " +
+                "extension's location so you can paste it there, and shows you the file. Nothing " +
+                "is downloaded – it came with Supervertaler.");
 
             _claude = new Button
             {
-                Text = "Install in Claude Desktop",
+                Text = "Show me the extension",
                 Location = new Point(margin, y),
                 AutoSize = true,
                 AutoSizeMode = AutoSizeMode.GrowAndShrink,
@@ -227,15 +228,10 @@ namespace Supervertaler.PromptEditor
         }
 
         /// <summary>
-        /// Hands the extension to Claude Desktop, which owns the rest: it shows
-        /// its own confirmation and installs it.
-        ///
-        /// <para>Three things can go wrong and each is said plainly rather than
-        /// as a shell error. The file can be missing, if someone copied the
-        /// add-in by hand instead of running the installer. Claude Desktop may
-        /// not be installed, or may not have claimed this kind of file - in
-        /// which case the folder is opened with the file selected, so the user
-        /// can drag it in themselves rather than be told no.</para>
+        /// Puts the extension in front of the user, with its location on the
+        /// clipboard and the three steps to hand. Claude Desktop installs
+        /// extensions from inside its own settings, so that is as far as
+        /// anything out here can take them.
         /// </summary>
         private void InstallInClaude()
         {
@@ -252,47 +248,60 @@ namespace Supervertaler.PromptEditor
                 return;
             }
 
-            // Opening it directly is the obvious way and it fails here. Claude
-            // Desktop is a packaged app, so the association Windows wrote points
-            // at its executable inside WindowsApps, which an ordinary process is
-            // not allowed to start - measured on this machine, where the button
-            // fell straight through to the folder. Handing the path to Explorer
-            // asks the shell to do the opening, which is allowed to activate a
-            // packaged app, so it is worth trying before giving up.
+            // No attempt is made to OPEN the file, and that is deliberate.
             //
-            // That association also carries Claude Desktop's version number in
-            // the path, so it breaks every time Claude updates until something
-            // rewrites it. Which is the other reason the folder fallback stays:
-            // this will come and go on the same machine.
-            foreach (var attempt in new Func<System.Diagnostics.Process>[]
-            {
-                () => System.Diagnostics.Process.Start(bundle),
-                () => System.Diagnostics.Process.Start("explorer.exe", "\"" + bundle + "\""),
-            })
-            {
-                try { attempt(); return; }
-                catch { /* try the next one */ }
-            }
-
-            // Nothing on this machine will open it, so show them the file rather
-            // than an error they can do nothing with.
+            // Double-clicking an extension is supposed to work when Claude
+            // Desktop is the default application for it. On this machine it
+            // offers three entries all called claude.exe, none with an icon,
+            // because the association carries the app's version number in its
+            // path and every Claude update leaves another one behind. Asking
+            // someone to choose between three identical unlabelled names is
+            // worse than not offering to open it at all. Starting it ourselves
+            // fails outright anyway: the path is inside WindowsApps, which an
+            // ordinary process may not launch.
+            //
+            // So this does the two things that always work, and says what to do
+            // with them. The clipboard is the important half: Claude's file box
+            // takes a pasted path, and the alternative is navigating to a folder
+            // under Program Files with a version number in it.
+            var shown = false;
             try
             {
                 System.Diagnostics.Process.Start("explorer.exe", "/select,\"" + bundle + "\"");
-                MessageBox.Show(this,
-                    "Claude Desktop did not take the file, so it is selected in the folder instead." +
-                    Environment.NewLine + Environment.NewLine +
-                    "In Claude Desktop, open Settings, then Extensions, then Advanced settings, " +
-                    "then Install extension, and choose that file.",
-                    "Install in Claude Desktop", MessageBoxButtons.OK, MessageBoxIcon.Information);
+                shown = true;
             }
-            catch (Exception ex)
+            catch { /* said below */ }
+
+            var copied = false;
+            try { Clipboard.SetText(bundle); copied = true; }
+            catch { /* the clipboard can be held by another program; not fatal */ }
+
+            var message = new StringBuilder();
+            message.Append("In Claude Desktop, open Settings, then Extensions, then Advanced ");
+            message.Append("settings, then Install extension.").Append(Environment.NewLine);
+            message.Append(Environment.NewLine);
+
+            if (copied)
             {
-                MessageBox.Show(this,
-                    "The extension could not be opened: " + ex.Message + Environment.NewLine +
-                    Environment.NewLine + bundle,
-                    "Install in Claude Desktop", MessageBoxButtons.OK, MessageBoxIcon.Warning);
+                message.Append("When it asks for a file, paste – the location is already on your ");
+                message.Append("clipboard:").Append(Environment.NewLine).Append(Environment.NewLine);
             }
+            else
+            {
+                message.Append("When it asks for a file, choose:")
+                       .Append(Environment.NewLine).Append(Environment.NewLine);
+            }
+
+            message.Append("    ").Append(bundle).Append(Environment.NewLine);
+
+            if (shown)
+            {
+                message.Append(Environment.NewLine);
+                message.Append("It is also selected in the folder that just opened.");
+            }
+
+            MessageBox.Show(this, message.ToString(), "Install in Claude Desktop",
+                MessageBoxButtons.OK, MessageBoxIcon.Information);
         }
 
         /// <summary>Opens a link, saying so plainly when it cannot.</summary>
