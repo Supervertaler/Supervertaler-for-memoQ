@@ -2232,7 +2232,13 @@ namespace Supervertaler.PromptEditor
                 return;
             }
 
-            var chosen = PromptChooserForm.ChooseBank(this, banks, SharedSettings.MemoryBank);
+            var choice = PromptChooserForm.ChooseBank(this, banks, SharedSettings.MemoryBank);
+            if (choice == null) return;
+
+            // "New memory bank..." closes the chooser and comes back here rather
+            // than nesting a second dialog inside it, so cancelling the name
+            // leaves the user where they started instead of two dialogs deep.
+            var chosen = choice.Create ? NewMemoryBank.Ask(this) : choice.Name;
             if (chosen == null) return;
 
             MemoryBankPicker.Save(chosen);

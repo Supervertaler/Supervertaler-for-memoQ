@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Collections.Generic;
 using System.Drawing;
 using System.Linq;
@@ -51,8 +51,26 @@ namespace Supervertaler.PromptEditor
         /// <summary>The chosen row's value, or null when the dialog was cancelled.</summary>
         public string SelectedValue { get; private set; }
 
+        /// <summary>
+        /// Set when the dialog closed because the user asked to make a new one
+        /// rather than pick an existing one. Only offered when the caller passes
+        /// <c>extraButton</c>.
+        /// </summary>
+        public bool CreateRequested { get; private set; }
+
         public ChooserForm(string title, string caption, string filterHint,
                            IReadOnlyList<Row> rows, string current)
+            : this(title, caption, filterHint, rows, current, null) { }
+
+        /// <summary>
+        /// <paramref name="extraButton"/> puts one more button on the left of the
+        /// row - "New memory bank...", say - and closing through it sets
+        /// <see cref="CreateRequested"/>. A chooser that can only choose from what
+        /// exists is a dead end the first time somebody has nothing to choose
+        /// from, which is exactly when a new project starts.
+        /// </summary>
+        public ChooserForm(string title, string caption, string filterHint,
+                           IReadOnlyList<Row> rows, string current, string extraButton)
         {
             // The shell's own dialog font, before anything else is built: every
             // control created below inherits it. See Ui.Default.
@@ -117,6 +135,23 @@ namespace Supervertaler.PromptEditor
                 Anchor = AnchorStyles.Bottom | AnchorStyles.Right
             };
             Controls.Add(cancel);
+
+            if (!string.IsNullOrEmpty(extraButton))
+            {
+                var create = new Button
+                {
+                    Text = extraButton,
+                    Left = 12, Top = ClientSize.Height - 34, Width = 170, Height = 26,
+                    Anchor = AnchorStyles.Bottom | AnchorStyles.Left
+                };
+                create.Click += (s, e) =>
+                {
+                    CreateRequested = true;
+                    DialogResult = DialogResult.OK;
+                    Close();
+                };
+                Controls.Add(create);
+            }
 
             AcceptButton = ok;
             CancelButton = cancel;
@@ -190,6 +225,7 @@ namespace Supervertaler.PromptEditor
         {
             // Nothing selected - an empty filter result, say - must not read as a
             // deliberate choice of the first thing in the underlying list.
+            if (CreateRequested) return;   // closing to create, not to pick
             if (!(_list.SelectedItem is Row row)) { DialogResult = DialogResult.Cancel; return; }
 
             SelectedValue = row.Value ?? string.Empty;

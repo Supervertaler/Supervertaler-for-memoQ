@@ -61,6 +61,8 @@ any release tooling that buckets on these headings works for both.
 
 ### Added
 
+- **A memory bank can be made from the bank chooser.** There was no way to create one: the chooser listed what already existed, and the only route to a new bank was a link inside the FigureLens images dialog, shown only when a project had none and hidden once it did. So the moment you most want a fresh bank – starting a new job – was the one case with no route to it at all, short of making the folder by hand. The chooser now has a **New memory bank…** button. It suggests the open project’s name, and a name that already exists simply reuses that bank without overwriting anything written in it.
+
 - **A staged translation can name the row it is for**, and the plugin then quotes that row’s source itself. Staging matched on source text alone, which asked the writer to reproduce every string character for character – and a source retyped with one character wrong was accepted and then matched nothing, leaving rows untranslated behind a clean confirmation. Naming the row removes the transcription entirely. It does not help with a paragraph memoQ splits into several rows, and says so.
 
 - **A tool that answers whether the staged translations landed**, over the verification added earlier.

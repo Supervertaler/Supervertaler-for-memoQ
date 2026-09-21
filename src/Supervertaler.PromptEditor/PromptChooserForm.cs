@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Collections.Generic;
 using System.Windows.Forms;
 using Supervertaler.Core.Models;
@@ -40,16 +40,27 @@ namespace Supervertaler.PromptEditor
         /// Shows the memory bank chooser. Returns the chosen bank name - empty
         /// for none - or null when cancelled.
         /// </summary>
-        public static string ChooseBank(IWin32Window owner, IReadOnlyList<BankRow> banks, string current)
+        /// <summary>The answer from the bank chooser: a name, or "make me a new one".</summary>
+        public sealed class BankChoice
+        {
+            public string Name;
+            public bool Create;
+        }
+
+        public static BankChoice ChooseBank(IWin32Window owner, IReadOnlyList<BankRow> banks, string current)
         {
             using (var dialog = new ChooserForm(
                 "Choose the active memory bank",
                 "The bank's brief, terminology and style go to the model with every request. "
                 + "Each project remembers its own.",
                 "Type to filter by name",
-                BankRows(banks), current))
+                BankRows(banks), current,
+                "New memory bank…"))
             {
-                return dialog.ShowDialog(owner) == DialogResult.OK ? dialog.SelectedValue : null;
+                if (dialog.ShowDialog(owner) != DialogResult.OK) return null;
+                return dialog.CreateRequested
+                    ? new BankChoice { Create = true }
+                    : new BankChoice { Name = dialog.SelectedValue };
             }
         }
 
