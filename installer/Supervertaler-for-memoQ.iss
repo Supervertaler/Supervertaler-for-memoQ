@@ -128,7 +128,9 @@ end;
 
 { memoQ holds the add-in open, so copying over it fails with a sharing violation
   that names nothing useful. Said plainly instead, and before anything is
-  written. }
+  written - and the same applies to REMOVING the files, which is why the
+  uninstaller asks too. An uninstall that half-succeeds leaves memoQ loading a
+  plugin the user believes they removed. }
 function MemoQIsRunning(): Boolean;
 var
   Res: Integer;
@@ -162,6 +164,31 @@ begin
   end;
 
   Result := True;
+end;
+
+{ The uninstaller runs in its own process with its own [Code] section, so this
+  is a second copy of the check rather than a call to the one above. }
+function UninstallMemoQIsRunning(): Boolean;
+var
+  Res: Integer;
+begin
+  Result := False;
+  if Exec(ExpandConstant('{cmd}'), '/C tasklist /FI "IMAGENAME eq memoQ.exe" | find /I "memoQ.exe"',
+          '', SW_HIDE, ewWaitUntilTerminated, Res) then
+    Result := (Res = 0);
+end;
+
+function InitializeUninstall(): Boolean;
+begin
+  Result := True;
+  if UninstallMemoQIsRunning() then
+  begin
+    MsgBox('memoQ is running.' + #13#10#13#10 +
+           'Close memoQ and run this again. While memoQ is open it holds the add-in files, so they ' +
+           'cannot all be removed - which would leave memoQ still loading a plugin you believe you ' +
+           'have uninstalled.', mbCriticalError, MB_OK);
+    Result := False;
+  end;
 end;
 
 { The live document link needs memoQ's own PDF Preview tool, because that is
