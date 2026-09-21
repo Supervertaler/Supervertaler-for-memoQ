@@ -145,6 +145,42 @@ if ($nt) {
     } finally { $form.Dispose() }
 }
 
+# ---- the connect-AI-assistant dialog --------------------------------------
+# Four wrapped paragraphs, two headings, a button, a status line and a link,
+# every one of them measured rather than placed at a number - which is the shape
+# that has been reported clipped three times in this product. The status line
+# also changes length depending on what is already set up, so the dialog has to
+# be right at both lengths rather than at the one that was on screen when it was
+# written.
+$connect = $asm.GetType('Supervertaler.PromptEditor.ChatGptSetupDialog')
+$dlg = [Activator]::CreateInstance($connect, $true)
+try {
+    Fits $dlg "the connect-AI-assistant dialog"
+    NoOverlaps $dlg "the connect-AI-assistant dialog"
+    TextFits $dlg "the connect-AI-assistant dialog"
+
+    # The link has to be reachable, not merely present: it is the only route to
+    # the Claude Desktop half.
+    $link = @($dlg.Controls | Where-Object { $_ -is [Windows.Forms.LinkLabel] })[0]
+    Check ($null -ne $link) 'the Claude Desktop link is there'
+    if ($link) {
+        Check ($link.Bottom -le $dlg.ClientSize.Height) `
+            "and sits inside the bottom edge ($($link.Bottom) of $($dlg.ClientSize.Height))"
+        Check ($link.Right -le $dlg.ClientSize.Width) `
+            "and inside the right edge ($($link.Right) of $($dlg.ClientSize.Width))"
+    }
+
+    # The old wording was reported as confusing on sight. This is not a style
+    # check - it is the specific sentence that said nothing about what to do.
+    $texts = @($dlg.Controls | ForEach-Object { $_.Text }) -join ' '
+    Check ($texts -notmatch 'installs itself') 'the dialog does not say an assistant "installs itself"'
+    Check ($texts -match 'no button') 'it says why one assistant has no button'
+
+    foreach ($b in @($dlg.Controls | Where-Object { $_ -is [Windows.Forms.Button] })) {
+        Check ($b.Bottom -le $dlg.ClientSize.Height) "$($b.Text) sits inside the bottom edge ($($b.Bottom) of $($dlg.ClientSize.Height))"
+    }
+} finally { $dlg.Dispose() }
+
 # ---- the quick-add dialog -------------------------------------------------
 # In the plugin assembly rather than the editor, which is why this test did not
 # cover it and why a button shipped sitting on top of a text box.
