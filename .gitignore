@@ -10,3 +10,5 @@ dist/
 # memoQ SDK packages: their redistributables, not ours to publish.
 memoQ-*-SDK-*.zip
 installer/wizard-*.bmp
+# Drawn at build time from installer/sv-icon-memoq.svg, same as the wizard images.
+sv-icon-memoq-512.png

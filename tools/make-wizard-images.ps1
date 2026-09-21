@@ -76,23 +76,35 @@ function DrawMark($g, $left, $top, $size) {
     } finally { $fS.Dispose(); $fv.Dispose(); $white.Dispose(); $fam.Dispose() }
 }
 
-function Draw($width, $height, $markSize, $path) {
+function Draw($width, $height, $markSize, $path, $format) {
     $bmp = New-Object System.Drawing.Bitmap($width, $height)
     $g = [System.Drawing.Graphics]::FromImage($bmp)
     try {
-        # The wizard's own background, so the image does not read as a pasted-on
-        # rectangle against the dialog.
-        $g.Clear([System.Drawing.Color]::White)
+        # White for the wizard, so the image does not read as a pasted-on
+        # rectangle against the dialog; transparent for the app icon, which sits
+        # on whatever background the host app happens to use.
+        if ($format -eq [System.Drawing.Imaging.ImageFormat]::Bmp) {
+            $g.Clear([System.Drawing.Color]::White)
+        } else {
+            $g.Clear([System.Drawing.Color]::Transparent)
+        }
         $g.SmoothingMode = [System.Drawing.Drawing2D.SmoothingMode]::AntiAlias
         $g.TextRenderingHint = [System.Drawing.Text.TextRenderingHint]::AntiAliasGridFit
 
         DrawMark $g (($width - $markSize) / 2) (($height - $markSize) / 2) $markSize
 
-        $bmp.Save($path, [System.Drawing.Imaging.ImageFormat]::Bmp)
+        $bmp.Save($path, $format)
     } finally { $g.Dispose(); $bmp.Dispose() }
     Write-Host ("  {0}  ({1}x{2})" -f (Split-Path $path -Leaf), $width, $height)
 }
 
+$bmp = [System.Drawing.Imaging.ImageFormat]::Bmp
+$png = [System.Drawing.Imaging.ImageFormat]::Png
+
 Write-Host 'wizard images:'
-Draw 164 314 128 (Join-Path $out 'wizard-large.bmp')   # the tall panel on the first and last pages
-Draw  55  58  48 (Join-Path $out 'wizard-small.bmp')   # the corner mark on every other page
+Draw 164 314 128 (Join-Path $out 'wizard-large.bmp') $bmp   # the tall panel on the first and last pages
+Draw  55  58  48 (Join-Path $out 'wizard-small.bmp') $bmp   # the corner mark on every other page
+
+# The MCP bundle's icon, which Claude Desktop shows beside the extension. It was
+# sv-icon-512.png - the blue one - for the same reason the wizard was.
+Draw 512 512 512 (Join-Path $root 'sv-icon-memoq-512.png') $png

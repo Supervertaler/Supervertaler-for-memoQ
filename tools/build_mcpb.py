@@ -24,7 +24,12 @@ from pathlib import Path
 REPO = Path(__file__).resolve().parent.parent
 DEFAULT_SERVER_PROJECT = REPO.parent / "Supervertaler-for-Trados" / "src" / "Supervertaler.McpServer"
 DIST = REPO / "dist"
-ICON = REPO / "sv-icon-512.png"
+# The memoQ colourway, drawn from installer/sv-icon-memoq.svg by the same
+# script that draws the installer wizard, and generated rather than
+# committed so there is one source of truth for the mark. It used to be
+# sv-icon-512.png, which is the BLUE Trados one.
+ICON = REPO / "sv-icon-memoq-512.png"
+MAKE_ICON = REPO / "tools" / "make-wizard-images.ps1"
 BUNDLE = "Supervertaler-for-memoQ-MCP-Server.mcpb"
 
 
@@ -90,6 +95,12 @@ def main() -> int:
     out = DIST / BUNDLE
     if out.exists():
         out.unlink()
+
+    if not ICON.exists():
+        subprocess.run(
+            ["powershell.exe", "-NoProfile", "-File", str(MAKE_ICON)],
+            check=True,
+        )
 
     print(f"== packing {out.name} ==")
     with zipfile.ZipFile(out, "w", zipfile.ZIP_DEFLATED) as z:
