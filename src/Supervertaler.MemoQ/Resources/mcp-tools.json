@@ -258,7 +258,7 @@
     {
       "name": "check_terminology",
       "access": "read",
-      "description": "QA check over the live document against the Supervertaler glossary: source paragraphs containing a glossary term whose target lacks the expected rendering (inflection tolerated), and any target using a term marked FORBIDDEN. Longest match wins where entries overlap. Needs the Supervertaler preview tool running and a glossary configured.",
+      "description": "QA check over the live document against the termbases ticked Read for this project: source paragraphs containing a term whose target lacks the expected rendering (inflection tolerated), and any target using a term marked FORBIDDEN. Longest match wins where entries overlap. Needs the Supervertaler preview tool running and at least one termbase ticked Read.",
       "inputSchema": {
         "type": "object",
         "properties": {
@@ -371,13 +371,13 @@
     {
       "name": "lookup_term",
       "access": "read",
-      "description": "Search the Supervertaler glossary for terms occurring in the given text. Returns each match with its approved target and whether it is forbidden. Forbidden terms must never appear in a translation, in any form.",
+      "description": "Search the termbases ticked Read for this project for terms occurring in the given text. Returns each match with its approved target, which termbase it came from, and whether it is forbidden. Forbidden terms must never appear in a translation, in any form.",
       "inputSchema": {
         "type": "object",
         "properties": {
           "text": {
             "type": "string",
-            "description": "Text to scan for glossary terms - a segment, a phrase, or a single word."
+            "description": "Text to scan for termbase terms - a segment, a phrase, or a single word."
           }
         },
         "required": [
@@ -395,7 +395,7 @@
     {
       "name": "add_term",
       "access": "write",
-      "description": "Add a term to the Supervertaler glossary. It appears in memoQ's terminology pane and is enforced in every later translation request within seconds. Set forbidden=true to ban a target term instead of approving one. Confirm with the user before adding terms they did not explicitly approve.",
+      "description": "Add a term to the project termbase - the one ticked Project in the Termbases window. It appears in memoQ's terminology pane and is enforced in every later translation request within seconds, and it is shared with Supervertaler for Trados and Workbench, which read the same database. Set forbidden=true to ban a target term instead of approving one. Fails if no termbase is ticked Project. Confirm with the user before adding terms they did not explicitly approve.",
       "inputSchema": {
         "type": "object",
         "properties": {
