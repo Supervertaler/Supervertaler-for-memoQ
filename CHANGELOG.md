@@ -29,6 +29,8 @@ any release tooling that buckets on these headings works for both.
 
 ### Fixed
 
+- **The OK and Cancel buttons were cut off in the New termbase dialog.** Its height was a fixed number and the buttons were placed a fixed distance up from the bottom, with nothing setting how tall a button is – so at a larger interface font the buttons grew past the edge they had been measured against. The dialog is now as tall as its contents turn out to be, and the buttons are as wide and as tall as their text needs.
+
 - **A trailing space was doubled.** memoQ appends the source’s trailing whitespace to whatever a translation provider returns, so a staged target that already carried it arrived in the grid with it twice – which memoQ’s own QA then flagged. Staged targets now have their trailing whitespace matched to the source, and the reply says how many were adjusted.
 
 - **Pre-translate emptied every row it had no staged translation for.** With "Pre-translate only captures and delivers staged translations" switched on, any row Claude had not staged came back as an empty translation – and memoQ does what it is told, so the target was cleared. A fuzzy match, an earlier pass or a human’s own work was silently replaced by nothing. Found on a production job where 32 rows came back blank, every one of which had content before the run. Such a row is now reported to memoQ as having no result, which is what the plugin interface provides for that, and memoQ leaves the target exactly as it was and says so under the grid.

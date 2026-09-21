@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Drawing;
 using System.Windows.Forms;
 using Supervertaler.Core;
@@ -42,6 +42,11 @@ namespace Supervertaler.PromptEditor
             MaximizeBox = false;
             ShowInTaskbar = false;
             AppIcon.Apply(this);
+
+            // Width only. The height is measured at the end, from what the
+            // controls actually came out as: it was fixed at 214 with the buttons
+            // placed 40 up from the bottom, so a font that made a button taller
+            // than 40 pushed it through the bottom edge. Reported clipped.
             ClientSize = new Size(440, 214);
 
             var line = TextRenderer.MeasureText("Termbase", Font).Height;
@@ -85,21 +90,31 @@ namespace Supervertaler.PromptEditor
             Controls.Add(_sourceEcho);
             Controls.Add(_targetEcho);
 
+            y += _sourceEcho.Height + 16;
+
+            // Measured, not assumed: a button is as tall as its font needs and as
+            // wide as its longest word, and "Cancel" is longer in several of the
+            // languages this is used in.
             _ok.Text = "OK";
             _ok.DialogResult = DialogResult.OK;
-            _ok.Width = 80;
-            _ok.Location = new Point(ClientSize.Width - 178, ClientSize.Height - 40);
 
-            var cancel = new Button
-            {
-                Text = "Cancel",
-                DialogResult = DialogResult.Cancel,
-                Width = 80,
-                Location = new Point(ClientSize.Width - 92, ClientSize.Height - 40)
-            };
+            var cancel = new Button { Text = "Cancel", DialogResult = DialogResult.Cancel };
+
+            var buttonWidth = Math.Max(80, Math.Max(_ok.PreferredSize.Width, cancel.PreferredSize.Width) + 16);
+            var buttonHeight = Math.Max(26, Math.Max(_ok.PreferredSize.Height, cancel.PreferredSize.Height));
+
+            _ok.Size = new Size(buttonWidth, buttonHeight);
+            cancel.Size = new Size(buttonWidth, buttonHeight);
+
+            cancel.Location = new Point(ClientSize.Width - 12 - buttonWidth, y);
+            _ok.Location = new Point(cancel.Left - 6 - buttonWidth, y);
 
             Controls.Add(_ok);
             Controls.Add(cancel);
+
+            // The bottom edge follows the buttons rather than the buttons
+            // following a guessed edge.
+            ClientSize = new Size(ClientSize.Width, y + buttonHeight + 12);
             AcceptButton = _ok;
             CancelButton = cancel;
 

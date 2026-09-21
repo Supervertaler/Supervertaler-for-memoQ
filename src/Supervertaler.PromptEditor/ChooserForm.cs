@@ -1,3 +1,4 @@
+using System;
 ﻿using System;
 using System.Collections.Generic;
 using System.Drawing;
@@ -138,12 +139,17 @@ namespace Supervertaler.PromptEditor
 
             if (!string.IsNullOrEmpty(extraButton))
             {
+                // Width measured from the text, not guessed at. A fixed 170 is
+                // fine in this font and clips in a larger one, which is the bug
+                // that was reported against the new-termbase dialog the same day
+                // this button was written.
                 var create = new Button
                 {
                     Text = extraButton,
-                    Left = 12, Top = ClientSize.Height - 34, Width = 170, Height = 26,
+                    Left = 12, Top = ClientSize.Height - 34, Height = 26,
                     Anchor = AnchorStyles.Bottom | AnchorStyles.Left
                 };
+                create.Width = Math.Max(170, create.PreferredSize.Width + 16);
                 create.Click += (s, e) =>
                 {
                     CreateRequested = true;
