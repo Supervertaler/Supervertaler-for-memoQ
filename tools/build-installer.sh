@@ -31,6 +31,11 @@ VERSION="$(powershell.exe -NoProfile -Command \
 
 echo "version: $VERSION"
 
+# --- the wizard images ------------------------------------------------------
+# Generated from the product's own mark rather than committed, so there is one
+# source of truth for it and no bitmap to go stale when the icon changes.
+powershell.exe -NoProfile -File "$(cygpath -w "$ROOT/tools/make-wizard-images.ps1")"
+
 # --- the installer ----------------------------------------------------------
 mkdir -p "$ROOT/dist"
 MSYS2_ARG_CONV_EXCL="/D" "$ISCC" \

@@ -9,3 +9,4 @@ dist/
 
 # memoQ SDK packages: their redistributables, not ours to publish.
 memoQ-*-SDK-*.zip
+installer/wizard-*.bmp
