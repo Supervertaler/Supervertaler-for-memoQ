@@ -49,6 +49,48 @@ function Fits($form, $what) {
     foreach ($b in $bad) { Write-Host "       $b" }
 }
 
+# Controls sitting on top of each other. Fitting inside the dialog is not enough:
+# a swap button placed at x=234 with a width of 26, beside a box starting at 246,
+# is inside the form and on top of its neighbour - which is exactly what shipped
+# on 2026-09-21 because this test only looked at the edges.
+function NoOverlaps($form, $what) {
+    $visible = @($form.Controls | Where-Object { $_.Visible -and $_.Width -gt 0 -and $_.Height -gt 0 })
+    $bad = @()
+
+    for ($i = 0; $i -lt $visible.Count; $i++) {
+        for ($j = $i + 1; $j -lt $visible.Count; $j++) {
+            $a = $visible[$i]; $b = $visible[$j]
+            $r = [Drawing.Rectangle]::Intersect($a.Bounds, $b.Bounds)
+            if ($r.Width -gt 0 -and $r.Height -gt 0) {
+                $bad += ("{0} '{1}' overlaps {2} '{3}' by {4}x{5}px" -f `
+                    $a.GetType().Name, $a.Text, $b.GetType().Name, $b.Text, $r.Width, $r.Height)
+            }
+        }
+    }
+
+    Check ($bad.Count -eq 0) "$what has no controls sitting on top of each other"
+    foreach ($b in $bad) { Write-Host "       $b" }
+}
+
+# Controls smaller than the text inside them. This is the one that generalises:
+# every clipping report so far has been a control given a number instead of being
+# asked how big it needs to be - a button 84 wide, 26 tall, an arrow 28 wide.
+# Bounds and overlaps both pass while the text is cut off inside.
+function TextFits($form, $what) {
+    $bad = @()
+    foreach ($c in $form.Controls) {
+        if (-not $c.Visible) { continue }
+        if (-not ($c -is [Windows.Forms.Button] -or $c -is [Windows.Forms.Label])) { continue }
+        if ([string]::IsNullOrEmpty($c.Text)) { continue }
+
+        $want = $c.PreferredSize
+        if ($c.Width -lt $want.Width)   { $bad += ("{0} '{1}' is {2}px narrower than its text" -f $c.GetType().Name, $c.Text, ($want.Width - $c.Width)) }
+        if ($c.Height -lt $want.Height) { $bad += ("{0} '{1}' is {2}px shorter than its text" -f $c.GetType().Name, $c.Text, ($want.Height - $c.Height)) }
+    }
+    Check ($bad.Count -eq 0) "$what has nothing clipped inside a control"
+    foreach ($b in $bad) { Write-Host "       $b" }
+}
+
 # ---- the text prompt, with the caption that reported the bug ------------
 $type = $asm.GetType('Supervertaler.PromptEditor.TextInputDialog')
 $ctor = @($type.GetConstructors([Reflection.BindingFlags]'Public,NonPublic,Instance'))[0]
@@ -59,6 +101,8 @@ $long = "A name for this client or project. An existing name reuses that bank; "
 $dialog = $ctor.Invoke(@("New memory bank", $long, "MEDI.GLOBAL (J_11886-1)"))
 try {
     Fits $dialog "the text prompt"
+    NoOverlaps $dialog "the text prompt"
+    TextFits $dialog "the text prompt"
 
     # The caption must WRAP rather than run on: a label that does not wrap
     # reports a width wider than the dialog and the text simply disappears.
@@ -80,6 +124,8 @@ try {
         Check ($short.ClientSize.Height -lt $dialog.ClientSize.Height) `
             "a short caption gives a shorter dialog ($($short.ClientSize.Height) against $($dialog.ClientSize.Height))"
         Fits $short "the short prompt"
+        NoOverlaps $short "the short prompt"
+        TextFits $short "the short prompt"
     } finally { $short.Dispose() }
 }
 finally { $dialog.Dispose() }
@@ -91,11 +137,49 @@ if ($nt) {
     $form = $ntCtor.Invoke(@("New termbase", "MEDI.GLOBAL (J_11886-1)", "en", ""))
     try {
         Fits $form "the new-termbase dialog"
+        NoOverlaps $form "the new-termbase dialog"
+        TextFits $form "the new-termbase dialog"
         foreach ($b in @($form.Controls | Where-Object { $_ -is [Windows.Forms.Button] })) {
             Check ($b.Bottom -le $form.ClientSize.Height) "$($b.Text) sits inside the bottom edge ($($b.Bottom) of $($form.ClientSize.Height))"
         }
     } finally { $form.Dispose() }
 }
+
+# ---- the quick-add dialog -------------------------------------------------
+# In the plugin assembly rather than the editor, which is why this test did not
+# cover it and why a button shipped sitting on top of a text box.
+$plugin = [Reflection.Assembly]::LoadFrom('D:\Google Drive\Dev\Sv\Supervertaler-for-memoQ\src\Supervertaler.MemoQ\bin\Release\Supervertaler.MemoQ.dll')
+$qa = $plugin.GetType('Supervertaler.MemoQ.Core.QuickAddForm')
+$qaCtor = @($qa.GetConstructors([Reflection.BindingFlags]'Public,NonPublic,Instance')) |
+          Where-Object { $_.GetParameters().Count -eq 6 }
+
+# The real case: the warning shown, and terms long enough to be awkward.
+$quick = $qaCtor.Invoke(@('eng-GB', 'dut-NL', 'Coronary Artery Disease', 'kransslagaderaandoening',
+                          'MEDI.GLOBAL (J_11886-1)', $true))
+try {
+    Fits $quick "the quick-add dialog"
+    NoOverlaps $quick "the quick-add dialog"
+    TextFits $quick "the quick-add dialog"
+
+    # The warning must be readable, which means wrapped rather than cut off.
+    $warning = @($quick.Controls | Where-Object { $_ -is [Windows.Forms.Label] -and $_.ForeColor.Name -eq 'Firebrick' })[0]
+    Check ($null -ne $warning) "the inferred-order warning is shown when the order was inferred"
+    if ($warning) {
+        Check ($warning.PreferredSize.Width -le $warning.Width -or $warning.Height -gt ($warning.Font.Height + 4)) `
+            "and it wraps rather than running off the edge"
+        Check ($warning.Text -notmatch 'inferred, not read') "and says what to do rather than what happened"
+    }
+} finally { $quick.Dispose() }
+
+# Without the warning the dialog must not keep a gap where it would have been.
+$quiet = $qaCtor.Invoke(@('eng-GB', 'dut-NL', 'device', 'hulpmiddel', 'MEDI.GLOBAL (J_11886-1)', $false))
+try {
+    Fits $quiet "the quick-add dialog, nothing inferred"
+    NoOverlaps $quiet "the quick-add dialog, nothing inferred"
+    TextFits $quiet "the quick-add dialog, nothing inferred"
+    Check (@($quiet.Controls | Where-Object { $_ -is [Windows.Forms.Label] -and $_.Visible -and $_.ForeColor.Name -eq 'Firebrick' }).Count -eq 0) `
+        "no warning when the segment settled it"
+} finally { $quiet.Dispose() }
 
 Write-Host ''
 Write-Host "DIALOG FIT TEST COMPLETE - $fails failure(s)"

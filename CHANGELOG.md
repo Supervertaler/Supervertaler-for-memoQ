@@ -29,6 +29,8 @@ any release tooling that buckets on these headings works for both.
 
 ### Fixed
 
+- **The Add term dialog clipped its buttons and its warning, and the swap arrow sat on top of the Dutch box.** Same cause as the other two dialogs: sizes written as numbers rather than measured. On this machine Add and Cancel need 28 pixels of height and were given 26, and the arrow needs 75 of width and was given 28. Everything is measured now, and the warning wraps instead of being cut off mid-sentence. The wording was also unhelpful – it described what had happened rather than what to do – and now leads with "Check these are the right way round".
+
 - **Alt+Up could put a term in backwards, and said nothing.** When neither word could be placed – because the English term appeared in the target as well as the source, and the Dutch one had just been typed and had not reached the live view – the plugin fell back on the order the keys were pressed in and assumed the source came first. Working target-first therefore produced a reversed pair, which matches nothing ever again and looks exactly like a term that is simply never used.
 
   The two uncertain cases are no longer treated alike. A word appearing on **both** sides is still a word of the source. A word appearing on **neither** means the live view has not caught up with the cell being edited, and that cell is the target. Where the order still has to be inferred, the dialog now says so in red and a swap button puts the pair the other way round in one click.
