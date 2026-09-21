@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Collections.Generic;
 using System.Data;
 using System.IO;
@@ -264,15 +264,18 @@ namespace Supervertaler.MemoQ.Core
             try
             {
                 using (var connection = Open())
-                using (var command = connection.CreateCommand())
                 {
+                    var synonyms = SynonymsFor(connection, ids);
+
+                    using (var command = connection.CreateCommand())
+                    {
                     // The ids are our own longs, read from this same database, so
                     // there is nothing here a parameter would protect against -
                     // but the list is built from them rather than from any string
                     // that ever came from outside.
                     command.CommandText =
                         "select tt.source_term, tt.target_term, tt.forbidden, " +
-                        "       tt.termbase_id, t.name, t.source_lang, t.target_lang " +
+                        "       tt.termbase_id, t.name, t.source_lang, t.target_lang, tt.id " +
                         "from termbase_terms tt " +
                         "join termbases t on t.id = tt.termbase_id " +
                         "where tt.termbase_id in (" + string.Join(",", ids.ConvertAll(i => i.ToString())) + ") " +
@@ -294,8 +297,28 @@ namespace Supervertaler.MemoQ.Core
 
                             if (source.Length == 0) continue;
 
+                            var termId = reader.IsDBNull(7) ? 0L : reader.GetInt64(7);
+                            var reversed = Reversed(Text(reader, 5), Text(reader, 6), jobSource, jobTarget);
+
+                            // Which side of THIS JOB a synonym belongs to. The
+                            // table records the side of the termbase as stored, so
+                            // in a termbase read backwards a stored "source"
+                            // synonym is a target-side one for this job. The wrong
+                            // way round would index a translation as something to
+                            // look for in the source text.
+                            List<string> sourceSide = null, targetSide = null;
+                            Synonyms syn;
+                            if (termId != 0 && synonyms.TryGetValue(termId, out syn))
+                            {
+                                sourceSide = reversed ? syn.Target : syn.Source;
+                                targetSide = reversed ? syn.Source : syn.Target;
+                            }
+
+                            var alsoAcceptable = targetSide != null && targetSide.Count > 0 ? targetSide : null;
+
                             entries.Add(new TermIndex.Entry
                             {
+                                AlsoAcceptable = alsoAcceptable,
                                 Source = source,
                                 Target = target,
                                 Forbidden = Flag(reader, 2),
@@ -307,7 +330,28 @@ namespace Supervertaler.MemoQ.Core
                                 // termbase says this".
                                 Origin = Text(reader, 4)
                             });
+
+                            // A source-side synonym is another spelling of the
+                            // same term, so it is a thing to look for in its own
+                            // right and gets its own entry with the same target.
+                            if (sourceSide != null)
+                                foreach (var also in sourceSide)
+                                {
+                                    if (string.IsNullOrWhiteSpace(also)) continue;
+
+                                    entries.Add(new TermIndex.Entry
+                                    {
+                                        Source = also,
+                                        Target = target,
+                                        Forbidden = Flag(reader, 2),
+                                        TermbaseId = reader.IsDBNull(3) ? 0 : reader.GetInt64(3),
+                                        Origin = Text(reader, 4),
+                                        FromSynonym = true,
+                                        AlsoAcceptable = alsoAcceptable
+                                    });
+                                }
                         }
+                    }
                 }
             }
             catch (Exception ex)
@@ -317,6 +361,76 @@ namespace Supervertaler.MemoQ.Core
             }
 
             return entries;
+        }
+
+        /// <summary>Both sides' synonyms for one term, as stored.</summary>
+        internal sealed class Synonyms
+        {
+            public List<string> Source = new List<string>();
+            public List<string> Target = new List<string>();
+        }
+
+        /// <summary>
+        /// Every synonym belonging to the selected termbases, by term id.
+        ///
+        /// <para>One query rather than one per term: the live database here holds
+        /// 1,147 synonyms against 37,359 terms, and a query per term would be tens
+        /// of thousands of round trips to save a dictionary.</para>
+        ///
+        /// <para>This product ignored the table entirely until 2026-09-21 while
+        /// Supervertaler for Trados wrote and matched it, so a synonym saved there
+        /// was silently invisible here in the same termbase - and 1,081 of the
+        /// 1,147 sit in the one termbase in daily use, which is the worst place
+        /// for a silent gap.</para>
+        /// </summary>
+        private static Dictionary<long, Synonyms> SynonymsFor(SqliteConnection connection, List<long> ids)
+        {
+            var found = new Dictionary<long, Synonyms>();
+            if (ids == null || ids.Count == 0) return found;
+
+            try
+            {
+                using (var command = connection.CreateCommand())
+                {
+                    command.CommandText =
+                        "select s.term_id, s.synonym_text, s.language " +
+                        "from termbase_synonyms s " +
+                        "join termbase_terms tt on tt.id = s.term_id " +
+                        "where tt.termbase_id in (" + string.Join(",", ids.ConvertAll(i => i.ToString())) + ") " +
+                        "  and s.synonym_text is not null and s.synonym_text <> '' " +
+                        "order by s.display_order, s.id";
+
+                    using (var reader = command.ExecuteReader())
+                        while (reader.Read())
+                        {
+                            if (reader.IsDBNull(0)) continue;
+
+                            var termId = reader.GetInt64(0);
+                            var text = Text(reader, 1);
+                            var side = Text(reader, 2);
+                            if (text.Length == 0) continue;
+
+                            Synonyms entry;
+                            if (!found.TryGetValue(termId, out entry)) found[termId] = entry = new Synonyms();
+
+                            // The column is constrained to these two values, but a
+                            // file written by something else may still surprise us,
+                            // and guessing a side would index a translation as a
+                            // source term.
+                            if (string.Equals(side, "source", StringComparison.OrdinalIgnoreCase)) entry.Source.Add(text);
+                            else if (string.Equals(side, "target", StringComparison.OrdinalIgnoreCase)) entry.Target.Add(text);
+                        }
+                }
+            }
+            catch (Exception ex)
+            {
+                // A termbase file without the synonyms table, or an unreadable
+                // one, must not stop the terms loading. Fewer hits, not no hits.
+                ErrorSink("Synonyms could not be read; terms are unaffected", ex);
+                return new Dictionary<long, Synonyms>();
+            }
+
+            return found;
         }
 
         /// <summary>

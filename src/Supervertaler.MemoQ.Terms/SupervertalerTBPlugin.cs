@@ -354,6 +354,17 @@ namespace Supervertaler.MemoQ
 
             sb.Append("<div style=\"color:#6c757d\">").Append(Escape(entry.Source)).Append("</div>");
 
+            // Other renderings the termbase accepts, from this term's target-side
+            // synonyms. Shown, never matched on, and never sent to the model: the
+            // translator may choose between renderings and the model may not,
+            // which is the whole reason a locked target is a single target.
+            if (entry.AlsoAcceptable != null && entry.AlsoAcceptable.Count > 0 && !entry.Forbidden)
+            {
+                sb.Append("<div style=\"color:#6c757d;font-size:8pt\">also: ")
+                  .Append(Escape(string.Join(", ", entry.AlsoAcceptable)))
+                  .Append("</div>");
+            }
+
             // Name what answered. With a glossary file and several termbases all
             // live at once, "a term matched" is much less use than knowing which
             // termbase said so - and it is the only way to tell, from the pane,
@@ -364,6 +375,11 @@ namespace Supervertaler.MemoQ
             sb.Append("<div style=\"color:#adb5bd;font-size:8pt\">Supervertaler")
               .Append(origin.Length > 0 ? " · " + Escape(origin) : string.Empty)
               .Append(entry.Rank == 1 ? " · project termbase" : string.Empty)
+              // A hit on a synonym is a hit on a word that is NOT in the
+              // termbase's source column, so a translator looking the term up
+              // would not find it. Saying so is the difference between a useful
+              // hit and a confusing one.
+              .Append(entry.FromSynonym ? " \u00b7 synonym" : string.Empty)
               .Append("</div>");
             sb.Append("</div>");
             return sb.ToString();

@@ -60,6 +60,29 @@ namespace Supervertaler.MemoQ.Core
             public string Origin { get; set; }
 
             /// <summary>
+            /// This entry is a SOURCE-side synonym of a term rather than the term
+            /// as written: another spelling of the same thing, which genuinely has
+            /// to be looked for. Carried so the pane can say so, since a
+            /// translator seeing a hit on a word that is not in the termbase's
+            /// source column should be told why.
+            /// </summary>
+            public bool FromSynonym { get; set; }
+
+            /// <summary>
+            /// Other renderings this term may take, from its TARGET-side synonyms.
+            /// Shown to the translator and never matched on: a target-side variant
+            /// is not an alternative source to look for.
+            ///
+            /// <para>It never reaches the model either. The model must not choose
+            /// between renderings - that is the inconsistency terminology exists
+            /// to prevent - and it already has permission to deviate from a single
+            /// binding target when one is clearly wrong for the sentence. Agreed
+            /// with Supervertaler for Trados on 2026-09-19 and written down in
+            /// core's alternatives note.</para>
+            /// </summary>
+            public List<string> AlsoAcceptable { get; set; }
+
+            /// <summary>
             /// <see cref="Source"/> with subscripts, superscripts and radical dots
             /// folded to their plain forms - what matching compares against, while
             /// Source stays as written for the pane and the prompt.
