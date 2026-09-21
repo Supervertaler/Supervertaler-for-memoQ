@@ -108,3 +108,130 @@ Draw  55  58  48 (Join-Path $out 'wizard-small.bmp') $bmp   # the corner mark on
 # The MCP bundle's icon, which Claude Desktop shows beside the extension. It was
 # sv-icon-512.png - the blue one - for the same reason the wizard was.
 Draw 512 512 512 (Join-Path $root 'sv-icon-memoq-512.png') $png
+
+# ---------------------------------------------------------------------------
+# The installer's own icon.
+#
+# Inno puts the wizard's images on the PAGES; the icon on the title bar, in the
+# task bar, and on the .exe in Explorer comes from SetupIconFile, and with no
+# SetupIconFile it uses its own generic one. So the pages were branded and the
+# window was not - which is the first thing anyone sees, and the thing they see
+# again every time they look at the downloaded file.
+#
+# Written by hand because .NET can make a single-size icon and nothing else,
+# and one size is not enough: Explorer, the task bar and the title bar all ask
+# for different ones and scale whatever they are given. Small sizes are DIB
+# frames, which every version of Windows reads; the two large ones are PNG,
+# which keeps the file to tens of kilobytes rather than a third of a megabyte.
+function MarkBitmap($size) {
+    $b = New-Object System.Drawing.Bitmap($size, $size,
+            [System.Drawing.Imaging.PixelFormat]::Format32bppArgb)
+    $g = [System.Drawing.Graphics]::FromImage($b)
+    try {
+        $g.Clear([System.Drawing.Color]::Transparent)
+        $g.SmoothingMode = [System.Drawing.Drawing2D.SmoothingMode]::AntiAlias
+        # AntiAlias rather than AntiAliasGridFit: grid fitting snaps stems to
+        # whole pixels, which is right on an opaque background and leaves hard
+        # edges against a transparent one.
+        $g.TextRenderingHint = [System.Drawing.Text.TextRenderingHint]::AntiAlias
+        DrawMark $g 0 0 $size
+    } finally { $g.Dispose() }
+    return $b
+}
+
+# A 32-bit bottom-up DIB, as an icon frame wants it: a BITMAPINFOHEADER whose
+# height is DOUBLED to account for the mask, the colour rows, then a mask of
+# zeroes. The mask is unused at 32 bits, where the alpha channel decides, but
+# leaving it out makes the frame unreadable.
+function DibFrame($bitmap) {
+    $w = $bitmap.Width; $h = $bitmap.Height
+    $data = $bitmap.LockBits(
+        (New-Object System.Drawing.Rectangle(0, 0, $w, $h)),
+        [System.Drawing.Imaging.ImageLockMode]::ReadOnly,
+        [System.Drawing.Imaging.PixelFormat]::Format32bppArgb)
+    try {
+        $pixels = New-Object byte[] ($data.Stride * $h)
+        [Runtime.InteropServices.Marshal]::Copy($data.Scan0, $pixels, 0, $pixels.Length)
+    } finally { $bitmap.UnlockBits($data) }
+
+    $maskRow = [Math]::Floor(($w + 31) / 32) * 4
+    $stream = New-Object System.IO.MemoryStream
+    $writer = New-Object System.IO.BinaryWriter($stream)
+    try {
+        $writer.Write([int]40)          # biSize
+        $writer.Write([int]$w)
+        $writer.Write([int]($h * 2))    # colour rows plus mask rows
+        $writer.Write([int16]1)         # biPlanes
+        $writer.Write([int16]32)        # biBitCount
+        $writer.Write([int]0)           # BI_RGB
+        $writer.Write([int]($w * $h * 4 + $maskRow * $h))
+        $writer.Write([int]0); $writer.Write([int]0)
+        $writer.Write([int]0); $writer.Write([int]0)
+
+        # Bottom-up, which is the one thing about this format that catches
+        # everybody: the last row of the image is written first.
+        for ($y = $h - 1; $y -ge 0; $y--) {
+            $writer.Write($pixels, $y * $data.Stride, $w * 4)
+        }
+        $writer.Write((New-Object byte[] ($maskRow * $h)))
+
+        $writer.Flush()
+        # The leading comma stops PowerShell unrolling the array into a stream
+        # of separate bytes on the way out. Without it every frame arrives as a
+        # single byte and the icon is a 159-byte directory pointing at nothing.
+        return ,$stream.ToArray()
+    } finally { $writer.Dispose(); $stream.Dispose() }
+}
+
+function PngFrame($bitmap) {
+    $stream = New-Object System.IO.MemoryStream
+    try {
+        $bitmap.Save($stream, [System.Drawing.Imaging.ImageFormat]::Png)
+        return ,$stream.ToArray()
+    } finally { $stream.Dispose() }
+}
+
+function WriteIcon($sizes, $pngFrom, $path) {
+    $frames = @()
+    foreach ($size in $sizes) {
+        $bitmap = MarkBitmap $size
+        try {
+            $bytes = if ($size -ge $pngFrom) { PngFrame $bitmap } else { DibFrame $bitmap }
+            $frames += [pscustomobject]@{ Size = $size; Bytes = [byte[]]$bytes }
+        } finally { $bitmap.Dispose() }
+    }
+
+    $file = [System.IO.File]::Create($path)
+    $writer = New-Object System.IO.BinaryWriter($file)
+    try {
+        $writer.Write([int16]0); $writer.Write([int16]1)          # reserved, type 1 = icon
+        $writer.Write([int16]$frames.Count)
+
+        # Every frame's data follows every frame's directory entry, so the first
+        # offset is past the whole directory.
+        $offset = 6 + 16 * $frames.Count
+        foreach ($f in $frames) {
+            # 256 is written as 0: the field is one byte.
+            $writer.Write([byte]($(if ($f.Size -ge 256) { 0 } else { $f.Size })))
+            $writer.Write([byte]($(if ($f.Size -ge 256) { 0 } else { $f.Size })))
+            $writer.Write([byte]0)            # palette colours
+            $writer.Write([byte]0)            # reserved
+            $writer.Write([int16]1)           # planes
+            $writer.Write([int16]32)          # bits per pixel
+            $writer.Write([int]$f.Bytes.Length)
+            $writer.Write([int]$offset)
+            $offset += $f.Bytes.Length
+        }
+        foreach ($f in $frames) { $writer.Write([byte[]]$f.Bytes, 0, $f.Bytes.Length) }
+    } finally { $writer.Dispose(); $file.Dispose() }
+
+    $written = (Get-Item $path).Length
+    $expected = 6 + 16 * $frames.Count
+    foreach ($f in $frames) { $expected += $f.Bytes.Length }
+    if ($written -ne $expected) { throw "The icon is $written bytes and should be $expected" }
+
+    Write-Host ("  {0}  ({1}) {2} KB" -f (Split-Path $path -Leaf), ($sizes -join ', '), [int]($written / 1KB))
+}
+
+Write-Host 'installer icon:'
+WriteIcon @(16, 20, 24, 32, 40, 48, 64, 128, 256) 128 (Join-Path $out 'sv-icon-memoq.ico')

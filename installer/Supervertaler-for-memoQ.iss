@@ -59,6 +59,14 @@ WizardStyle=modern
 WizardImageFile=wizard-large.bmp
 WizardSmallImageFile=wizard-small.bmp
 
+; The wizard images go on the PAGES. The title bar, the task bar and the .exe in
+; Explorer take their icon from here, and with no SetupIconFile they get Inno's
+; generic one - so the pages were branded and the window was not, which is the
+; first thing anyone sees and the thing they see again every time they look at
+; the file they downloaded. Generated alongside the wizard images, from the same
+; mark, at every size Windows asks for.
+SetupIconFile=sv-icon-memoq.ico
+
 ; The add-in goes under Program Files, so this cannot be a per-user install.
 PrivilegesRequired=admin
 

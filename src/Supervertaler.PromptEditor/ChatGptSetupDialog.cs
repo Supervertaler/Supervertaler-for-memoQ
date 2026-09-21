@@ -26,6 +26,13 @@ namespace Supervertaler.PromptEditor
         private readonly Label _status;
 
         /// <summary>
+        /// Where the Claude Desktop extension file and its instructions live.
+        /// The dialog cannot fetch that one, so the least it can do is not leave
+        /// the reader to search for it.
+        /// </summary>
+        private const string DocsUrl = "https://docs.supervertaler.com/memoq/mcp-server/";
+
+        /// <summary>
         /// What this product is, as far as the shared setup is concerned. The
         /// environment variable is the whole of what makes the shared server
         /// memoQ's rather than Trados's: it decides which handshake file the
@@ -101,12 +108,21 @@ namespace Supervertaler.PromptEditor
                 return label;
             }
 
+            // Says what it is FOR before it says what to press. The first version
+            // opened with "this downloads the Supervertaler MCP server", which
+            // assumes the reader knows what an MCP server is and why they would
+            // want one - and translators do not, nor should they have to.
+            Paragraph(
+                "An AI assistant can work with the memoQ project you have open: read the " +
+                "document, see the segment you are on, look words up in your termbases, and put " +
+                "translations ready for your next Pre-translate. Set up either assistant, or both.");
+
             Paragraph("ChatGPT desktop", bold: true);
             Paragraph(
-                "This downloads the Supervertaler MCP server and registers it with ChatGPT " +
-                "desktop, so you can ask ChatGPT about the project open in memoQ. It writes one " +
-                "entry into ChatGPT's configuration file and leaves everything else in it alone, " +
-                "keeping a dated backup first.");
+                "Press the button. Supervertaler fetches what ChatGPT needs, keeps it in your " +
+                "Supervertaler folder and points ChatGPT at it. It adds one line to ChatGPT's own " +
+                "settings file, leaves anything else in there alone, and keeps a dated copy of it " +
+                "first.");
 
             _setUp = new Button
             {
@@ -132,10 +148,40 @@ namespace Supervertaler.PromptEditor
             y += _status.Height + 16;
 
             Paragraph("Claude Desktop", bold: true);
+
+            // "Claude Desktop installs itself" was the first wording, and it was
+            // reported as confusing on sight: it says nothing about what the
+            // reader is meant to do, and it leaves the obvious question - why
+            // does one of these have a button and the other not - unanswered.
+            // Say what to do, then why there is no button, then where the file
+            // comes from, which is the question the old text walked straight
+            // past.
             Paragraph(
-                "Claude Desktop installs itself: open Settings, Extensions, Advanced settings, " +
-                "Install extension, and choose the Supervertaler for memoQ extension file. " +
-                "There is nothing to press here. Both assistants can be connected at once.");
+                "Claude Desktop adds connections from a file you choose yourself, so there is no " +
+                "button for it here. In Claude Desktop, open Settings, then Extensions, then " +
+                "Advanced settings, then Install extension, and pick the Supervertaler for memoQ " +
+                "file.");
+
+            var where = new LinkLabel
+            {
+                Text = "Where to get that file, with pictures",
+                AutoSize = true,
+                MaximumSize = new Size(inner, 0),
+                Location = new Point(margin, y),
+            };
+            where.LinkClicked += (s, e) =>
+            {
+                try { System.Diagnostics.Process.Start(DocsUrl); }
+                catch (Exception ex)
+                {
+                    MessageBox.Show(this, "The page could not be opened: " + ex.Message +
+                        Environment.NewLine + Environment.NewLine + DocsUrl,
+                        "Connect AI assistant", MessageBoxButtons.OK, MessageBoxIcon.Warning);
+                }
+            };
+            where.Size = where.PreferredSize;
+            Controls.Add(where);
+            y += where.Height + 12;
 
             var close = new Button
             {
