@@ -99,6 +99,25 @@ Name: "{autoprograms}\Supervertaler for memoQ"; Filename: "{code:MemoQAddins}\Su
 var
   MemoQDir: String;
 
+{ Inno right-aligns the header logo hard against the window edge, which leaves it
+  sitting closer to the edge than the page title sits to the other one. Give it
+  the same inset as the title instead, so the header is symmetric.
+
+  Read off the form rather than typed as a number: both values are already DPI
+  scaled, so this lands correctly on a 150% display as well, and a nonsense
+  result is left alone rather than moving the image somewhere worse. }
+procedure InitializeWizard();
+var
+  NewLeft: Integer;
+begin
+  NewLeft := WizardForm.MainPanel.Width
+             - WizardForm.WizardSmallBitmapImage.Width
+             - WizardForm.PageNameLabel.Left;
+
+  if (NewLeft > 0) and (NewLeft < WizardForm.WizardSmallBitmapImage.Left) then
+    WizardForm.WizardSmallBitmapImage.Left := NewLeft;
+end;
+
 { The newest memoQ under Program Files. The folder is stamped with the MAJOR
   version only - 12.4 and 12.5 both install into memoQ-12 - so the highest
   number is the right answer rather than merely a guess. }
