@@ -165,8 +165,22 @@ try {
     $warning = @($quick.Controls | Where-Object { $_ -is [Windows.Forms.Label] -and $_.ForeColor.Name -eq 'Firebrick' })[0]
     Check ($null -ne $warning) "the inferred-order warning is shown when the order was inferred"
     if ($warning) {
-        Check ($warning.PreferredSize.Width -le $warning.Width -or $warning.Height -gt ($warning.Font.Height + 4)) `
-            "and it wraps rather than running off the edge"
+        # This was written as "preferred width fits OR it is more than one line",
+        # and the first half can never be false: the label is AutoSize with a
+        # MaximumSize, so WinForms sets its width to its preferred width by
+        # definition. TextFits above compares the same two numbers for every
+        # label and button, and is worth having for the ones given a fixed size -
+        # but for an AutoSize control it asks a question with one answer. So the
+        # whole check passed unconditionally, in the harness that exists because
+        # this dialog shipped clipped three times.
+        #
+        # What can actually fail is whether the text wrapped at all. Take the
+        # MaximumSize away and this becomes one long line, which is how the
+        # warning first shipped, cut off mid-sentence.
+        Check ($warning.Height -gt ($warning.Font.Height + 4)) `
+            "and the warning wraps onto more than one line ($($warning.Height)px, one line is about $($warning.Font.Height)px)"
+        Check ($warning.Right -le $quick.ClientSize.Width) `
+            "and its right edge is inside the dialog ($($warning.Right) of $($quick.ClientSize.Width))"
         Check ($warning.Text -notmatch 'inferred, not read') "and says what to do rather than what happened"
     }
 } finally { $quick.Dispose() }
