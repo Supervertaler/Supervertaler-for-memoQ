@@ -173,9 +173,16 @@ namespace Supervertaler.PromptEditor
             // window was one button. The extension now ships with Supervertaler,
             // so the honest answer is a second button, and the asymmetry that
             // needed explaining is gone.
+            // Says what will happen without promising which of the two ways it
+            // happens. Claude Desktop takes the file directly on some machines
+            // and refuses it on others, for reasons that have nothing to do with
+            // Supervertaler, and a dialog that promises the good case makes the
+            // ordinary case read as a failure.
             Paragraph(
-                "Press the button and Claude Desktop takes over: it asks you to confirm, and the " +
-                "extension is installed. Nothing is downloaded – the file came with Supervertaler.");
+                "Press the button and Supervertaler hands the extension to Claude Desktop, which " +
+                "asks you to confirm it. If Claude will not take it directly, the file is shown to " +
+                "you in its folder with the three steps to add it by hand. Nothing is downloaded " +
+                "either way – the file came with Supervertaler.");
 
             _claude = new Button
             {
@@ -190,7 +197,10 @@ namespace Supervertaler.PromptEditor
 
             var where = new LinkLabel
             {
-                Text = "Doing it by hand, with pictures",
+                // "with pictures" was wishful: the page has none. A link that
+                // promises something the page does not have is worse than a
+                // plain one, because the reader goes looking for it.
+                Text = "How to do it by hand",
                 AutoSize = true,
                 MaximumSize = new Size(inner, 0),
                 Location = new Point(margin, y),
@@ -242,31 +252,46 @@ namespace Supervertaler.PromptEditor
                 return;
             }
 
+            // Opening it directly is the obvious way and it fails here. Claude
+            // Desktop is a packaged app, so the association Windows wrote points
+            // at its executable inside WindowsApps, which an ordinary process is
+            // not allowed to start - measured on this machine, where the button
+            // fell straight through to the folder. Handing the path to Explorer
+            // asks the shell to do the opening, which is allowed to activate a
+            // packaged app, so it is worth trying before giving up.
+            //
+            // That association also carries Claude Desktop's version number in
+            // the path, so it breaks every time Claude updates until something
+            // rewrites it. Which is the other reason the folder fallback stays:
+            // this will come and go on the same machine.
+            foreach (var attempt in new Func<System.Diagnostics.Process>[]
+            {
+                () => System.Diagnostics.Process.Start(bundle),
+                () => System.Diagnostics.Process.Start("explorer.exe", "\"" + bundle + "\""),
+            })
+            {
+                try { attempt(); return; }
+                catch { /* try the next one */ }
+            }
+
+            // Nothing on this machine will open it, so show them the file rather
+            // than an error they can do nothing with.
             try
             {
-                System.Diagnostics.Process.Start(bundle);
+                System.Diagnostics.Process.Start("explorer.exe", "/select,\"" + bundle + "\"");
+                MessageBox.Show(this,
+                    "Claude Desktop did not take the file, so it is selected in the folder instead." +
+                    Environment.NewLine + Environment.NewLine +
+                    "In Claude Desktop, open Settings, then Extensions, then Advanced settings, " +
+                    "then Install extension, and choose that file.",
+                    "Install in Claude Desktop", MessageBoxButtons.OK, MessageBoxIcon.Information);
             }
-            catch
+            catch (Exception ex)
             {
-                // Nothing on this machine opens a .mcpb, so show them the file
-                // instead of an error they can do nothing with.
-                try
-                {
-                    System.Diagnostics.Process.Start("explorer.exe", "/select,\"" + bundle + "\"");
-                    MessageBox.Show(this,
-                        "Claude Desktop did not open the file, so it is selected in the folder " +
-                        "instead." + Environment.NewLine + Environment.NewLine +
-                        "In Claude Desktop, open Settings, then Extensions, then Advanced settings, " +
-                        "then Install extension, and choose that file.",
-                        "Install in Claude Desktop", MessageBoxButtons.OK, MessageBoxIcon.Information);
-                }
-                catch (Exception ex)
-                {
-                    MessageBox.Show(this,
-                        "The extension could not be opened: " + ex.Message + Environment.NewLine +
-                        Environment.NewLine + bundle,
-                        "Install in Claude Desktop", MessageBoxButtons.OK, MessageBoxIcon.Warning);
-                }
+                MessageBox.Show(this,
+                    "The extension could not be opened: " + ex.Message + Environment.NewLine +
+                    Environment.NewLine + bundle,
+                    "Install in Claude Desktop", MessageBoxButtons.OK, MessageBoxIcon.Warning);
             }
         }
 
