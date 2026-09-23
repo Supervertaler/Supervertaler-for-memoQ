@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Drawing;
 using System.Windows.Forms;
 using Supervertaler.Core;
@@ -54,7 +54,7 @@ namespace Supervertaler.PromptEditor
                         ? "Supervertaler free trial: 1 day left."
                         : "Supervertaler free trial: " + TrialDaysRemaining + " days left.";
                 case LicenceState.Expired:
-                    return "AI translation is paused – see Settings, Licence.";
+                    return "AI translation is paused – see Help, Licence.";
                 default:
                     return null;
             }

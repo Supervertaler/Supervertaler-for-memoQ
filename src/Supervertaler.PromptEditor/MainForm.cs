@@ -324,13 +324,7 @@ namespace Supervertaler.PromptEditor
                 ToolTipText = "Let ChatGPT desktop or Claude Desktop work with the project open in memoQ."
             });
 
-            // Here rather than in memoQ's own dialog, because memoQ gives an
-            // add-in nowhere else to put it - and it is the same licence as
-            // Supervertaler for Trados, so the window says so.
-            settingsMenu.DropDownItems.Add(new ToolStripMenuItem("&Licence…", null, (s, e) => ShowLicence())
-            {
-                ToolTipText = "The Supervertaler licence on this computer, shared with Supervertaler for Trados."
-            });
+
 
             // memoQ's dialog writes the same file, so re-read on opening rather
             // than trust what this menu was last showing.
@@ -358,12 +352,15 @@ namespace Supervertaler.PromptEditor
             var helpMenu = new ToolStripMenuItem("&Help");
             helpMenu.DropDownItems.Add(new ToolStripMenuItem("&Documentation", null, (s, e) => OpenDocumentation()));
 
-            // Also here, not only under Settings. The first person to look for it
-            // - Michael, testing - opened the toolbar's Settings button, which is
-            // Translation settings, and found nothing: two things called Settings
-            // in one window, and the licence behind the less obvious one. Help is
-            // where people conventionally look for a licence after buying one.
-            helpMenu.DropDownItems.Add(new ToolStripMenuItem("&Licence…", null, (s, e) => ShowLicence()));
+            // Under Help and only there: it is where people look for a licence,
+            // and it is the same licence as Supervertaler for Trados. It was under
+            // Settings first, and the first person to look for it opened the
+            // toolbar's Settings button instead - Translation settings - and found
+            // no sign of it.
+            helpMenu.DropDownItems.Add(new ToolStripMenuItem("&Licence…", null, (s, e) => ShowLicence())
+            {
+                ToolTipText = "The Supervertaler licence on this computer, shared with Supervertaler for Trados."
+            });
 
             menu.Items.AddRange(new ToolStripItem[] { fileMenu, memoqMenu, settingsMenu, helpMenu });
 
@@ -411,7 +408,12 @@ namespace Supervertaler.PromptEditor
             // and the result was two buttons nobody could identify - including the
             // person who asked for them to be put there. An icon earns silence
             // only when everyone already knows it; a gear and a plug do not.
-            var settingsButton = Button("Settings", Glyphs.Settings, "Translation settings",
+            // "Translation settings", not "Settings": the menu bar has a Settings
+            // menu too, and two things with one name in one window sent the first
+            // person looking for the licence into the wrong one. The button opens
+            // Translation settings, so that is what it says.
+            var settingsButton = Button("Translation settings", Glyphs.Settings,
+                "Provider, model, API key and how memoQ sends segments",
                 (s, e) => ShowSettings());
             settingsButton.Alignment = ToolStripItemAlignment.Right;
 
@@ -793,7 +795,7 @@ namespace Supervertaler.PromptEditor
                 MessageBox.Show(this,
                     "The Supervertaler licence file on this computer was damaged and has been replaced." +
                     Environment.NewLine + Environment.NewLine +
-                    "Everything keeps working for now. To restore your licence, choose Settings, Licence " +
+                    "Everything keeps working for now. To restore your licence, choose Help, Licence " +
                     "and enter your licence key again – it is in the email you received when you " +
                     "bought Supervertaler.",
                     "Supervertaler licence", MessageBoxButtons.OK, MessageBoxIcon.Warning);
@@ -2449,7 +2451,12 @@ namespace Supervertaler.PromptEditor
         {
             try
             {
-                Process.Start("https://docs.supervertaler.com/memoq/prompt-editor/");
+                // The front page of the memoQ documentation, not the page about
+                // this window. It used to open the prompt editor's page, which
+                // greets someone who pressed Help, Documentation with the heading
+                // "Prompt Library & Editor" - accurate about this window and
+                // confusing to anyone who wanted the product's documentation.
+                Process.Start("https://docs.supervertaler.com/memoq/");
             }
             catch (Exception ex)
             {

@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Threading;
 using System.Threading.Tasks;
 using Supervertaler.Core;
@@ -68,10 +68,10 @@ namespace Supervertaler.MemoQ.Core
                 return hasKey
                     ? "Supervertaler's licence has not been confirmed online for 30 days, so AI " +
                       "translation is paused. Connect to the internet, then open the Supervertaler " +
-                      "editor and choose Settings, Licence, Check now. Your termbases, prompts and " +
+                      "editor and choose Help, Licence, Check now. Your termbases, prompts and " +
                       "memory banks are unaffected."
                     : "Supervertaler's free trial has ended on this computer, so AI translation is " +
-                      "paused. Open the Supervertaler editor and choose Settings, Licence to enter a " +
+                      "paused. Open the Supervertaler editor and choose Help, Licence to enter a " +
                       "licence key. Your termbases, prompts and memory banks are unaffected.";
             }
         }
