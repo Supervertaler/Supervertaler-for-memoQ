@@ -355,8 +355,8 @@ namespace Supervertaler.PromptEditor
             // Under Help and only there: it is where people look for a licence,
             // and it is the same licence as Supervertaler for Trados. It was under
             // Settings first, and the first person to look for it opened the
-            // toolbar's Settings button instead - Translation settings - and found
-            // no sign of it.
+            // toolbar's Settings button instead - Translation settings, since
+            // removed from the toolbar - and found no sign of it.
             helpMenu.DropDownItems.Add(new ToolStripMenuItem("&Licence…", null, (s, e) => ShowLicence())
             {
                 ToolTipText = "The Supervertaler licence on this computer, shared with Supervertaler for Trados."
@@ -365,7 +365,7 @@ namespace Supervertaler.PromptEditor
             menu.Items.AddRange(new ToolStripItem[] { fileMenu, memoqMenu, settingsMenu, helpMenu });
 
             // Two groups. On the left, what is used while writing a prompt; on
-            // the right, the three things that were reachable only through a menu
+            // the right, the two things that were reachable only through a menu
             // and that you want to SEE rather than go and look up - most of all
             // the MCP toggle, which decides whether Pre-translate spends API
             // credit or the chat subscription, and whose state was invisible.
@@ -403,19 +403,17 @@ namespace Supervertaler.PromptEditor
                 (s, e) => ShowImages());
 
             // Right-aligned items are laid out from the right edge inwards, so
-            // this list reads right to left on screen: settings, activity, MCP.
-            // Labelled, all three. They were icon-only to keep the corner quiet,
-            // and the result was two buttons nobody could identify - including the
-            // person who asked for them to be put there. An icon earns silence
-            // only when everyone already knows it; a gear and a plug do not.
-            // "Translation settings", not "Settings": the menu bar has a Settings
-            // menu too, and two things with one name in one window sent the first
-            // person looking for the licence into the wrong one. The button opens
-            // Translation settings, so that is what it says.
-            var settingsButton = Button("Translation settings", Glyphs.Settings,
-                "Provider, model, API key and how memoQ sends segments",
-                (s, e) => ShowSettings());
-            settingsButton.Alignment = ToolStripItemAlignment.Right;
+            // this list reads right to left on screen: activity, MCP. Labelled,
+            // both. They were icon-only to keep the corner quiet, and the result
+            // was buttons nobody could identify - including the person who asked
+            // for them to be put there. An icon earns silence only when everyone
+            // already knows it; a plug does not.
+            //
+            // No Translation settings button here any more. It duplicated
+            // Settings, Translation settings on the menu, and one command in two
+            // places read as two different things. Provider, model and key are set
+            // once, not per job, so the menu is where they belong; the toolbar is
+            // for what changes while you work.
 
             var activityButton = Button("Activity", Glyphs.Activity,
                 "What the plugin is doing, live (Ctrl+L). memoQ's own progress dialog says only \"Processing\".",
@@ -451,7 +449,7 @@ namespace Supervertaler.PromptEditor
                 _insert, new ToolStripSeparator(),
                 draft,
                 images,
-                settingsButton, activityButton, _mcpMode
+                activityButton, _mcpMode
             });
 
             // What memoQ will actually use, in the one place you cannot miss it.
