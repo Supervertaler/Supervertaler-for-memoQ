@@ -163,6 +163,6 @@ any release tooling that buckets on these headings works for both.
 ### Not yet
 
 - **A term added from the grid appears when you next move onto the segment, not at once.** memoQ asks a terminology plugin about a segment once and keeps the answer, and its terminology SDK has no way to say the answer has changed. The live document link, the one channel that reaches memoQ from outside, can only ask it to select a segment: asked for the range it already had, memoQ accepted and changed nothing; asked for a range it genuinely had to apply, it accepted that too and still did not look the segment up again. So memoQ re-queries terminology when the cursor changes row and not otherwise. Stepping to a neighbouring row and back would work and would cost you your place in the target cell every time you add a term, which is not worth paying when the dialog has already said the term went in.
-- A signed build and an installer. Until then the plugin is copied into memoQ's `Addins` folder by hand and memoQ warns once that it is unsigned.
+- A signed build. The installer exists (see Added), but until memoQ has compiled Supervertaler’s public key into one of its own releases, memoQ may warn once that the plugin is unsigned.
 - SuperBench (three models, one judge) – shipped in Supervertaler for Trados, tracked for memoQ as #6.
 - Word list markers as context for the model, so a lettered list of claim steps is not read as unlabelled sentences – #7, shared with Trados.
