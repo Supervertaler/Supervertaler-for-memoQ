@@ -47,12 +47,20 @@ namespace Supervertaler.PromptEditor
             public bool Create;
         }
 
-        public static BankChoice ChooseBank(IWin32Window owner, IReadOnlyList<BankRow> banks, string current)
+        public static BankChoice ChooseBank(IWin32Window owner, IReadOnlyList<BankRow> banks, string current,
+                                            string projectNote = null)
         {
+            // The project the choice is filed against goes in the caption, where it
+            // is read BEFORE choosing. It used to be said only afterwards, on the
+            // status bar, once the bank had already been recorded (#8).
+            var caption = "The bank's brief, terminology and style go to the model with every request. "
+                        + "Each project remembers its own.";
+            if (!string.IsNullOrWhiteSpace(projectNote))
+                caption += "\r\n\r\n" + projectNote;
+
             using (var dialog = new ChooserForm(
                 "Choose the active memory bank",
-                "The bank's brief, terminology and style go to the model with every request. "
-                + "Each project remembers its own.",
+                caption,
                 "Type to filter by name",
                 BankRows(banks), current,
                 "New memory bank…"))

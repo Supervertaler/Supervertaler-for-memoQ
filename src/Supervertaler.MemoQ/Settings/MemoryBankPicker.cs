@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Drawing;
 using System.Windows.Forms;
 using Supervertaler.MemoQ.Core;
@@ -127,9 +127,26 @@ namespace Supervertaler.MemoQ.Settings
             }
 
             var name = (SharedSettings.MemoryBankProjectName ?? string.Empty).Trim();
+            var which = name.Length > 0 ? "'" + name + "'" : "the last project translated in";
 
-            return "Remembered for " + (name.Length > 0 ? "'" + name + "'" : "the last project "
-                   + "translated in") + ". Other projects keep their own choice, and a project with none "
+            // Said before the choice rather than after it, and never a refusal:
+            // filing a bank against the previous project can be exactly what
+            // someone wants, when they know that is what they are doing (#8).
+            switch (Core.MemoQSession.Freshness())
+            {
+                case Core.ProjectFreshness.EarlierSession:
+                    return "This will be remembered for " + which + " - but memoQ reported that project in an "
+                         + "earlier session and has not yet said which project is open now. If you have opened a "
+                         + "different one, click into a segment in memoQ first.";
+                case Core.ProjectFreshness.MemoQClosed:
+                    return "This will be remembered for " + which + ", the last project memoQ reported. memoQ is "
+                         + "not running, so that is only right if it is the project you mean.";
+                case Core.ProjectFreshness.CannotTell:
+                    return "This will be remembered for " + which + ", which may be from an earlier memoQ session: "
+                         + "it could not be checked.";
+            }
+
+            return "Remembered for " + which + ". Other projects keep their own choice, and a project with none "
                    + "recorded uses no bank rather than inheriting this one.";
         }
 

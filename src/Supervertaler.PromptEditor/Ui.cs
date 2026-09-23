@@ -40,6 +40,17 @@ namespace Supervertaler.PromptEditor
         internal static Color Accent { get; } = Color.FromArgb(0xC9, 0x3A, 0x25);
 
         /// <summary>
+        /// Something to check, not something wrong: a dark amber, about 5.9:1 on
+        /// white, so it reads as text rather than decoration. Kept apart from the
+        /// accent, which means "in use", and from red, which means an error - the
+        /// project heading uses it when the project shown may be an earlier memoQ
+        /// session's (#8). Under a high-contrast theme it gives way to the system
+        /// text colour, which is the one guaranteed to be readable there.
+        /// </summary>
+        internal static Color Caution =>
+            SystemInformation.HighContrast ? SystemColors.ControlText : Color.FromArgb(0x8A, 0x5A, 0x00);
+
+        /// <summary>
         /// The chrome: the toolbar, the menu, the band at the top and the window
         /// ground behind them. The tree and the editor stay white.
         ///

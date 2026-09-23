@@ -124,6 +124,9 @@
     <Compile Include="..\Supervertaler.MemoQ\Core\ModelCatalog.cs">
       <Link>Shared\ModelCatalog.cs</Link>
     </Compile>
+    <Compile Include="..\Supervertaler.MemoQ\Core\MemoQSession.cs">
+      <Link>Shared\MemoQSession.cs</Link>
+    </Compile>
     <Compile Include="..\Supervertaler.MemoQ\Core\Licence.cs">
       <Link>Shared\Licence.cs</Link>
     </Compile>

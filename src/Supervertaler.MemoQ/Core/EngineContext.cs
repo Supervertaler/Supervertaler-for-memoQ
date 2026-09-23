@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
@@ -336,6 +336,22 @@ namespace Supervertaler.MemoQ.Core
                 if (project == Guid.Empty) return false;
                 var id = project.ToString("D");
                 var label = (name ?? string.Empty).Trim();
+
+                // Which memoQ session said so - BEFORE the same-project return
+                // below. A new session reopening yesterday's project finds the
+                // project unchanged and returns early, so stamping only on a
+                // change would leave a genuinely current project looking stale.
+                // Compared rather than remembered: this runs on every cursor move
+                // once the live document link is connected, and reading one more
+                // key is cheaper than a write and needs no flag to go stale.
+                var session = MemoQSession.ThisProcessStamp();
+                if (session.Length > 0
+                    && !string.Equals(SharedSettings.MemoryBankSession ?? string.Empty, session, StringComparison.Ordinal))
+                {
+                    SharedSettings.MemoryBankSession = session;
+                    PluginLog.Write("Project: " + (label.Length > 0 ? Quote(label) : "an unnamed project")
+                        + " is open in this memoQ session. The editor now shows it as current.");
+                }
 
                 // What the two settings dialogs record a later choice against.
                 // memoQ opens them from an MT settings resource and tells them

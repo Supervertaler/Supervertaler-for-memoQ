@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Collections.Generic;
 using System.Drawing;
 using System.Globalization;
@@ -365,6 +365,11 @@ namespace Supervertaler.PromptEditor
             // so it has to be legible rather than merely present.
             if (body.StartsWith("SuperMemory: ", StringComparison.Ordinal))
                 return "Bank       " + body.Substring("SuperMemory: ".Length);
+
+            // The moment the panel's project becomes current: the first request
+            // of a memoQ session (#8).
+            if (body.StartsWith("Project: ", StringComparison.Ordinal))
+                return "Project    " + body.Substring("Project: ".Length);
 
             return body;
         }

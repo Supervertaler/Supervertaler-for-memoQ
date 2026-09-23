@@ -2257,10 +2257,38 @@ namespace Supervertaler.PromptEditor
             // Shown whole and wrapped: it is the panel's heading, every row below
             // is shortened against it, and a client name cut in half is worse
             // than two lines.
-            _project.Text = name;
-            _project.ForeColor = SystemColors.ControlText;
-            _project.ToolTipText = Tip("The memoQ project these apply to:\r\n" + name
-                + "\r\n\r\nClick to sync with the project open in memoQ.");
+            //
+            // And only shown as current when it IS current (#8). A recorded project
+            // is whatever memoQ last said, which until the first request of a
+            // session is yesterday's - and the heading showed it exactly as if it
+            // were open now. The warning is in the heading itself, not only in a
+            // tooltip, because a tooltip is read by nobody who is not already
+            // suspicious.
+            string suffix = null, why = null;
+            switch (MemoQSession.Freshness())
+            {
+                case ProjectFreshness.EarlierSession:
+                    suffix = " (earlier memoQ session)";
+                    why = "memoQ reported this project in an earlier session and has not said which project is "
+                        + "open now. Click into a segment in memoQ, or click here to sync, and it updates. If it "
+                        + "stays like this, the project may not allow MT plugins - the live document link still "
+                        + "tells Supervertaler which project is open.";
+                    break;
+                case ProjectFreshness.MemoQClosed:
+                    suffix = " (memoQ is not running)";
+                    why = "The last project memoQ reported. memoQ is not running, so it may not be the one you open next.";
+                    break;
+                case ProjectFreshness.CannotTell:
+                    suffix = " (may be an earlier session)";
+                    why = "memoQ is running, but whether it reported this project in this session could not be checked.";
+                    break;
+            }
+
+            _project.Text = suffix == null ? name : name + suffix;
+            _project.ForeColor = suffix == null ? SystemColors.ControlText : Ui.Caution;
+            _project.ToolTipText = Tip(why == null
+                ? "The memoQ project these apply to:\r\n" + name + "\r\n\r\nClick to sync with the project open in memoQ."
+                : name + "\r\n\r\n" + why + "\r\n\r\nA memory bank chosen now is remembered for this project.");
         }
 
         /// <summary>
@@ -2320,7 +2348,8 @@ namespace Supervertaler.PromptEditor
                 return;
             }
 
-            var choice = PromptChooserForm.ChooseBank(this, banks, SharedSettings.MemoryBank);
+            var choice = PromptChooserForm.ChooseBank(this, banks, SharedSettings.MemoryBank,
+                MemoryBankPicker.ProjectNote());
             if (choice == null) return;
 
             // "New memory bank..." closes the chooser and comes back here rather

@@ -42,6 +42,7 @@ namespace Supervertaler.MemoQ.Core
         private const string MemoryBankKey = "membank";
         private const string MemoryBankProjectKey = "membank.project";
         private const string MemoryBankProjectNameKey = "membank.projectname";
+        private const string MemoryBankSessionKey = "membank.session";
         private const string BridgeModeKey = "bridgemode";
         private const string ProviderKey = "provider";
         private const string ModelKey = "model";
@@ -170,6 +171,18 @@ namespace Supervertaler.MemoQ.Core
         {
             get => Read(MemoryBankProjectNameKey);
             set => Write(MemoryBankProjectNameKey, value);
+        }
+
+        /// <summary>
+        /// Which memoQ session reported that project: memoQ's process start time.
+        /// Without it the editor could not tell yesterday's project from today's,
+        /// and a memory bank chosen before memoQ had spoken was filed against the
+        /// wrong client (issue #8). See <see cref="Core.MemoQSession"/>.
+        /// </summary>
+        public static string MemoryBankSession
+        {
+            get => Read(MemoryBankSessionKey);
+            set => Write(MemoryBankSessionKey, value);
         }
 
         /// <summary>

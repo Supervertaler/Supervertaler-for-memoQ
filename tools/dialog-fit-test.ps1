@@ -120,11 +120,20 @@ function TextFits($form, $what) {
     # check above cannot see it, because a control whose text measures nothing is
     # never narrower than its text.
     #
-    # This runs outside memoQ, in a different font, so it cannot ask whether THIS
-    # font has the glyph. What it can do is refuse the gamble: a button caption is
-    # two or three words, and there is no button in this product that needs a
-    # character outside ASCII to say what it does. Labels are exempt - they carry
-    # en dashes on purpose and are long enough that a missing glyph is visible.
+    # This runs in a different process and font from the one the user sees, so it
+    # cannot ask whether THAT font has the glyph. What it can do is refuse the
+    # gamble: a button's caption may use only characters from Windows-1252, the
+    # classic Windows code page every Windows interface font covers - Segoe UI,
+    # Tahoma, Verdana, Calibri, Arial. That keeps the typography that is safe
+    # everywhere (the ellipsis on "New memory bank…", en dashes, curly quotes)
+    # and refuses the arrows and symbols that live only in symbol fonts, which is
+    # where U+21C4 came from.
+    #
+    # The first version of this check said "ASCII only" and flagged the ellipsis,
+    # which no Windows font lacks. A check that cries wolf gets ignored, so it was
+    # narrowed to the characters that can actually come out blank.
+    $cp1252 = [Text.Encoding]::GetEncoding(1252,
+        [Text.EncoderFallback]::ExceptionFallback, [Text.DecoderFallback]::ExceptionFallback)
     $captions = @()
     foreach ($c in $form.Controls) {
         if (-not ($c -is [Windows.Forms.Button])) { continue }
@@ -133,9 +142,11 @@ function TextFits($form, $what) {
             $captions += ("a button at {0},{1} has no caption at all" -f $c.Left, $c.Top)
             continue
         }
-        $odd = @($c.Text.ToCharArray() | Where-Object { [int]$_ -gt 126 })
+        $odd = @($c.Text.ToCharArray() | Where-Object {
+            try { [void]$cp1252.GetBytes([string]$_); $false } catch { $true }
+        })
         if ($odd.Count -gt 0) {
-            $captions += ("button '{0}' uses {1} outside ASCII, which may be missing from the font memoQ uses" -f `
+            $captions += ("button '{0}' uses {1}, which is outside the characters every Windows font has" -f `
                 $c.Text, (($odd | ForEach-Object { 'U+{0:X4}' -f [int]$_ }) -join ', '))
         }
     }
@@ -306,6 +317,44 @@ try {
     Check (& $hasWarning $damaged) 'a damaged licence file gets its warning'
     Check (-not (& $hasWarning $clean)) 'and nothing else does'
 } finally { $damaged.Dispose(); $clean.Dispose() }
+
+# ---- the chooser, with the caption that now carries the project note -------
+# Its caption was a fixed single line, 18 pixels high. The bank chooser's own
+# caption already needed two, and the note added for issue #8 - which project a
+# bank will be filed against, said BEFORE choosing - needs more. Clipped, that
+# note is a warning nobody can see.
+#
+# Neither check above catches this. A label of fixed height reports a preferred
+# size for its text on ONE line, so it never looks too short; and it overlaps
+# nothing, because the text it hides simply is not drawn. So the caption is
+# measured as it would wrap at its own width, and that must fit its height.
+$chT   = $asm.GetType('Supervertaler.PromptEditor.ChooserForm')
+$rowT  = $asm.GetType('Supervertaler.PromptEditor.ChooserForm+Row')
+$rows  = [Activator]::CreateInstance([Collections.Generic.List``1].MakeGenericType($rowT))
+$chCtor = @($chT.GetConstructors([Reflection.BindingFlags]'Public,NonPublic,Instance') | Where-Object { $_.GetParameters().Count -eq 6 })[0]
+
+$base = "The bank's brief, terminology and style go to the model with every request. Each project remembers its own."
+$note = "This will be remembered for 'ACME.GLOBAL (PROJ-00001)' - but memoQ reported that project in an " +
+        "earlier session and has not yet said which project is open now. If you have opened a different " +
+        "one, click into a segment in memoQ first."
+
+foreach ($case in @(
+    @{ what = 'the bank chooser';                          caption = $base },
+    @{ what = 'the bank chooser, with an earlier-session note'; caption = ($base + "`r`n`r`n" + $note) })) {
+    $f = $chCtor.Invoke(@('Choose the active memory bank', $case.caption, 'Type to filter by name', $rows.psobject.BaseObject, '', 'New memory bank…'))
+    try {
+        Realise $f
+        Fits $f $case.what
+        NoOverlaps $f $case.what
+        TextFits $f $case.what
+
+        $head = @($f.Controls | Where-Object { $_ -is [Windows.Forms.Label] -and $_.Text -eq $case.caption })[0]
+        $need = [Windows.Forms.TextRenderer]::MeasureText($head.Text, $head.Font,
+                    (New-Object Drawing.Size($head.Width, 0)),
+                    [Windows.Forms.TextFormatFlags]::WordBreak).Height
+        Check ($head.Height -ge $need) "$($case.what): the whole caption is visible ($($head.Height)px shown, $($need)px needed)"
+    } finally { $f.Dispose() }
+}
 
 # ---- the quick-add dialog -------------------------------------------------
 # In the plugin assembly rather than the editor, which is why this test did not

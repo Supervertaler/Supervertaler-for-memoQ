@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 ﻿using System;
 using System.Collections.Generic;
 using System.Drawing;
@@ -88,53 +88,72 @@ namespace Supervertaler.PromptEditor
             MinimumSize = new Size(460, 320);
             AppIcon.Apply(this);
 
+            // Measured, not one fixed line. It was 18 pixels high, which clipped
+            // the memory bank chooser's own caption to its first line - and then
+            // silently swallowed the note added for issue #8, which says which
+            // project a bank will be filed against BEFORE the choice is made. A
+            // warning nobody can see is no warning. Everything below moves down by
+            // however much taller than one line the caption turned out to be.
             var head = new Label
             {
                 Text = caption,
-                Left = 12, Top = 10, Width = 580, AutoSize = false, Height = 18,
+                Left = 12, Top = 10, AutoSize = true, MaximumSize = new Size(596, 0),
                 ForeColor = SystemColors.GrayText,
-                Anchor = AnchorStyles.Top | AnchorStyles.Left | AnchorStyles.Right
             };
             Controls.Add(head);
+            var extra = Math.Max(0, head.Height - 18);
 
-            _filter.Left = 12; _filter.Top = 34; _filter.Width = 596;
+            // Grown now, before anything else is placed, so every position below
+            // is simply "where it was, plus extra". Growing it at the end instead
+            // would move the bottom-anchored controls a second time.
+            ClientSize = new Size(ClientSize.Width, ClientSize.Height + extra);
+
+            _filter.Left = 12; _filter.Top = 34 + extra; _filter.Width = 596;
             _filter.Anchor = AnchorStyles.Top | AnchorStyles.Left | AnchorStyles.Right;
             _filter.TextChanged += (s, e) => Populate();
             Controls.Add(_filter);
 
-            Controls.Add(new Label
+            var hint = new Label
             {
                 Text = filterHint,
-                Left = 14, Top = 58, AutoSize = true, ForeColor = SystemColors.GrayText
-            });
+                Left = 14, Top = 58 + extra, AutoSize = true, ForeColor = SystemColors.GrayText
+            };
+            Controls.Add(hint);
 
-            _list.Left = 12; _list.Top = 78; _list.Width = 596; _list.Height = 296;
+            // Below the hint as it measured, keeping the list's bottom edge where
+            // it was. It sat at a fixed 78, one pixel inside a hint that turned
+            // out 21 high - found the first time this dialog was measured.
+            _list.Left = 12; _list.Top = hint.Bottom + 2; _list.Width = 596;
+            _list.Height = (374 + extra) - _list.Top;
             _list.Anchor = AnchorStyles.Top | AnchorStyles.Bottom | AnchorStyles.Left | AnchorStyles.Right;
             _list.IntegralHeight = false;
             _list.SelectedIndexChanged += (s, e) => ShowDetail();
             _list.DoubleClick += (s, e) => Accept();
             Controls.Add(_list);
 
-            _detail.Left = 14; _detail.Top = 380; _detail.Width = 594; _detail.Height = 34;
+            _detail.Left = 14; _detail.Top = 380 + extra; _detail.Width = 594; _detail.Height = 34;
             _detail.Anchor = AnchorStyles.Bottom | AnchorStyles.Left | AnchorStyles.Right;
             _detail.ForeColor = SystemColors.GrayText;
             Controls.Add(_detail);
 
-            var ok = new Button
-            {
-                Text = "OK", DialogResult = DialogResult.OK,
-                Left = ClientSize.Width - 184, Top = ClientSize.Height - 34, Width = 84, Height = 26,
-                Anchor = AnchorStyles.Bottom | AnchorStyles.Right
-            };
+            // Font set before measuring - an unparented Button measures in the
+            // default font - and heights taken from the text, not a fixed 26,
+            // which was two pixels short of it in this font. The buttons share
+            // one height and sit the same distance from the bottom as before.
+            var ok = new Button { Text = "OK", DialogResult = DialogResult.OK, Font = Font };
+            var cancel = new Button { Text = "Cancel", DialogResult = DialogResult.Cancel, Font = Font };
+            var buttonHeight = Math.Max(26, Math.Max(ok.PreferredSize.Height, cancel.PreferredSize.Height));
+            var buttonTop = ClientSize.Height - 8 - buttonHeight;
+
+            ok.Size = new Size(Math.Max(84, ok.PreferredSize.Width + 16), buttonHeight);
+            cancel.Size = new Size(Math.Max(84, cancel.PreferredSize.Width + 16), buttonHeight);
+            cancel.Location = new Point(ClientSize.Width - 10 - cancel.Width, buttonTop);
+            ok.Location = new Point(cancel.Left - 6 - ok.Width, buttonTop);
+            ok.Anchor = AnchorStyles.Bottom | AnchorStyles.Right;
+            cancel.Anchor = AnchorStyles.Bottom | AnchorStyles.Right;
             ok.Click += (s, e) => Accept();
             Controls.Add(ok);
 
-            var cancel = new Button
-            {
-                Text = "Cancel", DialogResult = DialogResult.Cancel,
-                Left = ClientSize.Width - 94, Top = ClientSize.Height - 34, Width = 84, Height = 26,
-                Anchor = AnchorStyles.Bottom | AnchorStyles.Right
-            };
             Controls.Add(cancel);
 
             if (!string.IsNullOrEmpty(extraButton))
@@ -145,11 +164,12 @@ namespace Supervertaler.PromptEditor
                 // this button was written.
                 var create = new Button
                 {
-                    Text = extraButton,
-                    Left = 12, Top = ClientSize.Height - 34, Height = 26,
+                    Text = extraButton, Font = Font,
+                    Left = 12, Top = buttonTop, Height = buttonHeight,
                     Anchor = AnchorStyles.Bottom | AnchorStyles.Left
                 };
                 create.Width = Math.Max(170, create.PreferredSize.Width + 16);
+                create.Height = Math.Max(buttonHeight, create.PreferredSize.Height);
                 create.Click += (s, e) =>
                 {
                     CreateRequested = true;
