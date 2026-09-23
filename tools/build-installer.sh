@@ -63,19 +63,46 @@ SETUP="$ROOT/dist/Supervertaler-for-memoQ-$VERSION.exe"
 # the existence check below passed against a build from ten minutes earlier.
 rm -f "$SETUP"
 
-MSYS2_ARG_CONV_EXCL="/D" "$ISCC" \
-    "/DAppVersion=$VERSION" \
-    "$(cygpath -w "$ROOT/installer/Supervertaler-for-memoQ.iss")" \
-    | grep -E "^Successful|error|Error" || true
+# Compiled OUTSIDE the Google Drive folder and copied in afterwards. dist/ is
+# inside Drive, and three times in one week something held a file there that a
+# build step had just written: Inno failing to write the icon into its own new
+# installer ("EndUpdateResource failed", error 110), and Compress-Archive
+# refused the installer seconds after it appeared. Drive syncing a brand-new
+# file is the likeliest holder. C:\Temp is where build.sh already stages its
+# deploy for the same reason, and Drive does not sync it.
+#
+# Retried as well, because a scanner can still take a new executable for a
+# moment wherever it lands - and each attempt starts from an empty folder, so a
+# failed one cannot leave a file behind that the next check mistakes for success.
+OUT="/c/Temp/sv-installer"
+INNO_OK=0
+for attempt in 1 2 3; do
+    rm -rf "$OUT"
+    mkdir -p "$OUT"
+    MSYS2_ARG_CONV_EXCL="/D;/O" "$ISCC" \
+        "/DAppVersion=$VERSION" \
+        "/O$(cygpath -w "$OUT")" \
+        "$(cygpath -w "$ROOT/installer/Supervertaler-for-memoQ.iss")" \
+        | grep -E "^Successful|error|Error" || true
+    # PIPESTATUS, not $?, which belongs to grep and is happy whatever Inno did.
+    ISCC_STATUS=${PIPESTATUS[0]}
+    if [[ $ISCC_STATUS -eq 0 && -f "$OUT/$(basename "$SETUP")" ]]; then
+        INNO_OK=1
+        break
+    fi
+    echo "  Inno Setup did not finish (attempt $attempt, exit $ISCC_STATUS); trying again" >&2
+    sleep 3
+done
 
-# PIPESTATUS, not $?, which belongs to grep and is happy whatever Inno did.
-ISCC_STATUS=${PIPESTATUS[0]}
-if [[ $ISCC_STATUS -ne 0 ]]; then
-    echo "ERROR: Inno Setup failed (exit $ISCC_STATUS)" >&2
-    echo "       If it could not write the output file, close any installer window" >&2
-    echo "       that is still open and run this again." >&2
+if [[ $INNO_OK -ne 1 ]]; then
+    echo "ERROR: Inno Setup failed three times (last exit $ISCC_STATUS)." >&2
+    echo "       Something is holding the new installer - a virus scanner, or an" >&2
+    echo "       installer window that is still open." >&2
     exit 1
 fi
+
+cp "$OUT/$(basename "$SETUP")" "$SETUP"
+rm -rf "$OUT"
 
 [[ -f "$SETUP" ]] || { echo "ERROR: the installer was not produced" >&2; exit 1; }
 
