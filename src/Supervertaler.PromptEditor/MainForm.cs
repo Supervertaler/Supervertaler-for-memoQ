@@ -358,6 +358,13 @@ namespace Supervertaler.PromptEditor
             var helpMenu = new ToolStripMenuItem("&Help");
             helpMenu.DropDownItems.Add(new ToolStripMenuItem("&Documentation", null, (s, e) => OpenDocumentation()));
 
+            // Also here, not only under Settings. The first person to look for it
+            // - Michael, testing - opened the toolbar's Settings button, which is
+            // Translation settings, and found nothing: two things called Settings
+            // in one window, and the licence behind the less obvious one. Help is
+            // where people conventionally look for a licence after buying one.
+            helpMenu.DropDownItems.Add(new ToolStripMenuItem("&Licence…", null, (s, e) => ShowLicence()));
+
             menu.Items.AddRange(new ToolStripItem[] { fileMenu, memoqMenu, settingsMenu, helpMenu });
 
             // Two groups. On the left, what is used while writing a prompt; on
