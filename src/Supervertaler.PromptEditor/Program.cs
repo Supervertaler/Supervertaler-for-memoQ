@@ -10,6 +10,24 @@ namespace Supervertaler.PromptEditor
         /// Optional argument: the relative path of a prompt to open on startup,
         /// so a host can launch straight into the prompt the user had selected.
         /// </summary>
+        /// <summary>
+        /// %LocalAppData%\Supervertaler.memoQ\editor.log. Never throws: a log that
+        /// can stop the editor is worse than no log.
+        /// </summary>
+        private static void EditorLog(string line)
+        {
+            try
+            {
+                var dir = System.IO.Path.Combine(
+                    Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
+                    "Supervertaler.memoQ");
+                System.IO.Directory.CreateDirectory(dir);
+                System.IO.File.AppendAllText(System.IO.Path.Combine(dir, "editor.log"),
+                    DateTime.Now.ToString("yyyy-MM-dd HH:mm:ss") + "  " + line + Environment.NewLine);
+            }
+            catch { }
+        }
+
         [STAThread]
         private static void Main(string[] args)
         {
@@ -37,7 +55,16 @@ namespace Supervertaler.PromptEditor
 
                 // Inside the single-instance check, so a second editor that is
                 // about to exit does not start an online licence check first.
-                Supervertaler.MemoQ.Core.Licence.Start(null);
+                //
+                // With a log, not null. The licence code reports the one thing
+                // that tells us a save failed or fell back to the slower method,
+                // and with no hook that message went nowhere: a failure in the
+                // editor was silent while the same failure in memoQ was logged.
+                // Its own file beside plugin.log rather than plugin.log itself,
+                // so two processes are never appending to one file. The lines are
+                // rare - failures and the once-per-process fallback - so it needs
+                // no rotation.
+                Supervertaler.MemoQ.Core.Licence.Start(EditorLog);
 
                 try
                 {
