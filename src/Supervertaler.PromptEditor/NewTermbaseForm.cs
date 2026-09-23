@@ -52,8 +52,12 @@ namespace Supervertaler.PromptEditor
             var line = TextRenderer.MeasureText("Termbase", Font).Height;
             var y = 14;
 
-            Controls.Add(new Label { Text = "Name", AutoSize = true, Location = new Point(12, y) });
-            y += line + 4;
+            // Added, then measured. `line` is the height of the TEXT; an AutoSize
+            // label is that plus its leading, so advancing by `line` put every
+            // heading a couple of pixels into the box beneath it.
+            var nameHead = new Label { Text = "Name", AutoSize = true, Location = new Point(12, y) };
+            Controls.Add(nameHead);
+            y += nameHead.Height + 4;
             _name.Text = name ?? string.Empty;
             _name.Location = new Point(12, y);
             _name.Width = ClientSize.Width - 24;
@@ -62,9 +66,11 @@ namespace Supervertaler.PromptEditor
 
             var half = (ClientSize.Width - 24 - 12) / 2;
 
-            Controls.Add(new Label { Text = "Source language", AutoSize = true, Location = new Point(12, y) });
-            Controls.Add(new Label { Text = "Target language", AutoSize = true, Location = new Point(12 + half + 12, y) });
-            y += line + 4;
+            var srcHead = new Label { Text = "Source language", AutoSize = true, Location = new Point(12, y) };
+            var tgtHead = new Label { Text = "Target language", AutoSize = true, Location = new Point(12 + half + 12, y) };
+            Controls.Add(srcHead);
+            Controls.Add(tgtHead);
+            y += Math.Max(srcHead.Height, tgtHead.Height) + 4;
 
             _source.Text = sourceLang ?? string.Empty;
             _source.Location = new Point(12, y);
@@ -77,20 +83,24 @@ namespace Supervertaler.PromptEditor
             y += _source.Height + 4;
 
             // What the code was taken to mean, in words, under each box.
-            _sourceEcho.AutoSize = false;
+            // Height left to the label rather than set to `line`, which is six
+            // pixels short of what one of these needs and clipped the descenders
+            // off whatever language name was echoed back.
+            //
+            // AutoSize with a width cap rather than AutoSize off: the echo is a
+            // language name and can be longer than half this dialog.
+            _sourceEcho.AutoSize = true;
+            _sourceEcho.MaximumSize = new Size(half, 0);
             _sourceEcho.Location = new Point(12, y);
-            _sourceEcho.Width = half;
-            _sourceEcho.Height = line;
             _sourceEcho.ForeColor = SystemColors.GrayText;
-            _targetEcho.AutoSize = false;
+            _targetEcho.AutoSize = true;
+            _targetEcho.MaximumSize = new Size(half, 0);
             _targetEcho.Location = new Point(12 + half + 12, y);
-            _targetEcho.Width = half;
-            _targetEcho.Height = line;
             _targetEcho.ForeColor = SystemColors.GrayText;
             Controls.Add(_sourceEcho);
             Controls.Add(_targetEcho);
 
-            y += _sourceEcho.Height + 16;
+            y += Math.Max(Math.Max(_sourceEcho.Height, _targetEcho.Height), line) + 16;
 
             // Measured, not assumed: a button is as tall as its font needs and as
             // wide as its longest word, and "Cancel" is longer in several of the
@@ -98,7 +108,9 @@ namespace Supervertaler.PromptEditor
             _ok.Text = "OK";
             _ok.DialogResult = DialogResult.OK;
 
-            var cancel = new Button { Text = "Cancel", DialogResult = DialogResult.Cancel };
+            // See Dialogs.cs: an unparented Button measures itself in the wrong font.
+            _ok.Font = Font;
+            var cancel = new Button { Text = "Cancel", DialogResult = DialogResult.Cancel, Font = Font };
 
             var buttonWidth = Math.Max(80, Math.Max(_ok.PreferredSize.Width, cancel.PreferredSize.Width) + 16);
             var buttonHeight = Math.Max(26, Math.Max(_ok.PreferredSize.Height, cancel.PreferredSize.Height));

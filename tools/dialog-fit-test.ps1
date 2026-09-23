@@ -1,4 +1,4 @@
-﻿# Does anything in a dialog stick out past its own edge?
+# Does anything in a dialog stick out past its own edge?
 #
 # Two clipping reports in one day, both the same shape: a fixed ClientSize with
 # controls placed at fixed offsets from it, and no height set on the buttons - so
@@ -35,6 +35,29 @@ $fails = 0
 function Check($ok, $label) {
     if (-not $ok) { $script:fails++ }
     Write-Host "$(if ($ok) {'PASS'} else {'FAIL'}) $label"
+}
+
+# Make a form report what it will actually look like.
+#
+# WinForms' Control.Visible walks the parent chain, so EVERY child of a form that
+# has not been shown reports false. Both NoOverlaps and TextFits skip invisible
+# controls, so against an unshown form they skipped every control and passed
+# having checked nothing - in the harness that exists because this dialog shipped
+# clipped three times. Found 2026-09-23 while adding a check that also passed
+# vacuously.
+#
+# Showing it off-screen at zero opacity costs a few milliseconds, makes Visible
+# mean what it says, and has the side benefit that the layout and every
+# PreferredSize are the ones the user gets rather than the ones a constructor
+# computed.
+function Realise($form) {
+    $form.StartPosition = [Windows.Forms.FormStartPosition]::Manual
+    $form.Location = New-Object Drawing.Point(-32000, -32000)
+    $form.Opacity = 0
+    $form.ShowInTaskbar = $false
+    $form.TopMost = $false
+    $form.Show()
+    [Windows.Forms.Application]::DoEvents()
 }
 
 # Every control that carries text, against the edges of the form that holds it.
@@ -89,6 +112,35 @@ function TextFits($form, $what) {
     }
     Check ($bad.Count -eq 0) "$what has nothing clipped inside a control"
     foreach ($b in $bad) { Write-Host "       $b" }
+
+    # A button whose caption is a character the font does not have is blank on
+    # screen, and if its width was measured from that character it collapses too.
+    # Both happened: the swap button in the quick-add dialog carried U+21C4, and
+    # inside memoQ it was an empty 25-pixel box between the two term fields. The
+    # check above cannot see it, because a control whose text measures nothing is
+    # never narrower than its text.
+    #
+    # This runs outside memoQ, in a different font, so it cannot ask whether THIS
+    # font has the glyph. What it can do is refuse the gamble: a button caption is
+    # two or three words, and there is no button in this product that needs a
+    # character outside ASCII to say what it does. Labels are exempt - they carry
+    # en dashes on purpose and are long enough that a missing glyph is visible.
+    $captions = @()
+    foreach ($c in $form.Controls) {
+        if (-not ($c -is [Windows.Forms.Button])) { continue }
+        if (-not $c.Visible) { continue }
+        if ([string]::IsNullOrEmpty($c.Text)) {
+            $captions += ("a button at {0},{1} has no caption at all" -f $c.Left, $c.Top)
+            continue
+        }
+        $odd = @($c.Text.ToCharArray() | Where-Object { [int]$_ -gt 126 })
+        if ($odd.Count -gt 0) {
+            $captions += ("button '{0}' uses {1} outside ASCII, which may be missing from the font memoQ uses" -f `
+                $c.Text, (($odd | ForEach-Object { 'U+{0:X4}' -f [int]$_ }) -join ', '))
+        }
+    }
+    Check ($captions.Count -eq 0) "$what has no button that could come out blank"
+    foreach ($b in $captions) { Write-Host "       $b" }
 }
 
 # ---- the text prompt, with the caption that reported the bug ------------
@@ -100,6 +152,7 @@ $long = "A name for this client or project. An existing name reuses that bank; "
 
 $dialog = $ctor.Invoke(@("New memory bank", $long, "MEDI.GLOBAL (J_11886-1)"))
 try {
+    Realise $dialog
     Fits $dialog "the text prompt"
     NoOverlaps $dialog "the text prompt"
     TextFits $dialog "the text prompt"
@@ -123,6 +176,7 @@ try {
     try {
         Check ($short.ClientSize.Height -lt $dialog.ClientSize.Height) `
             "a short caption gives a shorter dialog ($($short.ClientSize.Height) against $($dialog.ClientSize.Height))"
+        Realise $short
         Fits $short "the short prompt"
         NoOverlaps $short "the short prompt"
         TextFits $short "the short prompt"
@@ -136,6 +190,7 @@ if ($nt) {
     $ntCtor = @($nt.GetConstructors([Reflection.BindingFlags]'Public,NonPublic,Instance'))[0]
     $form = $ntCtor.Invoke(@("New termbase", "MEDI.GLOBAL (J_11886-1)", "en", ""))
     try {
+        Realise $form
         Fits $form "the new-termbase dialog"
         NoOverlaps $form "the new-termbase dialog"
         TextFits $form "the new-termbase dialog"
@@ -155,6 +210,7 @@ if ($nt) {
 $connect = $asm.GetType('Supervertaler.PromptEditor.ChatGptSetupDialog')
 $dlg = [Activator]::CreateInstance($connect, $true)
 try {
+    Realise $dlg
     Fits $dlg "the connect-AI-assistant dialog"
     NoOverlaps $dlg "the connect-AI-assistant dialog"
     TextFits $dlg "the connect-AI-assistant dialog"
@@ -210,6 +266,7 @@ $qaCtor = @($qa.GetConstructors([Reflection.BindingFlags]'Public,NonPublic,Insta
 $quick = $qaCtor.Invoke(@('eng-GB', 'dut-NL', 'Coronary Artery Disease', 'kransslagaderaandoening',
                           'MEDI.GLOBAL (J_11886-1)', $true))
 try {
+    Realise $quick
     Fits $quick "the quick-add dialog"
     NoOverlaps $quick "the quick-add dialog"
     TextFits $quick "the quick-add dialog"
@@ -241,6 +298,7 @@ try {
 # Without the warning the dialog must not keep a gap where it would have been.
 $quiet = $qaCtor.Invoke(@('eng-GB', 'dut-NL', 'device', 'hulpmiddel', 'MEDI.GLOBAL (J_11886-1)', $false))
 try {
+    Realise $quiet
     Fits $quiet "the quick-add dialog, nothing inferred"
     NoOverlaps $quiet "the quick-add dialog, nothing inferred"
     TextFits $quiet "the quick-add dialog, nothing inferred"

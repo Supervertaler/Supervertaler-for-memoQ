@@ -24,7 +24,10 @@ namespace Supervertaler.MemoQ.Core
         private readonly TextBox _target = new TextBox();
         private readonly CheckBox _forbidden = new CheckBox { Text = "Forbidden – this rendering must not be used", AutoSize = true };
         private readonly TextBox _notes = new TextBox();
-        private readonly Label _into = new Label { AutoSize = false };
+        // AutoSize with a width cap, like the warning above it: the no-termbase
+        // wording wraps and the ordinary one does not, and a label that measures
+        // itself needs no branch for that.
+        private readonly Label _into = new Label { AutoSize = true };
         private readonly Label _guessedNote = new Label { AutoSize = false };
         private readonly Label _swapped = new Label { AutoSize = false };
         private readonly Button _add = new Button { Text = "Add", DialogResult = DialogResult.OK, Width = 84, Height = 26 };
@@ -68,18 +71,38 @@ namespace Supervertaler.MemoQ.Core
             var line = TextRenderer.MeasureText("Xg", Font).Height;
             var y = 12;
 
-            Controls.Add(new Label { Text = Heading(sourceLang), AutoSize = true, Location = new Point(12, y), ForeColor = SystemColors.GrayText });
-            Controls.Add(new Label { Text = Heading(targetLang), AutoSize = true, Location = new Point(246, y), ForeColor = SystemColors.GrayText });
-            y += line + 3;
-
-            // Measured from the client width rather than written as four fixed
-            // numbers. The first version put the swap button at x=234 with a
-            // width of 26 while the right-hand box began at 246, so it sat on
-            // top of it.
+            // The swap control is built FIRST, because everything across this
+            // row is measured from it: the gap between the two boxes is however
+            // wide the button needs to be, and the boxes divide what is left.
+            //
+            // It said "⇄" until 2026-09-23, and inside memoQ that glyph is
+            // not in the font - so the button was blank AND collapsed, because
+            // its width was measured from a character that measures nothing.
+            // That is the second time a chosen glyph has been missing in this
+            // product; the AutoPrompt delimiter was the first. A button caption
+            // is now a word, which every font has.
+            // Font set explicitly, because PreferredSize on a Button that has not
+            // been added to the form yet is measured in WinForms' default font
+            // rather than this one - so every button came out a couple of pixels
+            // short of its own text.
+            var swap = new Button { Text = "Swap", TabStop = false, Font = Font };
+            var swapWidth = swap.PreferredSize.Width;
             var margin = 12;
-            var gap = 34;                                   // room for the swap button
+            var gap = swapWidth + 6;                        // 3px either side of it
             var box = (ClientSize.Width - margin * 2 - gap) / 2;
             var rightBox = margin + box + gap;
+
+            var srcHead = new Label { Text = Heading(sourceLang), AutoSize = true, Location = new Point(margin, y), ForeColor = SystemColors.GrayText };
+            // Over its own box, rather than at a number that happened to line up
+            // when the boxes were a different width.
+            var tgtHead = new Label { Text = Heading(targetLang), AutoSize = true, Location = new Point(rightBox, y), ForeColor = SystemColors.GrayText };
+            Controls.Add(srcHead);
+            Controls.Add(tgtHead);
+
+            // Added first, then measured: an AutoSize label only knows its height
+            // once it has the form's font, and `line` under-reports it by the
+            // leading - which put every heading three pixels into the box below.
+            y += Math.Max(srcHead.Height, tgtHead.Height) + 3;
 
             _source.Text = source ?? string.Empty;
             _source.Location = new Point(margin, y); _source.Width = box;
@@ -90,12 +113,7 @@ namespace Supervertaler.MemoQ.Core
 
             // Between the two boxes, where it reads as "these two, the other way
             // round" rather than as an action on the dialog.
-            var swap = new Button { Text = "\u21c4", TabStop = false };
-
-            // Even one glyph has to be measured. A button is not as wide as the
-            // number somebody typed; it is as wide as its own text plus its
-            // border, and an arrow in this font is wider than 28 pixels.
-            swap.Width = Math.Max(gap - 6, swap.PreferredSize.Width);
+            swap.Width = swapWidth;
             swap.Height = Math.Max(_source.Height, swap.PreferredSize.Height);
             swap.Location = new Point(margin + box + 3, y);
             swap.Click += (s2, e2) =>
@@ -109,7 +127,10 @@ namespace Supervertaler.MemoQ.Core
             new ToolTip().SetToolTip(swap, "Swap: put the " + Heading(sourceLang) + " term on the left.");
             Controls.Add(swap);
 
-            y += _source.Height + 4;
+            // The row is as tall as its tallest control: the swap button is taller
+            // than the boxes, and measuring from the box put it one pixel into the
+            // warning below.
+            y += Math.Max(_source.Height, swap.Height) + 4;
 
             // Said only when it is true. A warning on every add is a warning
             // nobody reads, and most adds are read off the segment with certainty.
@@ -143,17 +164,17 @@ namespace Supervertaler.MemoQ.Core
 
             _forbidden.Location = new Point(12, y);
             Controls.Add(_forbidden);
-            y += line + 10;
+            y += _forbidden.Height + 10;
 
-            Controls.Add(new Label { Text = "Note (optional)", AutoSize = true, Location = new Point(12, y), ForeColor = SystemColors.GrayText });
-            y += line + 3;
+            var noteHead = new Label { Text = "Note (optional)", AutoSize = true, Location = new Point(12, y), ForeColor = SystemColors.GrayText };
+            Controls.Add(noteHead);
+            y += noteHead.Height + 3;
             _notes.Location = new Point(12, y); _notes.Width = 456;
             Controls.Add(_notes);
             y += _notes.Height + 12;
 
             _into.Location = new Point(12, y);
-            _into.Width = 456;
-            _into.Height = line * 2;
+            _into.MaximumSize = new Size(456, 0);
             if (termbaseName != null)
             {
                 _into.Text = "Into the project termbase: " + termbaseName;
@@ -167,7 +188,13 @@ namespace Supervertaler.MemoQ.Core
             }
             Controls.Add(_into);
 
-            var cancel = new Button { Text = "Cancel", DialogResult = DialogResult.Cancel };
+            // It was two fixed lines high and y never moved past it, so it sat on
+            // top of both buttons - a hundred pixels by twenty-four of label over
+            // button, found the day the harness stopped skipping every control.
+            y += _into.Height + 8;
+
+            var cancel = new Button { Text = "Cancel", DialogResult = DialogResult.Cancel, Font = Font };
+            _add.Font = Font;
 
             // Measured, and the bottom edge follows them. The fixed 84 by 26 with
             // the dialog fixed at 250 tall clipped both buttons' text at a larger
@@ -178,7 +205,6 @@ namespace Supervertaler.MemoQ.Core
             _add.Size = new Size(buttonWidth, buttonHeight);
             cancel.Size = new Size(buttonWidth, buttonHeight);
 
-            y += 6;
             cancel.Location = new Point(ClientSize.Width - margin - buttonWidth, y);
             _add.Location = new Point(cancel.Left - 8 - buttonWidth, y);
 

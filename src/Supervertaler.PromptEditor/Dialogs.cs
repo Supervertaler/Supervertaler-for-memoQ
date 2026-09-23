@@ -62,8 +62,11 @@ namespace Supervertaler.PromptEditor
 
             y = _box.Bottom + 14;
 
-            var ok = new Button { Text = "OK", DialogResult = DialogResult.OK };
-            var cancel = new Button { Text = "Cancel", DialogResult = DialogResult.Cancel };
+            // Font set before anything is measured: PreferredSize on a Button with
+            // no parent is measured in WinForms' default font rather than this
+            // one, which is two pixels shorter.
+            var ok = new Button { Text = "OK", DialogResult = DialogResult.OK, Font = Font };
+            var cancel = new Button { Text = "Cancel", DialogResult = DialogResult.Cancel, Font = Font };
 
             var buttonWidth = Math.Max(80, Math.Max(ok.PreferredSize.Width, cancel.PreferredSize.Width) + 16);
             var buttonHeight = Math.Max(26, Math.Max(ok.PreferredSize.Height, cancel.PreferredSize.Height));
@@ -121,8 +124,8 @@ namespace Supervertaler.PromptEditor
                 Padding = new Padding(8)
             };
 
-            var ok = new Button { Text = "Move", DialogResult = DialogResult.OK, Width = 80 };
-            var cancel = new Button { Text = "Cancel", DialogResult = DialogResult.Cancel, Width = 80 };
+            var ok = new Button { Text = "Move", DialogResult = DialogResult.OK, Width = 80, Font = Font };
+            var cancel = new Button { Text = "Cancel", DialogResult = DialogResult.Cancel, Width = 80, Font = Font };
             buttons.Controls.Add(cancel);
             buttons.Controls.Add(ok);
 
