@@ -321,8 +321,15 @@ namespace Supervertaler.PromptEditor
             // are the same subject: which assistant is driving memoQ.
             settingsMenu.DropDownItems.Add(new ToolStripMenuItem("&Connect AI assistant…", null, (s, e) => ConnectAiAssistant())
             {
-                ToolTipText = "Set up ChatGPT desktop to see the project open in memoQ. "
-                            + "Claude Desktop installs itself and is not set up here."
+                ToolTipText = "Let ChatGPT desktop or Claude Desktop work with the project open in memoQ."
+            });
+
+            // Here rather than in memoQ's own dialog, because memoQ gives an
+            // add-in nowhere else to put it - and it is the same licence as
+            // Supervertaler for Trados, so the window says so.
+            settingsMenu.DropDownItems.Add(new ToolStripMenuItem("&Licence…", null, (s, e) => ShowLicence())
+            {
+                ToolTipText = "The Supervertaler licence on this computer, shared with Supervertaler for Trados."
             });
 
             // memoQ's dialog writes the same file, so re-read on opening rather
@@ -731,10 +738,59 @@ namespace Supervertaler.PromptEditor
                 // The splitter also moves in ApplyWindowGeometry, which changes the
                 // tree's width and with it what "scrolled right" means.
                 ScrollTreeHome();
+
+                ShowLicenceNotices();
             };
 
             SetEditingEnabled(false);
             _status.Text = SupervertalerPaths.PromptLibraryDir;
+        }
+
+        // -- licence -------------------------------------------------------
+
+        /// <summary>
+        /// Opens the licence window, and again after each action it takes, on the
+        /// state that action left behind. The window closes with Retry rather than
+        /// rearranging itself in place.
+        /// </summary>
+        private void ShowLicence()
+        {
+            DialogResult result;
+            do
+            {
+                using (var dialog = new LicenceDialog(LicenceView.Current()))
+                    result = dialog.ShowDialog(this);
+            }
+            while (result == DialogResult.Retry);
+
+            ShowLicenceNotices(announceDamage: false);
+        }
+
+        /// <summary>
+        /// What the translator should know at start-up. A trial's remaining days
+        /// or a pause go on the status bar, where they are seen without being in
+        /// the way. A damaged licence file gets a message box at every start
+        /// until a key is entered again, because a warning shown once is a warning
+        /// missed - and the customer is then just told the AI has paused, with no
+        /// idea why.
+        /// </summary>
+        private void ShowLicenceNotices(bool announceDamage = true)
+        {
+            var view = LicenceView.Current();
+
+            var line = view.StatusLine();
+            if (line != null) _status.Text = line;
+
+            if (announceDamage && view.DamagedFileFound && view.State != Supervertaler.Core.LicenceState.Licensed)
+            {
+                MessageBox.Show(this,
+                    "The Supervertaler licence file on this computer was damaged and has been replaced." +
+                    Environment.NewLine + Environment.NewLine +
+                    "Everything keeps working for now. To restore your licence, choose Settings, Licence " +
+                    "and enter your licence key again – it is in the email you received when you " +
+                    "bought Supervertaler.",
+                    "Supervertaler licence", MessageBoxButtons.OK, MessageBoxIcon.Warning);
+            }
         }
 
         // -- window geometry -----------------------------------------------

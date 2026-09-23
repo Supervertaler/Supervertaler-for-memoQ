@@ -76,6 +76,18 @@ namespace Supervertaler.MemoQ
         {
             if (segs == null) return new TranslationResult[0];
 
+            // One answer per segment, carrying the reason, rather than a throw:
+            // that is how this session reports every other failure, and memoQ
+            // shows the message under the grid and leaves the target alone.
+            if (!Licence.AiAllowed)
+            {
+                var paused = new TranslationResult[segs.Length];
+                var why = Licence.PausedMessage;
+                for (int i = 0; i < paused.Length; i++)
+                    paused[i] = new TranslationResult { Exception = new MTException(why, why) };
+                return paused;
+            }
+
             try
             {
                 // The index is what carries the fuzzy match through: memoQ's TM
@@ -133,6 +145,12 @@ namespace Supervertaler.MemoQ
         {
             if (source == null || source.IsEmptyText)
                 return new TranslationResult { Translation = Segment.Empty, Confidence = 0 };
+
+            if (!Licence.AiAllowed)
+            {
+                var why = Licence.PausedMessage;
+                return new TranslationResult { Exception = new MTException(why, why) };
+            }
 
             var bundle = new TranslationBundle { Source = source };
 

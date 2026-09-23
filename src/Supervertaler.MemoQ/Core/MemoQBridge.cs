@@ -7,6 +7,7 @@ using System.Net;
 using System.Runtime.Serialization;
 using System.Runtime.Serialization.Json;
 using System.Text;
+using System.Text.RegularExpressions;
 using System.Threading;
 
 namespace Supervertaler.MemoQ.Core
@@ -281,6 +282,15 @@ namespace Supervertaler.MemoQ.Core
             var path = request.Url.AbsolutePath.TrimEnd('/');
             var method = request.HttpMethod.ToUpperInvariant();
 
+            // After authentication, before anything does work. A 403 with the
+            // reason in it, so the assistant can tell the translator what
+            // happened and what to do, rather than reporting a broken tool.
+            if (ClosedWhenLapsed(path) && !Licence.AiAllowed)
+            {
+                TryWrite(ctx, 403, Json(new ErrorBody { Error = Licence.PausedMessage }));
+                return;
+            }
+
             switch (method + " " + path)
             {
                 case "GET /v1/tools": HandleTools(ctx); return;
@@ -321,6 +331,51 @@ namespace Supervertaler.MemoQ.Core
                     TryWrite(ctx, 404, Json(new ErrorBody { Error = "unknown endpoint " + method + " " + path }));
                     return;
             }
+        }
+
+        // ── licence ──────────────────────────────────────────────────────
+
+        /// <summary>
+        /// Every route an assistant calls, read from the same manifest the
+        /// assistants are served. A tool added to it later is gated without
+        /// anybody having to remember this list exists.
+        /// </summary>
+        private static readonly Lazy<HashSet<string>> AssistantPaths = new Lazy<HashSet<string>>(() =>
+        {
+            var paths = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+            using (var stream = typeof(MemoQBridge).Assembly
+                       .GetManifestResourceStream("Supervertaler.MemoQ.Resources.mcp-tools.json"))
+            {
+                if (stream == null) return paths;
+                using (var reader = new StreamReader(stream, Encoding.UTF8))
+                {
+                    // Our own file, one fixed shape: a pattern is enough and
+                    // takes no JSON dependency into memoQ's process.
+                    foreach (Match m in Regex.Matches(reader.ReadToEnd(), "\"path\"\\s*:\\s*\"([^\"]+)\""))
+                        paths.Add(m.Groups[1].Value.TrimEnd('/'));
+                }
+            }
+            return paths;
+        });
+
+        /// <summary>
+        /// Whether a lapsed licence closes <paramref name="path"/>: everything an
+        /// assistant calls, and AutoPrompt, which asks the model to write a
+        /// prompt.
+        ///
+        /// <para>Two things stay open. Reading which project is open, because the
+        /// editor's own panel uses the same route and must keep working - an
+        /// editor that goes blank looks like memoQ has closed. And the tool list,
+        /// without which the server cannot start and so cannot say why the tools
+        /// are paused.</para>
+        /// </summary>
+        internal static bool ClosedWhenLapsed(string path)
+        {
+            if (string.IsNullOrEmpty(path)) return false;
+            path = path.TrimEnd('/');
+            if (string.Equals(path, "/v1/project", StringComparison.OrdinalIgnoreCase)) return false;
+            if (path.StartsWith("/v1/autoprompt", StringComparison.OrdinalIgnoreCase)) return true;
+            return AssistantPaths.Value.Contains(path);
         }
 
         // ── endpoints ────────────────────────────────────────────────────

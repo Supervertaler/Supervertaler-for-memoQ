@@ -57,6 +57,12 @@ namespace Supervertaler.MemoQ
             PluginLog.Write("Initialize: settings directory = "
                 + (environment?.PluginSettingsDirectory ?? "(null)"));
 
+            // First, before anything can touch the licence: core's licence code
+            // logs through a hook that has to be in place when it first loads,
+            // or its messages are lost. The online check it starts runs in the
+            // background and never delays memoQ.
+            Core.Licence.Start(PluginLog.Write);
+
             // Here rather than in the engine constructor: memoQ builds an engine
             // only for a project that uses the MT plugin, so a project whose
             // manager has switched MT plugins off never started the bridge - and

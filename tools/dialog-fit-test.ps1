@@ -1,4 +1,4 @@
-# Does anything in a dialog stick out past its own edge?
+﻿# Does anything in a dialog stick out past its own edge?
 #
 # Two clipping reports in one day, both the same shape: a fixed ClientSize with
 # controls placed at fixed offsets from it, and no height set on the buttons - so
@@ -150,7 +150,7 @@ $ctor = @($type.GetConstructors([Reflection.BindingFlags]'Public,NonPublic,Insta
 $long = "A name for this client or project. An existing name reuses that bank; " +
         "nothing already written in it is overwritten."
 
-$dialog = $ctor.Invoke(@("New memory bank", $long, "MEDI.GLOBAL (J_11886-1)"))
+$dialog = $ctor.Invoke(@("New memory bank", $long, "ACME.GLOBAL (PROJ-00001)"))
 try {
     Realise $dialog
     Fits $dialog "the text prompt"
@@ -188,7 +188,7 @@ finally { $dialog.Dispose() }
 $nt = $asm.GetType('Supervertaler.PromptEditor.NewTermbaseForm')
 if ($nt) {
     $ntCtor = @($nt.GetConstructors([Reflection.BindingFlags]'Public,NonPublic,Instance'))[0]
-    $form = $ntCtor.Invoke(@("New termbase", "MEDI.GLOBAL (J_11886-1)", "en", ""))
+    $form = $ntCtor.Invoke(@("New termbase", "ACME.GLOBAL (PROJ-00001)", "en", ""))
     try {
         Realise $form
         Fits $form "the new-termbase dialog"
@@ -254,6 +254,59 @@ try {
     }
 } finally { $dlg.Dispose() }
 
+# ---- the licence window, in every state -----------------------------------
+# Built from a LicenceView the test makes up, so no state here reads or writes
+# anybody's real licence. Every state has different wording and a different set
+# of buttons, so each is measured separately - a window that fits when licensed
+# can clip when the trial has ended and a key box appears.
+$viewT = $asm.GetType('Supervertaler.PromptEditor.LicenceView')
+$dlgT  = $asm.GetType('Supervertaler.PromptEditor.LicenceDialog')
+$stT   = $asm.GetType('Supervertaler.Core.LicenceState')
+
+function View($state, $hasKey, $days, $damaged) {
+    $v = [Activator]::CreateInstance($viewT, $true)
+    $viewT.GetField('State').SetValue($v, [Enum]::Parse($stT, $state))
+    $viewT.GetField('HasKey').SetValue($v, [bool]$hasKey)
+    $viewT.GetField('MaskedKey').SetValue($v, 'ABCD1234-****-****-****-****WXYZ')
+    $viewT.GetField('TrialDaysRemaining').SetValue($v, [int]$days)
+    $viewT.GetField('TrialEndsUtc').SetValue($v, [DateTime]::UtcNow.AddDays($days))
+    $viewT.GetField('LastValidatedUtc').SetValue($v, [DateTime]::UtcNow.AddDays(-2))
+    $viewT.GetField('DamagedFileFound').SetValue($v, [bool]$damaged)
+    return $v
+}
+
+$cases = @(
+    @{ what = 'licensed';                     v = (View 'Licensed' $true  0  $false) },
+    @{ what = 'on trial';                     v = (View 'Trial'    $false 11 $false) },
+    @{ what = 'trial ended';                  v = (View 'Expired'  $false 0  $false) },
+    @{ what = 'key not confirmed for 30 days'; v = (View 'Expired'  $true  0  $false) },
+    @{ what = 'unreadable';                   v = (View 'Unknown'  $false 0  $false) },
+    @{ what = 'damaged file, key needed';     v = (View 'Expired'  $false 0  $true)  }
+)
+
+foreach ($c in $cases) {
+    $w = "the licence window ($($c.what))"
+    $d = [Activator]::CreateInstance($dlgT, [object[]]@($c.v))
+    try {
+        Realise $d
+        Fits $d $w
+        NoOverlaps $d $w
+        TextFits $d $w
+        foreach ($b in @($d.Controls | Where-Object { $_ -is [Windows.Forms.Button] })) {
+            Check ($b.Bottom -le $d.ClientSize.Height) "$w - $($b.Text) sits inside the bottom edge"
+        }
+    } finally { $d.Dispose() }
+}
+
+# The warning a damaged file needs is shown only when there is one.
+$damaged = [Activator]::CreateInstance($dlgT, [object[]]@((View 'Expired' $false 0 $true)))
+$clean   = [Activator]::CreateInstance($dlgT, [object[]]@((View 'Expired' $false 0 $false)))
+try {
+    $hasWarning = { param($f) @($f.Controls | Where-Object { $_ -is [Windows.Forms.Label] -and $_.Text -match 'damaged' }).Count -gt 0 }
+    Check (& $hasWarning $damaged) 'a damaged licence file gets its warning'
+    Check (-not (& $hasWarning $clean)) 'and nothing else does'
+} finally { $damaged.Dispose(); $clean.Dispose() }
+
 # ---- the quick-add dialog -------------------------------------------------
 # In the plugin assembly rather than the editor, which is why this test did not
 # cover it and why a button shipped sitting on top of a text box.
@@ -264,7 +317,7 @@ $qaCtor = @($qa.GetConstructors([Reflection.BindingFlags]'Public,NonPublic,Insta
 
 # The real case: the warning shown, and terms long enough to be awkward.
 $quick = $qaCtor.Invoke(@('eng-GB', 'dut-NL', 'Coronary Artery Disease', 'kransslagaderaandoening',
-                          'MEDI.GLOBAL (J_11886-1)', $true))
+                          'ACME.GLOBAL (PROJ-00001)', $true))
 try {
     Realise $quick
     Fits $quick "the quick-add dialog"
@@ -296,7 +349,7 @@ try {
 } finally { $quick.Dispose() }
 
 # Without the warning the dialog must not keep a gap where it would have been.
-$quiet = $qaCtor.Invoke(@('eng-GB', 'dut-NL', 'device', 'hulpmiddel', 'MEDI.GLOBAL (J_11886-1)', $false))
+$quiet = $qaCtor.Invoke(@('eng-GB', 'dut-NL', 'device', 'hulpmiddel', 'ACME.GLOBAL (PROJ-00001)', $false))
 try {
     Realise $quiet
     Fits $quiet "the quick-add dialog, nothing inferred"

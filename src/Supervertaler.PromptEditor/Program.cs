@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Diagnostics;
 using System.Windows.Forms;
 
@@ -34,6 +34,10 @@ namespace Supervertaler.PromptEditor
                         "Supervertaler", MessageBoxButtons.OK, MessageBoxIcon.Information);
                     return;
                 }
+
+                // Inside the single-instance check, so a second editor that is
+                // about to exit does not start an online licence check first.
+                Supervertaler.MemoQ.Core.Licence.Start(null);
 
                 try
                 {

@@ -815,6 +815,41 @@ permissions, detection rather than prevention, and never a hard lockout on an
 absence of information - a false lockout on a Sunday costs a customer, while a
 freeloader costs revenue that was never coming.
 
+## Licensing (wired 2026-09-23)
+
+One Supervertaler licence covers both products. The licence itself lives in core
+(`core/src/SupervertalerLicence.cs`), written and owned by the Trados session and
+reviewed from here; memoQ only applies a policy on top of it, in
+`Core/Licence.cs`, which the editor also compiles.
+
+**The policy is Trados's, deliberately, so the two products never disagree about
+the same licence.** Only a licence KNOWN to have lapsed (`Expired`) pauses anything,
+and what it pauses is the AI: the MT engine (`SupervertalerSession`, which returns a
+per-segment `MTException` so memoQ shows the reason under the grid), every bridge
+route an assistant calls (read from `mcp-tools.json`, so a new tool is covered
+automatically) and AutoPrompt. Reading which project is open stays open, because the
+editor's own panel uses that route. Terminology, termbases, prompts and memory banks
+are never gated. **`Unknown` is never a refusal** - it means the licence could not be
+read, and a missing answer must never lock out a paying customer.
+
+Three rules for anyone touching it:
+
+- `Licence.Start` must run before anything touches `SupervertalerLicence.Instance`,
+  because core's log hook has to be in place when it first loads. The director calls
+  it first thing in `Initialize`; the editor calls it in `Main`.
+- **A harness never reads or writes the real licence**, and never validates the real
+  key online. Under `SUPERVERTALER_HARNESS` the gate is open and nothing is loaded.
+  `tools/licence-gate-test.ps1` checks the licence file and the trial record are
+  byte-identical afterwards, and pins the policy for every licence state - including a
+  check that fails if core ever adds a state memoQ has not decided the meaning of.
+- The licence window is built from a `LicenceView` snapshot, never from the live
+  licence, so `tools/dialog-fit-test.ps1` measures it in all six states without
+  touching anybody's licence.
+
+Anything written about the licence in this public repository states the policy,
+never how it resists tampering. See "Security defects are never written up in
+public" above.
+
 ## Confidentiality
 
 Same rule as the Trados repo: **never use real client names.** `Acme` for a client,
