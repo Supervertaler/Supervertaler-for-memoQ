@@ -1407,11 +1407,39 @@ namespace Supervertaler.PromptEditor
                 return false;
             }
 
+            var originalName = _current.Name;
+            var builtIn = _current.IsDefault;
+            var wasActive = builtIn && IsActivePrompt(_current);
+
             _current.Name = name;
             _current.Description = _description.Text.Trim();
             _current.App = (string)_app.SelectedItem ?? "both";
             _current.SortOrder = (int)_sortOrder.Value;
             _current.Content = _editor.Text;
+
+            // A built-in prompt is never saved over: the edit becomes a copy of
+            // its own, and the shipped file stays as Supervertaler wrote it.
+            //
+            // Core refreshes a shipped default when a new version replaces it,
+            // and it recognises one by the "default: true" flag - which a save
+            // in place keeps, because the prompt is still the built-in one. So an
+            // edit saved over the Default Translation Prompt would have been
+            // deleted by the next refresh without a word. Trados avoids this by
+            // making built-in text read-only; here the edit is kept instead, as a
+            // copy that is not marked default, and it becomes the active prompt
+            // if the original was, so memoQ uses what was just written.
+            if (builtIn)
+            {
+                var category = OutOfDefaultFolder(_current.Category);
+                var copyName = string.Equals(name, originalName, StringComparison.OrdinalIgnoreCase)
+                    ? name + " (my version)"
+                    : name;
+
+                _current.Name = UniqueName(copyName, category);
+                _current.Category = category;
+                _current.IsDefault = false;
+                _current.FilePath = null;
+            }
 
             try
             {
@@ -1431,10 +1459,58 @@ namespace Supervertaler.PromptEditor
             // library, so the tree is rebuilt and the prompt reselected by its
             // new relative path rather than by object identity.
             var relative = _current.RelativePath;
+
+            if (builtIn)
+            {
+                if (wasActive) SharedSettings.PromptPath = relative;
+                RefreshPrompt();
+            }
+
             LoadTree();
             SelectPrompt(relative);
 
+            if (builtIn)
+            {
+                MessageBox.Show(this,
+                    "\"" + originalName + "\" is built into Supervertaler and is kept as it shipped, so your "
+                    + "changes were saved as a prompt of your own: \"" + _current.Name + "\"."
+                    + (wasActive ? " memoQ now uses it." : ""),
+                    "Saved as a copy", MessageBoxButtons.OK, MessageBoxIcon.Information);
+            }
+
             return true;
+        }
+
+        /// <summary>
+        /// "Translate/Default" becomes "Translate": a copy of a built-in prompt
+        /// lives beside the defaults, not among them, where the library would
+        /// take it for one of Supervertaler's own.
+        /// </summary>
+        private static string OutOfDefaultFolder(string category)
+        {
+            var parts = (category ?? "").Split(new[] { '/', '\\' }, StringSplitOptions.RemoveEmptyEntries)
+                .Where(p => !p.Equals("Default", StringComparison.OrdinalIgnoreCase)
+                         && !p.Equals("Built-in", StringComparison.OrdinalIgnoreCase));
+            return string.Join("/", parts);
+        }
+
+        /// <summary>
+        /// <paramref name="name"/>, or with a number after it when that folder
+        /// already has a prompt by that name - a second edit of a built-in prompt
+        /// must not overwrite the first copy.
+        /// </summary>
+        private string UniqueName(string name, string category)
+        {
+            var taken = new HashSet<string>(
+                _library.GetAllPrompts()
+                    .Where(p => string.Equals(OutOfDefaultFolder(p.Category), category, StringComparison.OrdinalIgnoreCase)
+                             && !p.IsDefault)
+                    .Select(p => p.Name ?? ""),
+                StringComparer.OrdinalIgnoreCase);
+
+            if (!taken.Contains(name)) return name;
+            for (var n = 2; ; n++)
+                if (!taken.Contains(name + " " + n)) return name + " " + n;
         }
 
         /// <summary>
