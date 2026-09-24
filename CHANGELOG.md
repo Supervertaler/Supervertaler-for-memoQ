@@ -11,6 +11,8 @@ any release tooling that buckets on these headings works for both.
 
 ### Changed
 
+- **The live document link starts by itself.** The installer put it in place and nothing started it, so the instructions said to find it in Program Files and run it once by hand. Supervertaler now starts it the first time memoQ loads it, and memoQ asks once whether to allow the connection; after that memoQ starts it as it always has. It is started only once, and only when memoQ's PDF Preview tool is installed, so declining is not followed by the same question at every start.
+
 - **Claude Opus 5.5 replaces Opus 5 in the model list**, and is the first recommendation for Anthropic. It costs less: $4 per million input tokens and $20 per million output, against $5 and $25. If you had chosen Opus 5, it stays chosen and keeps working – it just shows in the model box as a model of your own rather than one from the list.
 
 - **Two things were called Settings.** The editor has a Settings menu and a Settings button on its toolbar, and they led to different places, so the first person looking for the licence opened the wrong one. The toolbar button has gone: it opened the same window as **Settings, Translation settings**, and one command in two places read as two different things. Provider, model and key are set once, so the menu is their place; the toolbar keeps what changes while you work. The licence is under **Help**, where people look for one. **Help, Documentation** now opens the front page of the memoQ documentation rather than the page about the prompt editor, which greeted anyone asking for help with the heading “Prompt Library & Editor”.

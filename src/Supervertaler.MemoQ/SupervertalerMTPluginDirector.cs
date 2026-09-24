@@ -68,6 +68,10 @@ namespace Supervertaler.MemoQ
             // work, and memoQ's start must not wait on it.
             System.Threading.Tasks.Task.Run(() => Core.DefaultPrompts.Ensure(PluginLog.Write));
 
+            // The live document link, started once so nobody has to find it in
+            // Program Files (see LiveLink). Also in the background.
+            System.Threading.Tasks.Task.Run(() => Core.LiveLink.StartOnce(PluginLog.Write));
+
             // Here rather than in the engine constructor: memoQ builds an engine
             // only for a project that uses the MT plugin, so a project whose
             // manager has switched MT plugins off never started the bridge - and

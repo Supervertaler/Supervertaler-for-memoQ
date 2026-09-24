@@ -53,6 +53,7 @@ namespace Supervertaler.MemoQ.Core
         private const string DocumentContextKey = "usedocumentcontext";
         private const string SendMemoryBankKey = "sendmemorybank";
         private const string BankExtractKey = "bankextract";
+        private const string LiveLinkStartedKey = "livelinkstarted";
         private const string ShowAllModelsKey = "showallmodels";
         private const string StructureContextKey = "structurecontext";
         private const string QuickTermHotkeyKey = "quicktermhotkey";
@@ -240,6 +241,13 @@ namespace Supervertaler.MemoQ.Core
         /// Bank row. Empty when the bank was sent whole.
         /// </summary>
         public static string BankExtract { get => StringOr(BankExtractKey, string.Empty); set => Write(BankExtractKey, value ?? string.Empty); }
+
+        /// <summary>
+        /// Whether the plugin has ever started the live document link itself. It
+        /// does so once (see LiveLink); after that memoQ starts it, or the
+        /// translator declined and is not asked again.
+        /// </summary>
+        public static bool LiveLinkStarted { get => BoolOr(LiveLinkStartedKey, false); set => Write(LiveLinkStartedKey, value ? "1" : "0"); }
 
         /// <summary>
         /// Whether the model dropdown shows the provider's whole inventory as well
