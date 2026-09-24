@@ -111,6 +111,16 @@ try {
     Check (-not (Test-Path (Join-Path $temp 'memoq\bank-extracts'))) 'no extract file is written under a harness'
     Check (([string]$shared.GetProperty('BankExtract', $Static).GetValue($null)) -eq $savedExtract) 'and the editor pointer is left alone'
 
+    # ---- 5b. when the article choice may be asked ------------------------------
+    # Once 3,000 characters are known - or at once, if the live link has handed
+    # over the whole document: a short job seen in full is a complete sample, and
+    # without this it would never be asked at all.
+    $can = $plugin.GetType('Supervertaler.MemoQ.Core.EngineContext').GetMethod('CanChooseArticles', $Static)
+    function Can($len, $whole) { $a = New-Object object[] 2; $a[0] = [int]$len; $a[1] = [bool]$whole; [bool]$can.Invoke($null, $a) }
+    Check (-not (Can 500 $false)) 'a short partial capture is not asked about'
+    Check (Can 500 $true) 'a short document known in full is'
+    Check (Can 5000 $false) 'a long enough capture is, whole or not'
+
     # ---- 6. extract files do not pile up ---------------------------------------
     # One file per document ever translated would grow forever. The newest 200
     # stay, anything not rewritten for 90 days goes, and the one just written is

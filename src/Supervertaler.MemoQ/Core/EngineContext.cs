@@ -97,9 +97,16 @@ namespace Supervertaler.MemoQ.Core
         /// <summary>
         /// Below this much document text the article choice is not asked: a model
         /// shown one sentence cannot say which notes the document needs. Until
-        /// then every article is kept, as before.
+        /// then every article is kept, as before - unless the whole document is
+        /// already known, from the live link, in which case a short document is a
+        /// complete sample and is asked about at once. Without that, a short job
+        /// would never be asked at all, and short jobs are common.
         /// </summary>
         private const int MinCharsToChooseArticles = 3000;
+
+        /// <summary>Whether enough of the document is known to ask which articles it needs.</summary>
+        internal static bool CanChooseArticles(int documentLength, bool wholeDocument) =>
+            wholeDocument || documentLength >= MinCharsToChooseArticles;
         private string _warnedMissingBank;
         private string _reportedBank;
 
@@ -583,7 +590,7 @@ namespace Supervertaler.MemoQ.Core
             // rows, but the key moves only when it has doubled: every rebuild
             // changes the system prompt and costs a cache write, so a job gets a
             // handful of them rather than one per row.
-            var document = DocumentText(out var documentId);
+            var document = DocumentText(out var documentId, out var wholeDocument);
             var newest = NewestWrite(dir).ToString("O");
             var key = string.Join("|", dir, SourceLangCode, TargetLangCode, newest,
                                   documentId, GrowthStep(document));
@@ -617,7 +624,9 @@ namespace Supervertaler.MemoQ.Core
 
                         var extract = global::Supervertaler.Core.BankExtract.Build(
                             ctx, document, SourceLangCode, TargetLangCode, PerRequestTokenBudget,
-                            document.Length >= MinCharsToChooseArticles ? ChooseArticles : (Func<global::Supervertaler.Core.ArticleSelectionRequest, IList<string>>)null,
+                            CanChooseArticles(document.Length, wholeDocument)
+                                ? ChooseArticles
+                                : (Func<global::Supervertaler.Core.ArticleSelectionRequest, IList<string>>)null,
                             earlier,
                             chooserName: General.Provider + " / " + General.Model);
 
@@ -671,8 +680,9 @@ namespace Supervertaler.MemoQ.Core
         /// - or the rows memoQ has sent so far, whichever holds more. Null when
         /// there is nothing yet.
         /// </summary>
-        private string DocumentText(out string documentId)
+        private string DocumentText(out string documentId, out bool wholeDocument)
         {
+            wholeDocument = false;
             var id = CurrentDocument;
             documentId = id == Guid.Empty ? MemoryKey : id.ToString("N");
 
@@ -693,7 +703,12 @@ namespace Supervertaler.MemoQ.Core
             if (capture != null && capture.Sources.Count > 0)
                 fromCapture = TagBridge.StripTagMarkers(string.Join("\n", capture.Sources));
 
-            var best = (fromPreview?.Length ?? 0) >= (fromCapture?.Length ?? 0) ? fromPreview : fromCapture;
+            // The live link hands over every part of the document when it
+            // connects, so text from it is the whole document; text captured from
+            // translation requests is only what memoQ has asked about so far.
+            var usePreview = (fromPreview?.Length ?? 0) >= (fromCapture?.Length ?? 0);
+            var best = usePreview ? fromPreview : fromCapture;
+            wholeDocument = usePreview && !string.IsNullOrWhiteSpace(fromPreview);
             return string.IsNullOrWhiteSpace(best) ? null : best;
         }
 
