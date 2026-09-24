@@ -52,6 +52,7 @@ namespace Supervertaler.MemoQ.Core
         private const string TerminologyContextKey = "useterminology";
         private const string DocumentContextKey = "usedocumentcontext";
         private const string SendMemoryBankKey = "sendmemorybank";
+        private const string BankExtractKey = "bankextract";
         private const string ShowAllModelsKey = "showallmodels";
         private const string StructureContextKey = "structurecontext";
         private const string QuickTermHotkeyKey = "quicktermhotkey";
@@ -232,6 +233,13 @@ namespace Supervertaler.MemoQ.Core
         /// chosen there, not in memoQ's resource.
         /// </summary>
         public static bool SendMemoryBank { get => BoolOr(SendMemoryBankKey, true); set => Write(SendMemoryBankKey, value ? "1" : "0"); }
+
+        /// <summary>
+        /// The latest per-job extract of a large bank, as "path|summary": written
+        /// by the plugin when it selects, read by the editor to say so on the
+        /// Bank row. Empty when the bank was sent whole.
+        /// </summary>
+        public static string BankExtract { get => StringOr(BankExtractKey, string.Empty); set => Write(BankExtractKey, value ?? string.Empty); }
 
         /// <summary>
         /// Whether the model dropdown shows the provider's whole inventory as well

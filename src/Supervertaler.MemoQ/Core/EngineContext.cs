@@ -87,6 +87,19 @@ namespace Supervertaler.MemoQ.Core
         private string _kbReaderBank;
         private string _kbBlock;
         private string _kbBlockKey;
+
+        // The article choice for a large bank, made once per job (see
+        // BankExtract) and reused while the bank and the document stay the same,
+        // so the model is asked once per job rather than once per rebuild.
+        private List<string> _articleChoice;
+        private string _articleChoiceKey;
+
+        /// <summary>
+        /// Below this much document text the article choice is not asked: a model
+        /// shown one sentence cannot say which notes the document needs. Until
+        /// then every article is kept, as before.
+        /// </summary>
+        private const int MinCharsToChooseArticles = 3000;
         private string _warnedMissingBank;
         private string _reportedBank;
 
@@ -565,8 +578,15 @@ namespace Supervertaler.MemoQ.Core
             var dir = BankDir(bank);
             if (dir == null) return null;
 
-            var key = string.Join("|", dir, SourceLangCode, TargetLangCode,
-                                  NewestWrite(dir).ToString("O"));
+            // The document is part of the key, so a large bank is selected for
+            // the job at hand (see BankExtract). Its text grows as memoQ sends
+            // rows, but the key moves only when it has doubled: every rebuild
+            // changes the system prompt and costs a cache write, so a job gets a
+            // handful of them rather than one per row.
+            var document = DocumentText(out var documentId);
+            var newest = NewestWrite(dir).ToString("O");
+            var key = string.Join("|", dir, SourceLangCode, TargetLangCode, newest,
+                                  documentId, GrowthStep(document));
 
             lock (_kbLock)
             {
@@ -581,9 +601,46 @@ namespace Supervertaler.MemoQ.Core
                     }
                     _kbReader.RefreshIndex();
 
+                    // Untrimmed: the extract decides what goes before the budget
+                    // does, and a small bank is trimmed below exactly as before.
                     var ctx = _kbReader.LoadContext(
                         ProjectNameOrNull(), null, SourceLangCode, TargetLangCode,
-                        tokenBudget: PerRequestTokenBudget);
+                        tokenBudget: 0);
+
+                    if (ctx != null && ctx.HasContent
+                        && ctx.EstimatedTokens > global::Supervertaler.Core.BankExtract.Threshold
+                        && document != null)
+                    {
+                        var choiceKey = string.Join("|", dir, newest, documentId);
+                        var earlier = string.Equals(choiceKey, _articleChoiceKey, StringComparison.Ordinal)
+                            ? _articleChoice : null;
+
+                        var extract = global::Supervertaler.Core.BankExtract.Build(
+                            ctx, document, SourceLangCode, TargetLangCode, PerRequestTokenBudget,
+                            document.Length >= MinCharsToChooseArticles ? ChooseArticles : (Func<global::Supervertaler.Core.ArticleSelectionRequest, IList<string>>)null,
+                            earlier);
+
+                        if (extract.ArticleChoice != null)
+                        {
+                            _articleChoice = extract.ArticleChoice;
+                            _articleChoiceKey = choiceKey;
+                        }
+
+                        _kbBlock = extract.Context.HasContent
+                            ? global::Supervertaler.Core.MemoryBankReader.FormatForPrompt(extract.Context)
+                            : null;
+                        _kbBlockKey = key;
+                        _reportedBank = null;   // the plain "sending" line applies again if the bank shrinks
+
+                        WriteExtract(extract, bank);
+                        return _kbBlock;
+                    }
+
+                    ctx?.TrimToTokenBudget(PerRequestTokenBudget);
+
+                    // Sent whole: no selection for the editor to point at.
+                    if (!SharedSettings.InHarness && SharedSettings.BankExtract.Length > 0)
+                        SharedSettings.BankExtract = string.Empty;
 
                     _kbBlock = ctx == null || !ctx.HasContent
                         ? null
@@ -606,6 +663,121 @@ namespace Supervertaler.MemoQ.Core
         }
 
         private bool _reportedOff;
+
+        /// <summary>
+        /// This job's document as text, for selecting from a large bank: the live
+        /// document link's rows when it is connected - the whole document at once
+        /// - or the rows memoQ has sent so far, whichever holds more. Null when
+        /// there is nothing yet.
+        /// </summary>
+        private string DocumentText(out string documentId)
+        {
+            var id = CurrentDocument;
+            documentId = id == Guid.Empty ? MemoryKey : id.ToString("N");
+
+            string fromPreview = null;
+            try
+            {
+                if (id != Guid.Empty)
+                {
+                    var rows = PreviewStore.Rows(id);
+                    if (rows.Count > 0)
+                        fromPreview = TagBridge.StripTagMarkers(string.Join("\n", rows.Select(r => r.Source)));
+                }
+            }
+            catch { /* the live link is optional */ }
+
+            string fromCapture = null;
+            var capture = CaptureStore.Get(MemoryKey);
+            if (capture != null && capture.Sources.Count > 0)
+                fromCapture = TagBridge.StripTagMarkers(string.Join("\n", capture.Sources));
+
+            var best = (fromPreview?.Length ?? 0) >= (fromCapture?.Length ?? 0) ? fromPreview : fromCapture;
+            return string.IsNullOrWhiteSpace(best) ? null : best;
+        }
+
+        /// <summary>Which doubling of the document's length this is: the key moves when it doubles.</summary>
+        private static string GrowthStep(string document)
+        {
+            if (document == null) return "none";
+            return ((int)Math.Floor(Math.Log(Math.Max(1, document.Length) / 500.0, 2))).ToString();
+        }
+
+        /// <summary>
+        /// The article choice for a large bank: one request to the model in the
+        /// translator's settings, once per job. Null - keep every article - under
+        /// a harness, while AI is paused, or when anything goes wrong; a failed
+        /// choice must never stop a translation.
+        /// </summary>
+        private IList<string> ChooseArticles(global::Supervertaler.Core.ArticleSelectionRequest request)
+        {
+            if (SharedSettings.InHarness || !Licence.AiAllowed) return null;
+
+            try
+            {
+                var general = General;
+                using (var cancel = new CancellationTokenSource(TimeSpan.FromSeconds(90)))
+                using (var client = new global::Supervertaler.Core.LlmClient(
+                           SessionRunner.MapProviderForCore(general.Provider), general.Model, ApiKey,
+                           string.IsNullOrWhiteSpace(general.Endpoint) ? null : general.Endpoint.Trim()))
+                {
+                    var reply = client.SendPromptAsync(
+                            global::Supervertaler.Core.BankExtract.SelectionUserPrompt(request),
+                            global::Supervertaler.Core.BankExtract.SelectionSystemPrompt,
+                            cancellationToken: cancel.Token)
+                        .ConfigureAwait(false).GetAwaiter().GetResult();
+
+                    var usage = client.LastUsage;
+                    PluginLog.Write("SuperMemory: asked " + general.Model + " which of "
+                        + request.Candidates.Count + " articles this document needs"
+                        + (usage == null ? "" : " | tokens: in " + usage.RegularInputTokens.ToString("N0")
+                                               + " out " + usage.OutputTokens.ToString("N0")));
+
+                    return global::Supervertaler.Core.BankExtract.ParseSelection(reply, request.Candidates);
+                }
+            }
+            catch (Exception ex)
+            {
+                PluginLog.Write("SuperMemory: the article choice could not be made; every article is kept", ex);
+                return null;
+            }
+        }
+
+        /// <summary>
+        /// Writes what this job sends from the banks where the translator can
+        /// read it, and says so once in the log. Outside the bank folders, which
+        /// may be synced or kept in Git. Never under a harness.
+        /// </summary>
+        private void WriteExtract(global::Supervertaler.Core.BankExtractResult extract, string bank)
+        {
+            var summary = extract.TokensAfter.ToString("N0") + " of " + extract.TokensBefore.ToString("N0") + " tokens";
+            string path = null;
+
+            if (!SharedSettings.InHarness)
+            {
+                try
+                {
+                    var folder = Path.Combine(global::Supervertaler.Core.SupervertalerPaths.Root, "memoq", "bank-extracts");
+                    Directory.CreateDirectory(folder);
+                    path = Path.Combine(folder, MemoryKey + ".md");
+
+                    var label = (ProjectNameOrNull() ?? "this project")
+                        + ", " + (bank.Length == 0 ? "shared defaults only" : "bank " + Quote(bank));
+                    File.WriteAllText(path,
+                        global::Supervertaler.Core.BankExtract.FormatFile(extract, label, DateTime.Now),
+                        new System.Text.UTF8Encoding(false));
+
+                    SharedSettings.BankExtract = path + "|" + summary;
+                }
+                catch (Exception ex)
+                {
+                    PluginLog.Write("SuperMemory: could not write this job's extract", ex);
+                }
+            }
+
+            PluginLog.Write("SuperMemory: sending a selection for this job - " + summary + " | "
+                + string.Join(" ", extract.Report) + (path == null ? "" : " | " + path));
+        }
 
         private void ReportBankOffOnce()
         {

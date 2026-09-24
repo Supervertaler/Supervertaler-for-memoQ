@@ -2400,6 +2400,7 @@ namespace Supervertaler.PromptEditor
                     ? "No memory bank, and no shared bank either, so SuperMemory contributes "
                       + "nothing. Click to choose one."
                     : "No client bank. The _shared bank still goes with every request:\r\n" + shared
+                      + ExtractNote()
                       + "\r\n\r\nClick to add a client bank on top of it.");
                 return;
             }
@@ -2411,7 +2412,26 @@ namespace Supervertaler.PromptEditor
                 ? "There is no bank of this name under " + Supervertaler.Core.MemoryBanks.Root
                   + ", so nothing from it is reaching the model.\r\n\r\nClick to choose another."
                 : "Sent with every translation request, and in full to AutoPrompt:\r\n" + dir
+                  + ExtractNote()
                   + "\r\n\r\nClick to choose a different one.");
+        }
+
+        /// <summary>
+        /// When the banks are large enough that only the part this job needs is
+        /// sent, a line saying so and where the details are. Nothing to press:
+        /// the selection is automatic, and this is only for someone who wonders.
+        /// </summary>
+        private static string ExtractNote()
+        {
+            var value = SharedSettings.BankExtract ?? "";
+            var bar = value.IndexOf('|');
+            if (bar <= 0) return "";
+
+            var path = value.Substring(0, bar);
+            if (!System.IO.File.Exists(path)) return "";
+
+            return "\r\n\r\nThe banks are large, so this job gets only the part it needs: "
+                + value.Substring(bar + 1) + ". What was chosen and why:\r\n" + path;
         }
 
         /// <summary>
