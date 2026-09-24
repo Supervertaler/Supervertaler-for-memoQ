@@ -87,6 +87,14 @@ namespace Supervertaler.MemoQ.Core
                 system = system + Environment.NewLine + Environment.NewLine + kbContext.Trim();
             }
 
+            // Last, after the prompt and the bank, so no prompt can switch it off
+            // by accident and nothing written after it can soften it. Every prompt
+            // gets it - the default, AutoPrompt's, a hand-written one - because
+            // until it existed the shape of a reply was whatever the selected
+            // prompt happened to say. See OutputContract. The same text on every
+            // request, so it sits inside the cached prefix at no extra cost.
+            system = system + Environment.NewLine + Environment.NewLine + OutputContract.Text;
+
             var sb = new StringBuilder();
 
             // Outside the document-context switch on purpose. That switch governs

@@ -143,6 +143,12 @@ namespace Supervertaler.MemoQ
         private TranslationResult TranslateOne(
             Segment source, Segment tmSource, Segment tmTarget, SegmentMetadata row)
         {
+            // Only tags, spaces or punctuation: the source is the translation.
+            // Before the empty test, which a tag-only row also passes - and
+            // before the licence gate, since no AI is involved.
+            if (NothingToTranslate.Applies(source))
+                return NothingToTranslate.Copy(source);
+
             if (source == null || source.IsEmptyText)
                 return new TranslationResult { Translation = Segment.Empty, Confidence = 0 };
 

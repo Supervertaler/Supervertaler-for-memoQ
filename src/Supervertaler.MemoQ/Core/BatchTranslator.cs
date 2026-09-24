@@ -6,6 +6,7 @@ using System.Threading.Tasks;
 using MemoQ.Addins.Common.DataStructures;
 using MemoQ.MTInterfaces;
 using Supervertaler.Core;
+using Supervertaler.MemoQ.Settings;
 
 namespace Supervertaler.MemoQ.Core
 {
@@ -69,11 +70,21 @@ namespace Supervertaler.MemoQ.Core
             var batchSize = Math.Max(1, Math.Min(100, context.General.BatchSize));
 
             // Empty segments never reach the model; they are filled in directly so
-            // the numbering the model sees has no gaps in it.
+            // the numbering the model sees has no gaps in it. A row that is only
+            // tags or punctuation is filled with its own source (see
+            // NothingToTranslate) - it used to be filled with nothing, which
+            // memoQ wrote into the target, deleting the tag.
             var pending = new List<int>();
+            var copied = 0;
             for (var i = 0; i < segments.Length; i++)
             {
-                if (segments[i] == null || segments[i].IsEmptyText)
+                if (NothingToTranslate.Applies(segments[i]))
+                {
+                    results[i] = NothingToTranslate.Copy(segments[i]);
+                    CaptureStore.Record(context, TagBridge.ToTaggedText(segments[i]), statusOf?.Invoke(i));
+                    copied++;
+                }
+                else if (segments[i] == null || segments[i].IsEmptyText)
                     results[i] = new TranslationResult { Translation = Segment.Empty, Confidence = 0 };
                 else
                     pending.Add(i);
@@ -107,7 +118,11 @@ namespace Supervertaler.MemoQ.Core
             if (servedFromStaging > 0)
                 PluginLog.Write($"batch: {servedFromStaging} segment(s) served from staging, {pending.Count} left for the model");
 
-            if (pending.Count == 0) return results;
+            if (pending.Count == 0)
+            {
+                LogRows(results, servedFromStaging, copied, context.General);
+                return results;
+            }
 
             // Bridge mode: the rest have been captured for Claude to see, and
             // that is the whole job of this pass. Nothing goes to the model.
@@ -139,6 +154,7 @@ namespace Supervertaler.MemoQ.Core
 
                 PluginLog.Write($"batch: bridge mode - captured {pending.Count} segment(s), none staged, "
                     + "reported as no-result so memoQ leaves those targets untouched");
+                LogRows(results, servedFromStaging, copied, context.General);
                 return results;
             }
 
@@ -146,6 +162,7 @@ namespace Supervertaler.MemoQ.Core
             {
                 foreach (var i in pending)
                     results[i] = await translateOne(segments[i], i, cancellationToken).ConfigureAwait(false);
+                LogRows(results, servedFromStaging, copied, context.General);
                 return results;
             }
 
@@ -164,7 +181,12 @@ namespace Supervertaler.MemoQ.Core
                         context, cancellationToken)
                         .ConfigureAwait(false);
 
-                    for (var k = 0; k < chunk.Count; k++) results[chunk[k]] = translated[k];
+                    for (var k = 0; k < chunk.Count; k++)
+                    {
+                        results[chunk[k]] = translated[k]
+                            ?? await RetryAloneAsync(translateOne, segments[chunk[k]], chunk[k], cancellationToken)
+                                .ConfigureAwait(false);
+                    }
                 }
                 catch (OperationCanceledException)
                 {
@@ -191,7 +213,50 @@ namespace Supervertaler.MemoQ.Core
                 }
             }
 
+            LogRows(results, servedFromStaging, copied, context.General);
             return results;
+        }
+
+        /// <summary>
+        /// One segment whose batch reply broke the output contract, asked for on
+        /// its own. A failure there is reported on the row, never thrown: the
+        /// batch it came from already succeeded.
+        /// </summary>
+        private static async Task<TranslationResult> RetryAloneAsync(
+            Func<Segment, int, CancellationToken, Task<TranslationResult>> translateOne,
+            Segment segment, int index, CancellationToken cancellationToken)
+        {
+            try
+            {
+                return await translateOne(segment, index, cancellationToken).ConfigureAwait(false);
+            }
+            catch (OperationCanceledException)
+            {
+                throw;
+            }
+            catch (Exception ex)
+            {
+                return new TranslationResult { Exception = AsMemoQError(ex) };
+            }
+        }
+
+        /// <summary>
+        /// Where the rows of one Pre-translate call came from. Staged translations
+        /// and the model's look identical once they are in the grid, so this line
+        /// is the only place a translator can see how much of a run the model
+        /// wrote - and how many rows it left for them.
+        /// </summary>
+        private static void LogRows(TranslationResult[] results, int staged, int copied,
+            SupervertalerGeneralSettings general)
+        {
+            var left = results.Count(r => r?.Exception != null);
+            var model = results.Count(r => r != null && r.Exception == null
+                                           && r.Translation != null && !r.Translation.IsEmpty) - staged - copied;
+
+            PluginLog.Write($"rows: {results.Length} - {staged} staged, {Math.Max(0, model)} by the model "
+                + $"({general.Provider} / {general.Model}), "
+                + (copied > 0 ? $"{copied} copied from the source (tags only), " : "")
+                + $"{left} left for the translator");
         }
 
         private static string TaggedOrNull(List<Segment> segments, int index)
@@ -389,6 +454,25 @@ namespace Supervertaler.MemoQ.Core
             for (var i = 0; i < chunk.Count; i++)
             {
                 var match = parsed.FirstOrDefault(p => p.Number == i + 1);
+                var source = TagBridge.ToTaggedText(chunk[i]);
+
+                // A reply carrying commentary is not served from the batch (see
+                // ReplyCheck). It is left null, and the caller sends that segment
+                // again on its own through the single-segment path, which asks
+                // with the contract restated and refuses a second offence. The
+                // rest of the batch is unaffected.
+                var problem = ReplyCheck.Problem(source, match?.Translation);
+                if (problem != null)
+                {
+                    PluginLog.Write($"reply: retried - {problem}, segment {i + 1} of this batch; "
+                        + "asking for it on its own");
+                    continue;
+                }
+
+                var tags = ReplyCheck.TagDifference(source, match?.Translation);
+                if (tags != null)
+                    PluginLog.Write($"reply: tags differ from the source ({tags}), segment {i + 1} "
+                        + "of this batch - served; worth a look");
 
                 results[i] = new TranslationResult
                 {

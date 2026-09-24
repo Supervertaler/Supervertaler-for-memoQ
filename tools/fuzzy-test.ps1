@@ -71,8 +71,11 @@ $argv = [object[]]::new(1); $argv[0] = $inputs
 $user = $build1.Invoke($null, $argv)
 
 $hasBlock = $user -like '*CLOSEST APPROVED TRANSLATIONS*'
-$namesRow = $user -like '*Segment 2, approved translation: Een inrichting omvattende een widget.*'
-$noRow1 = -not ($user -like '*Segment 1, source in memory*')
+# One block per segment since core's #116 layout: "Segment 2", then the
+# memory's source and the approved translation on lines of their own.
+$block = $user.Substring(0, [Math]::Max(0, $user.IndexOf('**SEGMENTS TO TRANSLATE')))
+$namesRow = $block -match '(?s)Segment 2\b.*approved:\s+Een inrichting omvattende een widget\.'
+$noRow1 = $block -notmatch 'Segment 1\b'
 Write-Host "$(if ($hasBlock -and $namesRow -and $noRow1) {'PASS'} else {'FAIL'}) batch prompt: block=$hasBlock namesRow2=$namesRow onlyRowsWithAMatch=$noRow1"
 
 # Without any fuzzy text the prompt must be byte-identical to the old shape.

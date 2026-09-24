@@ -57,6 +57,13 @@ namespace Supervertaler.PromptEditor
         private int _single;
         private int _drafts;
 
+        // Where Pre-translate's rows came from, summed over the run. Staged and
+        // model-written rows look identical in the grid; this is the only place
+        // the difference shows.
+        private int _staged;
+        private int _byModel;
+        private int _leftOver;
+
         /// <summary>
         /// How much of the log to show when the window opens.
         ///
@@ -152,6 +159,9 @@ namespace Supervertaler.PromptEditor
             _problems = 0;
             _single = 0;
             _drafts = 0;
+            _staged = 0;
+            _byModel = 0;
+            _leftOver = 0;
 
             try
             {
@@ -261,6 +271,10 @@ namespace Supervertaler.PromptEditor
         private static readonly Regex Entry =
             new Regex(@"^\[(?<time>[\d\-: .]+)\]\s+\[\d+\]\s+(?<body>.*)$", RegexOptions.Compiled);
 
+        private static readonly Regex Rows =
+            new Regex(@"^rows: \d+ - (?<staged>\d+) staged, (?<model>\d+) by the model .*?, (?<left>\d+) left",
+                      RegexOptions.Compiled);
+
         private static readonly Regex Batch =
             new Regex(@"^batch: (?<sent>\d+) segment\(s\) sent, (?<back>\d+) returned(?: \| terms: (?<terms>\d+))?(?: \| recall: (?<recall>\d+))?",
                       RegexOptions.Compiled);
@@ -312,6 +326,14 @@ namespace Supervertaler.PromptEditor
                 return text;
             }
 
+            var rows = Rows.Match(body);
+            if (rows.Success)
+            {
+                _staged += int.Parse(rows.Groups["staged"].Value, CultureInfo.InvariantCulture);
+                _byModel += int.Parse(rows.Groups["model"].Value, CultureInfo.InvariantCulture);
+                _leftOver += int.Parse(rows.Groups["left"].Value, CultureInfo.InvariantCulture);
+            }
+
             if (body.StartsWith("translate: ", StringComparison.Ordinal)) _single++;
             if (body.StartsWith("AutoPrompt", StringComparison.Ordinal)) _drafts++;
 
@@ -335,7 +357,8 @@ namespace Supervertaler.PromptEditor
         {
             return body.IndexOf("failed", StringComparison.OrdinalIgnoreCase) >= 0
                 || body.IndexOf("exception", StringComparison.OrdinalIgnoreCase) >= 0
-                || body.IndexOf("could not", StringComparison.OrdinalIgnoreCase) >= 0;
+                || body.IndexOf("could not", StringComparison.OrdinalIgnoreCase) >= 0
+                || body.StartsWith("reply: refused", StringComparison.Ordinal);
         }
 
         private static string Friendly(string body)
@@ -355,6 +378,16 @@ namespace Supervertaler.PromptEditor
 
             if (body.StartsWith("AutoPrompt", StringComparison.Ordinal))
                 return "AutoPrompt " + body.Substring("AutoPrompt".Length).TrimStart(':', ' ');
+
+            // Where a Pre-translate call's rows came from: staged, the model, or
+            // left for the translator. The last is never zero by accident.
+            if (body.StartsWith("rows: ", StringComparison.Ordinal))
+                return "Rows       " + body.Substring("rows: ".Length);
+
+            // A reply that was not a clean translation: asked again, refused, or
+            // served with different tags. The output contract made visible.
+            if (body.StartsWith("reply: ", StringComparison.Ordinal))
+                return "Reply      " + body.Substring("reply: ".Length);
 
             if (body.StartsWith("DocumentMemory: ", StringComparison.Ordinal))
                 return "Memory     " + body.Substring("DocumentMemory: ".Length);
@@ -404,6 +437,11 @@ namespace Supervertaler.PromptEditor
 
             if (_drafts > 0)
                 parts.Add(_drafts + " AutoPrompt call" + (_drafts == 1 ? "" : "s"));
+
+            // Only once something has been staged or left over: on an ordinary
+            // run every row is the model's, and saying so adds nothing.
+            if (_staged > 0 || _leftOver > 0)
+                parts.Add(_staged + " staged, " + _byModel + " by the model, " + _leftOver + " left for you");
 
             if (parts.Count == 0)
             {

@@ -157,6 +157,9 @@ namespace Supervertaler.MemoQ
             EngineContext context,
             CancellationToken cancellationToken)
         {
+            if (NothingToTranslate.Applies(bundle?.Source))
+                return NothingToTranslate.Copy(bundle.Source);
+
             if (bundle?.Source == null || bundle.Source.IsEmptyText)
                 return new TranslationResult { Translation = Segment.Empty, Confidence = 0 };
 
@@ -255,22 +258,47 @@ namespace Supervertaler.MemoQ
                        apiKey,
                        string.IsNullOrWhiteSpace(general.Endpoint) ? null : general.Endpoint.Trim()))
             {
-                var raw = await client.SendPromptAsync(
-                    prompt.User,
-                    prompt.System,
-                    cancellationToken: cancellationToken).ConfigureAwait(false);
+                var reply = await AskAsync(client, prompt.User, prompt.System, structure, cancellationToken)
+                    .ConfigureAwait(false);
 
-                var reply = raw?.Trim();
-
-                // Stripped before it is cached as well as before it is shown, so
-                // a served-from-cache answer is as clean as a fresh one.
-                if (structure.Mode == StructureContextMode.Markers)
+                // Checked before anything else happens to it (see ReplyCheck). A
+                // reply that carries commentary gets one more chance with the
+                // contract restated; a second one is not served at all. An empty
+                // row costs the translator one segment; a note in the target can
+                // reach a client.
+                var problem = ReplyCheck.Problem(taggedSource, reply);
+                if (problem != null)
                 {
-                    reply = StructureContext.Strip(reply, out var echoed);
-                    if (echoed)
-                        PluginLog.Write("structure: the model echoed a list marker at the start of this segment; "
-                            + "removed before it reached the document");
+                    PluginLog.Write($"reply: retried - {problem} ({reply?.Length ?? 0} chars back "
+                        + $"for {taggedSource.Length})");
+
+                    var again = await AskAsync(client,
+                            OutputContract.Reminder + Environment.NewLine + Environment.NewLine + prompt.User,
+                            prompt.System, structure, cancellationToken)
+                        .ConfigureAwait(false);
+
+                    var second = ReplyCheck.Problem(taggedSource, again);
+                    if (second != null)
+                    {
+                        // The reason and the sizes only: this log gets pasted into
+                        // issues. What the model actually wrote goes in the message
+                        // memoQ shows under the row, which stays on this machine.
+                        PluginLog.Write($"reply: refused - {second}, twice; the row is left for the translator");
+                        return new TranslationResult
+                        {
+                            Exception = BatchTranslator.AsMemoQError(
+                                new InvalidOperationException(Refusal(second, again)))
+                        };
+                    }
+
+                    reply = again;
+                    PluginLog.Write("reply: the second answer was a clean translation and was used");
                 }
+
+                // Reported, not refused: a dropped formatting tag is often right.
+                var tags = ReplyCheck.TagDifference(taggedSource, reply);
+                if (tags != null)
+                    PluginLog.Write($"reply: tags differ from the source ({tags}) - served; worth a look");
 
                 TranslationCache.Set(cacheKey, reply);
 
@@ -319,6 +347,50 @@ namespace Supervertaler.MemoQ
                 };
             }
         }
+        /// <summary>
+        /// One request, with the list marker stripped when markers were sent.
+        /// Stripped before the reply is checked or cached, so a served-from-cache
+        /// answer is as clean as a fresh one.
+        /// </summary>
+        private static async Task<string> AskAsync(
+            global::Supervertaler.Core.LlmClient client,
+            string user,
+            string system,
+            StructureMarkers.Plan structure,
+            CancellationToken cancellationToken)
+        {
+            var raw = await client.SendPromptAsync(user, system, cancellationToken: cancellationToken)
+                .ConfigureAwait(false);
+
+            var reply = raw?.Trim();
+
+            if (structure.Mode == StructureContextMode.Markers)
+            {
+                reply = StructureContext.Strip(reply, out var echoed);
+                if (echoed)
+                    PluginLog.Write("structure: the model echoed a list marker at the start of this segment; "
+                        + "removed before it reached the document");
+            }
+
+            return reply;
+        }
+
+        /// <summary>
+        /// What memoQ shows under a row whose reply was refused twice. It says
+        /// why, and quotes what came back, so the translator can see it was the
+        /// model and not the plugin - and can use the translation part if it was
+        /// sound. Long replies are cut: this is a message line, not a document.
+        /// </summary>
+        internal static string Refusal(string problem, string reply)
+        {
+            var shown = (reply ?? "").Trim();
+            if (shown.Length > 600) shown = shown.Substring(0, 600) + " …";
+
+            return "Supervertaler left this segment for you: the model's reply contained " + problem
+                + ", and did again when asked a second time, so it was not written into the document. "
+                + "The model sent: " + shown;
+        }
+
         /// <summary>
         /// Whether memoQ forwarded a fuzzy TM match for this segment, and how big
         /// it was. Sizes only: the match is a customer's own translation.
