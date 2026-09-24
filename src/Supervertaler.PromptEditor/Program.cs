@@ -66,6 +66,10 @@ namespace Supervertaler.PromptEditor
                 // no rotation.
                 Supervertaler.MemoQ.Core.Licence.Start(EditorLog);
 
+                // Before the window is built, so the library it shows already
+                // has the built-in prompts in it (see DefaultPrompts).
+                Supervertaler.MemoQ.Core.DefaultPrompts.Ensure(EditorLog);
+
                 try
                 {
                     Application.Run(new MainForm(args != null && args.Length > 0 ? args[0] : null));

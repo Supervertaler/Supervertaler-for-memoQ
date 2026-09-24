@@ -33,6 +33,8 @@ any release tooling that buckets on these headings works for both.
 
 ### Fixed
 
+- **The built-in prompts only ever arrived through Supervertaler for Trados.** memoQ read the shared prompt library but never put Supervertaler's own prompts in it, so on a computer without the Trados plugin there was no Default Translation Prompt to choose – and updates to the built-in prompts never arrived either. memoQ now puts them in place when it loads Supervertaler, and the editor does when it starts. Only what is missing is written, and only an unedited built-in prompt is ever updated.
+
 - **A translation with numbered lines of its own was cut apart during Pre-translate.** Replies to a batch are numbered by segment, and every line starting "2." or "4.1" was read as the start of another segment – so procedure steps or a contents list inside one segment were split up, and their lines moved to the wrong rows with the numbers stripped. A number now starts a new segment only when it is the next one due and the sources that were sent agree; a segment's own numbered lines stay together.
 
 - **Every row you landed on paid full price for the whole prompt and memory bank.** Pre-translate has used prompt caching for weeks, but the request memoQ makes when you move to a row never asked for it – so with a 26,000-token memory bank each row sent about 41,000 input tokens at the full rate, and an ordinary morning of work in memoQ cost several dollars on Opus. It now asks, and because the prompt and bank are the same text for every row of a job, each row after the first reads them back at a tenth of the price. The Activity window shows a Tokens line for each such request; *cached* should appear from the second row on.

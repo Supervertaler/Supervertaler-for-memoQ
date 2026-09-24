@@ -63,6 +63,11 @@ namespace Supervertaler.MemoQ
             // background and never delays memoQ.
             Core.Licence.Start(PluginLog.Write);
 
+            // The built-in prompts, for a translator who has never run the
+            // Trados plugin (see DefaultPrompts). In the background: it is file
+            // work, and memoQ's start must not wait on it.
+            System.Threading.Tasks.Task.Run(() => Core.DefaultPrompts.Ensure(PluginLog.Write));
+
             // Here rather than in the engine constructor: memoQ builds an engine
             // only for a project that uses the MT plugin, so a project whose
             // manager has switched MT plugins off never started the bridge - and

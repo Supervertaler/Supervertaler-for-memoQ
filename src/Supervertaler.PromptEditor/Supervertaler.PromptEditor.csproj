@@ -130,6 +130,9 @@
     <Compile Include="..\Supervertaler.MemoQ\Core\Licence.cs">
       <Link>Shared\Licence.cs</Link>
     </Compile>
+    <Compile Include="..\Supervertaler.MemoQ\Core\DefaultPrompts.cs">
+      <Link>Shared\DefaultPrompts.cs</Link>
+    </Compile>
     <Compile Include="..\Supervertaler.MemoQ\Core\MemoryBankChoice.cs">
       <Link>Shared\MemoryBankChoice.cs</Link>
     </Compile>
