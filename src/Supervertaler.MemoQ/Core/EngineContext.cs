@@ -618,7 +618,8 @@ namespace Supervertaler.MemoQ.Core
                         var extract = global::Supervertaler.Core.BankExtract.Build(
                             ctx, document, SourceLangCode, TargetLangCode, PerRequestTokenBudget,
                             document.Length >= MinCharsToChooseArticles ? ChooseArticles : (Func<global::Supervertaler.Core.ArticleSelectionRequest, IList<string>>)null,
-                            earlier);
+                            earlier,
+                            chooserName: General.Provider + " / " + General.Model);
 
                         if (extract.ArticleChoice != null)
                         {
@@ -696,6 +697,42 @@ namespace Supervertaler.MemoQ.Core
             return string.IsNullOrWhiteSpace(best) ? null : best;
         }
 
+        /// <summary>How many extract files are kept - one per document ever translated would grow forever.</summary>
+        internal const int KeepExtracts = 200;
+
+        /// <summary>An extract file not rewritten for this long belongs to a finished job.</summary>
+        internal static readonly TimeSpan KeepExtractsFor = TimeSpan.FromDays(90);
+
+        /// <summary>
+        /// Keeps the newest <paramref name="keep"/> extract files and removes any
+        /// older than <paramref name="maxAge"/>, never <paramref name="justWritten"/>.
+        /// Returns how many went. A file that cannot be removed is left for next
+        /// time - this is housekeeping, and must never fail the write it follows.
+        /// </summary>
+        internal static int PruneExtracts(string folder, int keep, TimeSpan maxAge, string justWritten)
+        {
+            var removed = 0;
+            try
+            {
+                var files = new DirectoryInfo(folder).GetFiles("*.md")
+                    .OrderByDescending(f => f.LastWriteTimeUtc)
+                    .ToList();
+                var cutoff = DateTime.UtcNow - maxAge;
+
+                for (var i = 0; i < files.Count; i++)
+                {
+                    var f = files[i];
+                    if (string.Equals(f.FullName, justWritten, StringComparison.OrdinalIgnoreCase)) continue;
+                    if (i < keep && f.LastWriteTimeUtc >= cutoff) continue;
+
+                    try { f.Delete(); removed++; }
+                    catch { /* locked or in use: next time */ }
+                }
+            }
+            catch { /* a folder we cannot list is not worth failing over */ }
+            return removed;
+        }
+
         /// <summary>Which doubling of the document's length this is: the key moves when it doubles.</summary>
         private static string GrowthStep(string document)
         {
@@ -768,6 +805,9 @@ namespace Supervertaler.MemoQ.Core
                         new System.Text.UTF8Encoding(false));
 
                     SharedSettings.BankExtract = path + "|" + summary;
+
+                    var pruned = PruneExtracts(folder, KeepExtracts, KeepExtractsFor, path);
+                    if (pruned > 0) PluginLog.Write("SuperMemory: removed " + pruned + " old extract file(s)");
                 }
                 catch (Exception ex)
                 {

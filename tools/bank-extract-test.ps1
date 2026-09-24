@@ -110,6 +110,31 @@ try {
     # ---- 5. a harness asks no model and writes no file -----------------------
     Check (-not (Test-Path (Join-Path $temp 'memoq\bank-extracts'))) 'no extract file is written under a harness'
     Check (([string]$shared.GetProperty('BankExtract', $Static).GetValue($null)) -eq $savedExtract) 'and the editor pointer is left alone'
+
+    # ---- 6. extract files do not pile up ---------------------------------------
+    # One file per document ever translated would grow forever. The newest 200
+    # stay, anything not rewritten for 90 days goes, and the one just written is
+    # never touched.
+    $prune = $plugin.GetType('Supervertaler.MemoQ.Core.EngineContext').GetMethod('PruneExtracts', $Static)
+    $folder = Join-Path $temp 'prune-test'
+    New-Item -ItemType Directory -Path $folder | Out-Null
+    $now = [DateTime]::UtcNow
+    for ($i = 0; $i -lt 203; $i++) {
+        $f = Join-Path $folder ("recent-{0:000}.md" -f $i)
+        [IO.File]::WriteAllText($f, 'x')
+        [IO.File]::SetLastWriteTimeUtc($f, $now.AddMinutes(-$i))
+    }
+    $old = Join-Path $folder 'finished-job.md'
+    [IO.File]::WriteAllText($old, 'x')
+    [IO.File]::SetLastWriteTimeUtc($old, $now.AddDays(-100))
+    $current = Join-Path $folder 'recent-000.md'
+
+    $removed = $prune.Invoke($null, @([string]$folder, [int]200, [TimeSpan]::FromDays(90), [string]$current))
+    $left = @(Get-ChildItem $folder -Filter *.md)
+    Check ($left.Count -eq 200) "the newest 200 are kept: $($left.Count) left, $removed removed"
+    Check (-not (Test-Path $old)) 'a file not rewritten for 90 days is removed'
+    Check (Test-Path $current) 'the one just written is kept'
+    Check (-not (Test-Path (Join-Path $folder 'recent-202.md'))) 'the oldest recent ones go first'
 }
 finally {
     $shared.GetProperty('MemoryBank', $Static).SetValue($null, $savedBank)
