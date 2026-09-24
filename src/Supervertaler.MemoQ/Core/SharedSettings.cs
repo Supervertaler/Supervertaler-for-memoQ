@@ -51,6 +51,7 @@ namespace Supervertaler.MemoQ.Core
         private const string BatchSizeKey = "batchsize";
         private const string TerminologyContextKey = "useterminology";
         private const string DocumentContextKey = "usedocumentcontext";
+        private const string SendMemoryBankKey = "sendmemorybank";
         private const string ShowAllModelsKey = "showallmodels";
         private const string StructureContextKey = "structurecontext";
         private const string QuickTermHotkeyKey = "quicktermhotkey";
@@ -219,6 +220,18 @@ namespace Supervertaler.MemoQ.Core
 
         public static bool UseDocumentContext { get => BoolOr(DocumentContextKey, true); set => Write(DocumentContextKey, value ? "1" : "0"); }
         public static bool UseDocumentContextOr(bool fromResource) => BoolOr(DocumentContextKey, fromResource);
+
+        /// <summary>
+        /// Whether the memory bank goes to the model at all - the chosen client
+        /// bank and <c>_shared</c> alike, for translation and AutoPrompt both.
+        /// The choice Supervertaler for Trados has always offered, asked for in
+        /// memoQ once a bill showed what a large bank costs on every row. On
+        /// unless switched off: memoQ has always sent it, and a setting that
+        /// quietly stopped sending a translator's client notes would be worse
+        /// than the cost it saves. Only in the shared file - the bank itself is
+        /// chosen there, not in memoQ's resource.
+        /// </summary>
+        public static bool SendMemoryBank { get => BoolOr(SendMemoryBankKey, true); set => Write(SendMemoryBankKey, value ? "1" : "0"); }
 
         /// <summary>
         /// Whether the model dropdown shows the provider's whole inventory as well

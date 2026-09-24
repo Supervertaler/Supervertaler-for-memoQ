@@ -34,6 +34,7 @@ namespace Supervertaler.PromptEditor
         private readonly NumericUpDown _batchSize = new NumericUpDown();
         private readonly CheckBox _useTerminology = new CheckBox();
         private readonly CheckBox _useDocumentContext = new CheckBox();
+        private readonly CheckBox _sendMemoryBank = new CheckBox();
         private readonly CheckBox _bridgeMode = new CheckBox();
         private readonly TextBox _apiKey = new TextBox();
         private Label _apiKeySource;
@@ -211,6 +212,13 @@ namespace Supervertaler.PromptEditor
             Controls.Add(_useDocumentContext);
             y += 26;
 
+            // Which bank is chosen per job, on the panel; whether one is sent at
+            // all is a standing choice, so it lives here with the other two.
+            _sendMemoryBank.Text = "Send the memory bank to the model";
+            _sendMemoryBank.Left = fieldX; _sendMemoryBank.Top = y; _sendMemoryBank.Width = fieldW;
+            Controls.Add(_sendMemoryBank);
+            y += 26;
+
             _bridgeMode.Text = "Pre-translate via Claude Desktop (MCP) instead of the API key";
             _bridgeMode.Left = fieldX; _bridgeMode.Top = y; _bridgeMode.Width = fieldW;
             Controls.Add(_bridgeMode);
@@ -223,7 +231,7 @@ namespace Supervertaler.PromptEditor
             // Measured rather than widened by a guess, so that a larger UI font or a
             // higher DPI cannot clip them again. The dialog grows if it has to; the
             // buttons are placed off ClientSize.Width further down and follow.
-            var boxes = new[] { _useTerminology, _useDocumentContext, _bridgeMode };
+            var boxes = new[] { _useTerminology, _useDocumentContext, _sendMemoryBank, _bridgeMode };
             var widest = 0;
             foreach (var box in boxes)
             {
@@ -532,6 +540,7 @@ namespace Supervertaler.PromptEditor
             _batchSize.Value = Math.Max(1, Math.Min(100, SharedSettings.BatchSizeOr(20)));
             _useTerminology.Checked = SharedSettings.UseTerminologyContextOr(true);
             _useDocumentContext.Checked = SharedSettings.UseDocumentContextOr(true);
+            _sendMemoryBank.Checked = SharedSettings.SendMemoryBank;
             _bridgeMode.Checked = SharedSettings.BridgeMode;
 
             // Null for the resource: this program cannot read memoQ's settings, and
@@ -554,6 +563,7 @@ namespace Supervertaler.PromptEditor
             SharedSettings.BatchSize = (int)_batchSize.Value;
             SharedSettings.UseTerminologyContext = _useTerminology.Checked;
             SharedSettings.UseDocumentContext = _useDocumentContext.Checked;
+            SharedSettings.SendMemoryBank = _sendMemoryBank.Checked;
             SharedSettings.BridgeMode = _bridgeMode.Checked;
             SharedSettings.ShowAllModels = _showAllModels.Checked;
 

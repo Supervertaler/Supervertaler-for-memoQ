@@ -2373,6 +2373,19 @@ namespace Supervertaler.PromptEditor
         {
             var bank = (SharedSettings.MemoryBank ?? string.Empty).Trim();
 
+            // Switched off in Translation settings: the choice is kept and shown,
+            // but the row says plainly that none of it is going to the model.
+            if (!SharedSettings.SendMemoryBank)
+            {
+                _memoryBank.Text = (bank.Length == 0 ? "shared defaults" : bank) + " (not sent)";
+                _memoryBank.ForeColor = SystemColors.GrayText;
+                _memoryBank.ToolTipText = Tip("Sending the memory bank is switched off in Settings, "
+                    + "Translation settings, so nothing from any bank - this one or _shared - reaches the "
+                    + "model, for translation or AutoPrompt.\r\n\r\nClick to choose which bank this project "
+                    + "uses when it is switched back on.");
+                return;
+            }
+
             if (bank.Length == 0)
             {
                 // Not "none": the shared bank travels whether or not a client

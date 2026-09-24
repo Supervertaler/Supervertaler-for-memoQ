@@ -552,6 +552,15 @@ namespace Supervertaler.MemoQ.Core
 
         public string KbContextBlock()
         {
+            // Switched off: nothing from any bank goes, not even _shared. Said
+            // once per change rather than per request, like the bank line itself.
+            if (!SharedSettings.SendMemoryBank)
+            {
+                ReportBankOffOnce();
+                return null;
+            }
+            _reportedOff = false;
+
             var bank = (SharedSettings.MemoryBank ?? string.Empty).Trim();
             var dir = BankDir(bank);
             if (dir == null) return null;
@@ -596,6 +605,20 @@ namespace Supervertaler.MemoQ.Core
             }
         }
 
+        private bool _reportedOff;
+
+        private void ReportBankOffOnce()
+        {
+            if (_reportedOff) return;
+            _reportedOff = true;
+
+            // Forget the last block, so switching back on reports the bank again
+            // and does not serve a block read before the switch was turned off.
+            lock (_kbLock) { _kbBlock = null; _kbBlockKey = null; }
+
+            PluginLog.Write("SuperMemory: not sending the memory bank - switched off in Translation settings");
+        }
+
         /// <summary>
         /// The same bank, whole, for AutoPrompt.
         ///
@@ -607,6 +630,9 @@ namespace Supervertaler.MemoQ.Core
         /// </summary>
         public string KbContextForAutoPrompt()
         {
+            // The same switch: off means the bank leaves this machine for nothing.
+            if (!SharedSettings.SendMemoryBank) return null;
+
             var dir = BankDir((SharedSettings.MemoryBank ?? string.Empty).Trim());
             if (dir == null) return null;
 

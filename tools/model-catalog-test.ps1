@@ -104,7 +104,7 @@ Check ($bare.ToString() -eq 'some-model-id') "a model with no name at all shows 
 # folder, so a real fetched list is put back afterwards.
 $path = $cacheFile.Invoke($null, [object[]]@($anthropic))
 $lines = @(
-    "claude-opus-5`tClaude Opus 5",     # already curated: must not appear twice
+    "claude-opus-5-5`tClaude Opus 5.5", # already curated: must not appear twice
     "claude-experimental-9`tClaude Experimental 9",
     "twin-name-a`tTwin Name",
     "twin-name-b`tTwin Name",
@@ -126,7 +126,7 @@ Check ($allIds.Count -gt $shortIds.Count) "on: the list grows to $($allIds.Count
 Check (@($allIds[0..($shortIds.Count - 1)] | Where-Object { $shortIds -notcontains $_ }).Count -eq 0) `
     "on: the recommended few are still first"
 Check ($allIds -contains 'claude-experimental-9') "on: a model released after this build is reachable"
-Check ((@($allIds | Where-Object { $_ -eq 'claude-opus-5' })).Count -eq 1) `
+Check ((@($allIds | Where-Object { $_ -eq 'claude-opus-5-5' })).Count -eq 1) `
     "on: a model in both lists appears once, keeping its verdict"
 
 $parsed = $fetched.Invoke($null, [object[]]@($anthropic))

@@ -45,6 +45,7 @@ namespace Supervertaler.MemoQ.Settings
         private Label _memoryBankNote;
         private readonly CheckBox _useTerminology = new CheckBox();
         private readonly CheckBox _useDocumentContext = new CheckBox();
+        private readonly CheckBox _sendMemoryBank = new CheckBox();
         private readonly CheckBox _bridgeMode = new CheckBox();
         private readonly CheckBox _quickTerm = new CheckBox();
         private readonly Button _test = new Button();
@@ -232,6 +233,11 @@ namespace Supervertaler.MemoQ.Settings
             _useDocumentContext.Text = "Send surrounding segments and project metadata to the model";
             _useDocumentContext.Left = fieldX; _useDocumentContext.Top = y; _useDocumentContext.AutoSize = true;
             Controls.Add(_useDocumentContext);
+            y += 24;
+
+            _sendMemoryBank.Text = "Send the memory bank to the model";
+            _sendMemoryBank.Left = fieldX; _sendMemoryBank.Top = y; _sendMemoryBank.AutoSize = true;
+            Controls.Add(_sendMemoryBank);
             y += 24;
 
             // Named for the question it answers — who translates? — rather than
@@ -469,6 +475,7 @@ namespace Supervertaler.MemoQ.Settings
             _batchSize.Value = Math.Max(1, Math.Min(100, SharedSettings.BatchSizeOr(g.BatchSize)));
             _useTerminology.Checked = SharedSettings.UseTerminologyContextOr(g.UseTerminologyContext);
             _useDocumentContext.Checked = SharedSettings.UseDocumentContextOr(g.UseDocumentContext);
+            _sendMemoryBank.Checked = SharedSettings.SendMemoryBank;
             _bridgeMode.Checked = SharedSettings.BridgeModeOr(g.BridgeMode);
             _quickTerm.Checked = SharedSettings.QuickTermHotkey;
 
@@ -1033,6 +1040,7 @@ namespace Supervertaler.MemoQ.Settings
             SharedSettings.BatchSize = (int)_batchSize.Value;
             SharedSettings.UseTerminologyContext = _useTerminology.Checked;
             SharedSettings.UseDocumentContext = _useDocumentContext.Checked;
+            SharedSettings.SendMemoryBank = _sendMemoryBank.Checked;
             SharedSettings.BridgeMode = _bridgeMode.Checked;
             SharedSettings.QuickTermHotkey = _quickTerm.Checked;
             SharedSettings.ShowAllModels = _showAllModels.Checked;
