@@ -37,7 +37,7 @@ function Check($ok, $label) {
     Write-Host "$(if ($ok) {'PASS'} else {'FAIL'}) $label"
 }
 
-$check    = $plugin.GetType('Supervertaler.MemoQ.Core.ReplyCheck')
+$check    = $plugin.GetType('Supervertaler.Core.ReplyCheck')
 $problem  = $check.GetMethod('Problem', $Static)
 $tagDiff  = $check.GetMethod('TagDifference', $Static)
 function Problem([string]$source, [string]$reply) { return $problem.Invoke($null, @($source, $reply)) }
@@ -82,7 +82,7 @@ Check ($null -eq $tagDiff.Invoke($null, @($tagged, '<inline_tag id="0"/>Specific
 Check ($null -eq $tagDiff.Invoke($null, @($tagged, '<inline_tag id="0"/>Specificatie [[TC: <b>check</b>]]'))) 'tags inside a [[TC]] marker are not counted'
 
 # ---- 2. the contract is on every system prompt --------------------------------
-$contract = $plugin.GetType('Supervertaler.MemoQ.Core.OutputContract')
+$contract = $plugin.GetType('Supervertaler.Core.OutputContract')
 $text     = [string]$contract.GetField('Text', $Static).GetValue($null)
 $builder  = $plugin.GetType('Supervertaler.MemoQ.Core.PromptBuilder')
 $settingsType = $plugin.GetType('Supervertaler.MemoQ.Settings.SupervertalerGeneralSettings')
