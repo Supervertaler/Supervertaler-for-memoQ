@@ -89,6 +89,37 @@ Check (-not $sysA.Contains('chemistry')) 'and not in the stable half, where it w
 Check ($usrA.Contains('catalysts')) 'the subject survives the split'
 Check ($usrA -notmatch 'Source segment:') 'and the single-segment trailer is still dropped for a batch'
 
+# ---- the single-segment path, which is what memoQ calls most ---------------
+# Every row the translator lands on is one of these. It sent the prompt and a
+# 26,000-token memory bank uncached on every row until 2026-09-24, because it
+# never asked for caching. Asking only pays if the system half is the same text
+# from one segment to the next - so two different segments, with different
+# project metadata, must build byte-identical system prompts.
+$common = [AppDomain]::CurrentDomain.GetAssemblies() | Where-Object { $_.GetName().Name -eq 'MemoQ.Addins.Common' } | Select-Object -First 1
+if ($null -eq $common) { $common = [Reflection.Assembly]::LoadFrom('C:\Program Files\memoQ\memoQ-12\MemoQ.Addins.Common.dll') }
+$segB    = $common.GetType('MemoQ.Addins.Common.DataStructures.SegmentBuilder')
+$bundleT = $mt.GetType('MemoQ.MTInterfaces.TranslationBundle')
+
+function BuildOne($text, $metadata) {
+    $bundle = [Activator]::CreateInstance($bundleT)
+    $bundleT.GetField('Source').SetValue($bundle, $segB.GetMethod('CreateFromString').Invoke($null, @($text)))
+    $argv = New-Object object[] 11
+    $argv[0] = $bundle; $argv[1] = $general; $argv[2] = 'eng'; $argv[3] = 'nld'; $argv[4] = $metadata
+    $argv[5] = $null; $argv[6] = $null; $argv[7] = 'INSTRUCTIONS-MARKER'; $argv[8] = $KB; $argv[9] = $off; $argv[10] = $null
+    return $builder.GetMethod('Build', $Static).Invoke($null, $argv)
+}
+
+$one = BuildOne 'A device comprising a widget.' (Meta 'chemistry' 'catalysts')
+$two = BuildOne 'The lever is attached to the housing.' (Meta 'mechanics' 'gearboxes')
+$sysOne = $one.GetType().GetProperty('System').GetValue($one)
+$sysTwo = $two.GetType().GetProperty('System').GetValue($two)
+$usrOne = $one.GetType().GetProperty('User').GetValue($one)
+
+Check ($sysOne -ceq $sysTwo) 'single segments: the system prompt is byte-identical across two different rows'
+Check ($sysOne.Contains($KB)) 'single segments: the memory bank is in that stable half'
+Check ($usrOne.Contains('A device comprising a widget.') -and -not $sysOne.Contains('A device comprising a widget.')) 'single segments: the segment itself is in the varying half'
+Check ($usrOne.Contains('chemistry') -and -not $sysOne.Contains('chemistry')) 'single segments: so is the project metadata'
+
 # ---- the instrument itself ----------------------------------------------
 # Every judgement about caching - including whether #5 paid for its round trip -
 # rests on the token line, and the token line rests on this parser. Anthropic

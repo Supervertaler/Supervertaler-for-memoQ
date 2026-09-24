@@ -381,6 +381,12 @@ namespace Supervertaler.PromptEditor
 
             // Where a Pre-translate call's rows came from: staged, the model, or
             // left for the translator. The last is never zero by accident.
+            // What one single-segment request cost. "cached" should appear on
+            // every one after the first of a job; if it never does, the whole
+            // prompt and memory bank are being paid for on every row.
+            if (body.StartsWith("tokens: ", StringComparison.Ordinal))
+                return "Tokens     " + body.Substring("tokens: ".Length);
+
             if (body.StartsWith("rows: ", StringComparison.Ordinal))
                 return "Rows       " + body.Substring("rows: ".Length);
 

@@ -359,8 +359,27 @@ namespace Supervertaler.MemoQ
             StructureMarkers.Plan structure,
             CancellationToken cancellationToken)
         {
-            var raw = await client.SendPromptAsync(user, system, cancellationToken: cancellationToken)
+            // Cached, like the batch path. This was the one request that did not
+            // ask, and it is the one memoQ makes most: every row the translator
+            // lands on. The system half - prompt, memory bank, contract - is the
+            // same text for the whole job and everything per segment is in the
+            // user half, so each lookup after the first reads the cache at a tenth
+            // of the price. Without it a job with a 26,000-token memory bank paid
+            // for about 41,000 input tokens on every row, and one morning of
+            // ordinary work in memoQ cost several dollars on Opus.
+            var raw = await client.SendPromptAsync(user, system, cancellationToken: cancellationToken,
+                    enablePromptCaching: true)
                 .ConfigureAwait(false);
+
+            // Said on every request, as the batch path already does: the cache
+            // is invisible unless something reports it, and "cached" never
+            // appearing is how the leak above would have shown the same day.
+            var usage = client.LastUsage;
+            if (usage != null)
+                PluginLog.Write($"tokens: in {usage.RegularInputTokens:N0}"
+                    + (usage.CacheReadTokens > 0 ? $" (cached {usage.CacheReadTokens:N0})" : "")
+                    + (usage.CacheWriteTokens > 0 ? $" (cache write {usage.CacheWriteTokens:N0})" : "")
+                    + $" out {usage.OutputTokens:N0}");
 
             var reply = raw?.Trim();
 
