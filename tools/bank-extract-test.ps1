@@ -111,6 +111,36 @@ try {
     Check (-not (Test-Path (Join-Path $temp 'memoq\bank-extracts'))) 'no extract file is written under a harness'
     Check (([string]$shared.GetProperty('BankExtract', $Static).GetValue($null)) -eq $savedExtract) 'and the editor pointer is left alone'
 
+    # ---- 5a. notes for the assistants only --------------------------------------
+    # audience: assistant keeps a note out of translation - the MT block and
+    # AutoPrompt - while the MCP tools, which is who it is written for, still get it.
+    $sharedDir = Join-Path $banksRoot '_shared'
+    New-Item -ItemType Directory -Path $sharedDir -Force | Out-Null
+    [IO.File]::WriteAllText((Join-Path $sharedDir 'brief.md'), "# House`r`n`r`nBritish spelling. HOUSE-MARKER`r`n")
+    [IO.File]::WriteAllText((Join-Path $sharedDir 'method.md'), "---`r`naudience: assistant`r`n---`r`n# Method`r`n`r`nCheck the termbase has entries. METHOD-MARKER`r`n")
+    Start-Sleep -Milliseconds 50   # a newer write, so the cached block is rebuilt
+
+    $mt = & $block
+    Check ($mt -and $mt.Contains('HOUSE-MARKER') -and -not $mt.Contains('METHOD-MARKER')) 'translation: the assistant note is left out, the rest of _shared is sent'
+    $auto = $ctx.GetType().GetMethod('KbContextForAutoPrompt').Invoke($ctx, @())
+    Check ($auto -and -not $auto.Contains('METHOD-MARKER')) 'AutoPrompt leaves it out too'
+
+    # A small bank, so nothing is trimmed for size and the check is about the marker alone.
+    $tiny = Join-Path $banksRoot 'tiny'
+    New-Item -ItemType Directory -Path $tiny -Force | Out-Null
+    [IO.File]::WriteAllText((Join-Path $tiny 'brief.md'), "# Tiny`r`n`r`nA small client. TINY-MARKER`r`n")
+
+    $sm = $plugin.GetType('Supervertaler.MemoQ.Core.SuperMemory')
+    $contextMethod = $sm.GetMethods($Static) | Where-Object { $_.Name -eq 'Context' } | Select-Object -First 1
+    $argv = New-Object object[] ($contextMethod.GetParameters().Count)
+    for ($i = 0; $i -lt $argv.Count; $i++) {
+        $p = $contextMethod.GetParameters()[$i]
+        $argv[$i] = if ($p.Name -match 'bank') { 'tiny' } elseif ($p.ParameterType -eq [int]) { 0 } elseif ($p.HasDefaultValue) { $p.DefaultValue } else { $null }
+    }
+    $mcp = $contextMethod.Invoke($null, $argv)
+    $mcpText = ($mcp | ConvertTo-Json -Depth 5 -Compress)
+    Check ($mcpText -match 'METHOD-MARKER') 'the MCP tool still gives it to the assistant'
+
     # ---- 5b. when the article choice may be asked ------------------------------
     # Once 3,000 characters are known - or at once, if the live link has handed
     # over the whole document: a short job seen in full is a complete sample, and

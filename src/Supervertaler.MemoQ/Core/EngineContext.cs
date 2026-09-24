@@ -612,7 +612,11 @@ namespace Supervertaler.MemoQ.Core
                     // does, and a small bank is trimmed below exactly as before.
                     var ctx = _kbReader.LoadContext(
                         ProjectNameOrNull(), null, SourceLangCode, TargetLangCode,
-                        tokenBudget: 0);
+                        tokenBudget: 0,
+                        // A translation use: notes marked audience: assistant stay
+                        // out of it. The MCP tools (SuperMemory.Context) still load
+                        // them - the assistants are who they are written for.
+                        forTranslation: true);
 
                     if (ctx != null && ctx.HasContent
                         && ctx.EstimatedTokens > global::Supervertaler.Core.BankExtract.Threshold
@@ -868,9 +872,11 @@ namespace Supervertaler.MemoQ.Core
                 var reader = new global::Supervertaler.Core.MemoryBankReader(dir);
                 reader.RefreshIndex();
 
+                // AutoPrompt writes a translation prompt, so it is a translation
+                // use too: assistant-only notes are not part of it.
                 var ctx = reader.LoadContext(
                     ProjectNameOrNull(), null, SourceLangCode, TargetLangCode,
-                    tokenBudget: AutoPromptTokenBudget);
+                    tokenBudget: AutoPromptTokenBudget, forTranslation: true);
 
                 return ctx == null || !ctx.HasContent
                     ? null
@@ -1010,6 +1016,8 @@ namespace Supervertaler.MemoQ.Core
                 ? " | not sent, over the " + PerRequestTokenBudget.ToString("N0") + "-token budget: "
                   + string.Join(", ", ctx.TrimmedPaths)
                 : "";
+            if (ctx.AssistantOnlyPaths != null && ctx.AssistantOnlyPaths.Count > 0)
+                trimmed += " | not sent, for the assistants only: " + string.Join(", ", ctx.AssistantOnlyPaths);
 
             // Characters over four is the same rough measure the reader trims by,
             // so the two numbers are at least consistent with each other.
