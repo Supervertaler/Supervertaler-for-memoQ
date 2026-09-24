@@ -417,7 +417,12 @@ namespace Supervertaler.MemoQ.Core
                 TranslationCache.Set(cacheKey, raw);
             }
 
-            var parsed = TranslationPrompt.ParseBatchResponse(raw, chunk.Count);
+            // With the inputs, not just the count: a translation with numbered
+            // lines of its own - procedure steps, a contents list - is then kept
+            // whole rather than cut apart at every "2." (core f13b1d8), and a list
+            // inside one segment is told apart from the next segment's number by
+            // the sources that were sent.
+            var parsed = TranslationPrompt.ParseBatchResponse(raw, inputs);
 
             // A marker the model echoed at the start of a target is removed before
             // it can reach the document, and said so: that line is the evidence,

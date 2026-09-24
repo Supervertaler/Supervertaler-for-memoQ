@@ -135,7 +135,7 @@ namespace Supervertaler.PromptEditor
             FiguresPath = @"D:\Supervertaler\memory-banks\acme-proj-001\figures.md",
             FiguresWritten = new DateTime(2026, 8, 26, 23, 58, 0),
             FiguresRows = 14, FiguresWithoutVision = true,
-            ProviderName = "Anthropic / claude-opus-5",
+            ProviderName = "Anthropic / claude-opus-5-5",
         }) { }
 
         public ImagesDialog(ImagesActions actions, ImagesState initial)

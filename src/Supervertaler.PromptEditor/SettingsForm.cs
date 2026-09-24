@@ -525,7 +525,7 @@ namespace Supervertaler.PromptEditor
             var provider = SharedSettings.ProviderOr(LlmProviders.Anthropic);
             _provider.SelectedItem = Array.IndexOf(LlmProviders.All, provider) >= 0 ? provider : LlmProviders.Anthropic;
 
-            _modelId = SharedSettings.ModelOr("claude-opus-5");
+            _modelId = SharedSettings.ModelOr("claude-opus-5-5");
             _model.Text = _modelId;
             _endpoint.Text = SharedSettings.EndpointOr(string.Empty);
             _parallel.Value = Math.Max(1, Math.Min(16, SharedSettings.ParallelOr(4)));

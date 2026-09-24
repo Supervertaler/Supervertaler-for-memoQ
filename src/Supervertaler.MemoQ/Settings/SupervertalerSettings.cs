@@ -14,7 +14,7 @@ namespace Supervertaler.MemoQ.Settings
     {
         public string Provider { get; set; } = LlmProviders.Anthropic;
 
-        public string Model { get; set; } = "claude-opus-5";
+        public string Model { get; set; } = "claude-opus-5-5";
 
         /// <summary>Blank means "use the provider default". Set for Ollama or an OpenAI-compatible gateway.</summary>
         public string Endpoint { get; set; } = string.Empty;
