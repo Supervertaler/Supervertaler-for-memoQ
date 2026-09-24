@@ -154,7 +154,7 @@ namespace Supervertaler.MemoQ.Core
 
                 PluginLog.Write($"batch: bridge mode - captured {pending.Count} segment(s), none staged, "
                     + "reported as no-result so memoQ leaves those targets untouched");
-                LogRows(results, servedFromStaging, copied, context.General);
+                LogRows(results, servedFromStaging, copied, context.General, captured: pending.Count);
                 return results;
             }
 
@@ -247,16 +247,21 @@ namespace Supervertaler.MemoQ.Core
         /// wrote - and how many rows it left for them.
         /// </summary>
         private static void LogRows(TranslationResult[] results, int staged, int copied,
-            SupervertalerGeneralSettings general)
+            SupervertalerGeneralSettings general, int captured = 0)
         {
-            var left = results.Count(r => r?.Exception != null);
+            // Rows Claude Desktop mode deliberately left alone are counted as
+            // captured, not as left for the translator: nothing went wrong with
+            // them, and counting them as left made a normal capture pass read
+            // like twenty failures.
+            var left = results.Count(r => r?.Exception != null) - captured;
             var model = results.Count(r => r != null && r.Exception == null
                                            && r.Translation != null && !r.Translation.IsEmpty) - staged - copied;
 
             PluginLog.Write($"rows: {results.Length} - {staged} staged, {Math.Max(0, model)} by the model "
                 + $"({general.Provider} / {general.Model}), "
                 + (copied > 0 ? $"{copied} copied from the source (tags only), " : "")
-                + $"{left} left for the translator");
+                + (captured > 0 ? $"{captured} captured for Claude Desktop, " : "")
+                + $"{Math.Max(0, left)} left for the translator");
         }
 
         private static string TaggedOrNull(List<Segment> segments, int index)

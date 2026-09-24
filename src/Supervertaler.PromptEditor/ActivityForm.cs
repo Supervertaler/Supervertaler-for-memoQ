@@ -63,6 +63,7 @@ namespace Supervertaler.PromptEditor
         private int _staged;
         private int _byModel;
         private int _leftOver;
+        private int _captured;
 
         /// <summary>
         /// How much of the log to show when the window opens.
@@ -162,6 +163,7 @@ namespace Supervertaler.PromptEditor
             _staged = 0;
             _byModel = 0;
             _leftOver = 0;
+            _captured = 0;
 
             try
             {
@@ -275,6 +277,9 @@ namespace Supervertaler.PromptEditor
             new Regex(@"^rows: \d+ - (?<staged>\d+) staged, (?<model>\d+) by the model .*?, (?<left>\d+) left",
                       RegexOptions.Compiled);
 
+        private static readonly Regex Captured =
+            new Regex(@"(?<captured>\d+) captured for Claude Desktop", RegexOptions.Compiled);
+
         private static readonly Regex Batch =
             new Regex(@"^batch: (?<sent>\d+) segment\(s\) sent, (?<back>\d+) returned(?: \| terms: (?<terms>\d+))?(?: \| recall: (?<recall>\d+))?",
                       RegexOptions.Compiled);
@@ -332,6 +337,10 @@ namespace Supervertaler.PromptEditor
                 _staged += int.Parse(rows.Groups["staged"].Value, CultureInfo.InvariantCulture);
                 _byModel += int.Parse(rows.Groups["model"].Value, CultureInfo.InvariantCulture);
                 _leftOver += int.Parse(rows.Groups["left"].Value, CultureInfo.InvariantCulture);
+
+                var captured = Captured.Match(body);
+                if (captured.Success)
+                    _captured += int.Parse(captured.Groups["captured"].Value, CultureInfo.InvariantCulture);
             }
 
             if (body.StartsWith("translate: ", StringComparison.Ordinal)) _single++;
@@ -350,7 +359,15 @@ namespace Supervertaler.PromptEditor
         {
             return body.StartsWith("CreateLookupSession", StringComparison.Ordinal)
                 || body.StartsWith("metadata:", StringComparison.Ordinal)
-                || body.StartsWith("HasCapability", StringComparison.Ordinal);
+                || body.StartsWith("HasCapability", StringComparison.Ordinal)
+
+                // memoQ often asks for one row at a time, and then a Rows or a
+                // capture line per row only repeats what the Segment line says,
+                // or says "nothing staged" twenty times in one second. Still
+                // counted in the totals below the list; shown with Show
+                // everything.
+                || body.StartsWith("rows: 1 - ", StringComparison.Ordinal)
+                || body.StartsWith("batch: bridge mode - captured 1 segment(s)", StringComparison.Ordinal);
         }
 
         private static bool IsProblem(string body)
@@ -446,8 +463,10 @@ namespace Supervertaler.PromptEditor
 
             // Only once something has been staged or left over: on an ordinary
             // run every row is the model's, and saying so adds nothing.
-            if (_staged > 0 || _leftOver > 0)
-                parts.Add(_staged + " staged, " + _byModel + " by the model, " + _leftOver + " left for you");
+            if (_staged > 0 || _leftOver > 0 || _captured > 0)
+                parts.Add(_staged + " staged, " + _byModel + " by the model"
+                          + (_captured > 0 ? ", " + _captured + " captured for Claude Desktop" : "")
+                          + ", " + _leftOver + " left for you");
 
             if (parts.Count == 0)
             {

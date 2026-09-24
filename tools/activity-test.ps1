@@ -104,5 +104,28 @@ Check ($passthru -eq $unknownBody) 'an unrecognised line is passed through uncha
 
 Check (($clock.Invoke($null, [object[]]@('2026-09-03 23:51:22.456'))) -eq '23:51:22') 'the timestamp is reduced to the part anyone reads'
 
+# ---- the Rows line, and what a one-row call shows --------------------------
+# memoQ often asks for one row at a time: a Pre-translate with Claude Desktop
+# mode on printed "captured 1 segment(s)" and "Rows 1 - ..." twenty times in one
+# second, and the footer counted every row Claude Desktop mode deliberately left
+# alone as "left for you". One-row lines are hidden by default and still counted.
+$rowsRe     = $form.GetField('Rows', $NonPublic).GetValue($null)
+$capturedRe = $form.GetField('Captured', $NonPublic).GetValue($null)
+$oneRow     = 'rows: 1 - 0 staged, 1 by the model (Anthropic / claude-opus-5-5), 0 left for the translator'
+$tenRows    = 'rows: 10 - 2 staged, 7 by the model (Anthropic / claude-opus-5-5), 1 left for the translator'
+$captured   = 'rows: 1 - 0 staged, 0 by the model (Anthropic / claude-opus-5-5), 1 captured for Claude Desktop, 0 left for the translator'
+$bridgeOne  = 'batch: bridge mode - captured 1 segment(s), none staged, reported as no-result so memoQ leaves those targets untouched'
+
+Check ($isDiag.Invoke($null, [object[]]@($oneRow))) 'a one-row Rows line is hidden by default'
+Check ($isDiag.Invoke($null, [object[]]@($bridgeOne))) 'so is a one-row capture line'
+Check (-not $isDiag.Invoke($null, [object[]]@($tenRows))) 'a Rows line for a real batch is shown'
+
+$m = $rowsRe.Match($captured)
+Check ($m.Success -and $m.Groups['left'].Value -eq '0') 'a captured row is not counted as left for you'
+Check ($capturedRe.Match($captured).Groups['captured'].Value -eq '1') 'it is counted as captured for Claude Desktop'
+$m = $rowsRe.Match($tenRows)
+Check ($m.Success -and $m.Groups['staged'].Value -eq '2' -and $m.Groups['model'].Value -eq '7' -and $m.Groups['left'].Value -eq '1') 'a batch Rows line still parses: staged, model, left'
+Check (($friendly.Invoke($null, [object[]]@('tokens: in 83 (cached 36,790) out 34'))) -like 'Tokens *') 'a tokens line is shown as Tokens'
+
 Write-Host ''
 Write-Host "ACTIVITY TEST COMPLETE - $fails failure(s)"
