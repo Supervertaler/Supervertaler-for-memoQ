@@ -33,6 +33,19 @@ namespace Supervertaler.MemoQ.Core
     internal static class BatchTranslator
     {
         /// <summary>
+        /// Said on the Info line of a staged translation matched only once tags and
+        /// escapes were set aside, when memoQ's source has inline tags and the
+        /// staged target has none: memoQ will flag the missing tags, and the
+        /// translator should know why. Empty otherwise.
+        /// </summary>
+        internal static string StagedTagNote(bool loose, string taggedSource, string target)
+        {
+            if (!loose || !StagedTranslations.HasTags(taggedSource) || StagedTranslations.HasTags(target)) return "";
+            PluginLog.Write("staged: served without inline tags - the staged target carries none of the source's");
+            return "; inline tags not placed";
+        }
+
+        /// <summary>
         /// Translates an array of segments, in chunks.
         ///
         /// A failed chunk falls back to translating its segments one at a time
@@ -102,13 +115,13 @@ namespace Supervertaler.MemoQ.Core
                 var tagged = TagBridge.ToTaggedText(segments[i]);
                 CaptureStore.Record(context, tagged, statusOf?.Invoke(i));
 
-                var staged = StagedTranslations.TryGet(tagged, langPair);
+                var staged = StagedTranslations.TryGet(tagged, langPair, out var loose);
                 if (staged != null)
                 {
                     results[i] = new TranslationResult
                     {
                         Translation = TagBridge.FromTaggedText(staged.Target, segments[i]),
-                        Info = staged.Label + " (staged via Supervertaler MCP)"
+                        Info = staged.Label + " (staged via Supervertaler MCP" + StagedTagNote(loose, tagged, staged.Target) + ")"
                     };
                     pending.RemoveAt(k);
                     servedFromStaging++;

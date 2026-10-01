@@ -193,5 +193,68 @@ foreach ($p in 'offset','limit','neverServed','sourceContains','compact') {
     Check ($gs.paramMap.$p -eq $p) "  and forwards it"
 }
 
+# ---- 8. a source staged without its tags still matches memoQ's request ---
+# memoQ asks in its segment XML - tags as elements, "&amp;" for "&" - while a
+# source taken from the live link has neither. Staged by row id, every row with
+# an inline tag missed and went to the model: 31 of 501 rows on one job.
+$st = $asm.GetType('Supervertaler.MemoQ.Core.StagedTranslations')
+$loose = $st.GetMethod('Loose', $B)
+$hasTags = $st.GetMethod('HasTags', $B)
+$tryGet = $st.GetMethods($B) | Where-Object { $_.Name -eq 'TryGet' -and $_.GetParameters().Count -eq 3 }
+function L($t) { return $loose.Invoke($null, [object[]]@([string]$t)) }
+function Get3($s, $p) {
+    $a = [object[]]@([string]$s, [string]$p, $false)
+    $e = $tryGet.Invoke($null, $a)
+    return @{ Entry = $e; Loose = [bool]$a[2] }
+}
+function StagePairs($pairs, $lp) {
+    $list = [Collections.Generic.List[Collections.Generic.KeyValuePair[string,string]]]::new()
+    foreach ($k in $pairs.Keys) { $list.Add([Collections.Generic.KeyValuePair[string,string]]::new($k, $pairs[$k])) }
+    return $st.GetMethod('Stage', $B).Invoke($null, [object[]]@($list, $lp, 'test'))
+}
+
+Check ((L 'Press <inline_tag id="0"/>Start<inline_tag id="1"/> now') -eq 'Press Start now') "Loose drops inline tags"
+Check ((L 'Tom &amp; Jerry') -eq 'Tom & Jerry') "Loose undoes XML escapes"
+Check ((L 'Tom <spec_char val="&amp;"/> Jerry') -eq 'Tom & Jerry') "a spec_char becomes its character, not nothing"
+Check ($hasTags.Invoke($null, [object[]]@('a <inline_tag id="0"/> b'))) "HasTags sees an inline tag"
+Check (-not $hasTags.Invoke($null, [object[]]@('Tom &amp; Jerry'))) "an escape alone is not a tag"
+Check (-not $hasTags.Invoke($null, [object[]]@('if a < b and c > d'))) "nor is a comparison"
+Check ((L 'if a < b and c > d') -eq 'if a < b and c > d') "Loose leaves a comparison in the live link's text alone"
+Check ((L 'if a &lt; b and c &gt; d') -eq 'if a < b and c > d') "  and memoQ's escaped form of it comes out the same"
+
+$lp = 'eng-GB-dut-NL'
+[void]$st.GetMethod('Clear', $B).Invoke($null, @())
+[void](StagePairs @{ 'Press Start now' = 'Druk nu op Start'; 'Tom & Jerry' = 'Tom en Jerry' } $lp)
+
+$r = Get3 'Press <inline_tag id="0"/>Start<inline_tag id="1"/> now' $lp
+Check ($null -ne $r.Entry -and $r.Entry.Target -eq 'Druk nu op Start') "memoQ's tagged request finds the pair staged without tags"
+Check ($r.Loose) "  and says it matched loosely"
+$r = Get3 'Tom &amp; Jerry' $lp
+Check ($null -ne $r.Entry) "an escaped request finds the unescaped staging"
+$r = Get3 'Press Start now' 'eng-GB-ger-DE'
+Check ($null -eq $r.Entry) "the loose match still respects the language pair"
+
+# Exact wins: a pair staged in memoQ's tagged form is preferred over a loose one.
+[void](StagePairs @{ 'Press <inline_tag id="0"/>Start<inline_tag id="1"/> now' = 'Druk nu op <inline_tag id="0"/>Start<inline_tag id="1"/>' } $lp)
+$r = Get3 'Press <inline_tag id="0"/>Start<inline_tag id="1"/> now' $lp
+Check ($r.Entry.Target -match 'inline_tag' -and -not $r.Loose) "an exact tagged pair wins over a loose one"
+$r = Get3 'Unrelated text' $lp
+Check ($null -eq $r.Entry) "and nothing unrelated matches"
+[void]$st.GetMethod('Clear', $B).Invoke($null, @())
+$r = Get3 'Tom &amp; Jerry' $lp
+Check ($null -eq $r.Entry) "Clear empties the loose index too"
+
+# The Info line says so when the tags could not be placed.
+$note = $asm.GetType('Supervertaler.MemoQ.Core.BatchTranslator').GetMethod('StagedTagNote', $B)
+function Note($l, $s, $t) { return $note.Invoke($null, [object[]]@([bool]$l, [string]$s, [string]$t)) }
+Check ((Note $true 'a <inline_tag id="0"/> b' 'x y') -match 'tags not placed') "a loose match with untagged target is noted"
+Check ((Note $false 'a <inline_tag id="0"/> b' 'x y') -eq '') "  an exact match is not"
+Check ((Note $true 'a <inline_tag id="0"/> b' 'x <inline_tag id="0"/> y') -eq '') "  nor a target that carries tags"
+Check ((Note $true 'Tom &amp; Jerry' 'Tom en Jerry') -eq '') "  nor a loose match on escapes alone"
+
+$seg2 = Tool 'get_segments'
+Check ($seg2.description -match 'taggedSource') "get_segments tells the agent where the tags are"
+Check ((Tool 'stage_translations').description -match 'taggedSource') "and stage_translations points at it"
+
 Write-Host ''
 Write-Host "BRIDGE MODE MISS TEST COMPLETE - $fails failure(s)"

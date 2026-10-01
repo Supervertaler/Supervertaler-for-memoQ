@@ -181,14 +181,15 @@ namespace Supervertaler.MemoQ
             // both: someone who could see the whole document already decided
             // what this segment should say.
             var staged = StagedTranslations.TryGet(
-                taggedSource, (context.SourceLangCode ?? "?") + "-" + (context.TargetLangCode ?? "?"));
+                taggedSource, (context.SourceLangCode ?? "?") + "-" + (context.TargetLangCode ?? "?"), out var loose);
             if (staged != null)
             {
-                PluginLog.Write($"translate: served staged translation ({staged.Label})");
+                PluginLog.Write($"translate: served staged translation ({staged.Label}{(loose ? ", matched without tags" : "")})");
                 return new TranslationResult
                 {
                     Translation = TagBridge.FromTaggedText(staged.Target, bundle.Source),
-                    Info = staged.Label + " (staged via Supervertaler MCP)"
+                    Info = staged.Label + " (staged via Supervertaler MCP"
+                         + Core.BatchTranslator.StagedTagNote(loose, taggedSource, staged.Target) + ")"
                 };
             }
 

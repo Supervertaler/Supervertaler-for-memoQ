@@ -495,6 +495,7 @@ namespace Supervertaler.MemoQ.Core
                     var rows = PreviewStore.Rows(previewDoc.DocumentGuid);
                     var livePair = (previewDoc.SourceLangCode ?? "?") + "-" + (previewDoc.TargetLangCode ?? "?");
                     var active = PreviewStore.GetActive()?.PartId;
+                    var taggedForms = StagedTranslations.CapturedTaggedForms(livePair);
 
                     TryWrite(ctx, 200, Json(new SegmentsBody
                     {
@@ -510,6 +511,9 @@ namespace Supervertaler.MemoQ.Core
                             Index = offset + i + 1,
                             PartId = r.PartId,
                             Source = r.Source,
+                            // The live link hides inline tags. Where memoQ has asked about
+                            // this row, its tagged form - so a staged target can carry them.
+                            TaggedSource = StagedTranslations.TaggedFormOf(taggedForms, r.Source),
                             Target = string.IsNullOrEmpty(r.Target) ? null : r.Target,
                             Staged = StagedTranslations.TryGetPeek(r.Source, livePair)?.Target,
                             IsActive = r.PartId == active ? true : (bool?)null
@@ -700,6 +704,14 @@ namespace Supervertaler.MemoQ.Core
             var resolved = 0;
             var unknownParts = new List<string>();
 
+            // memoQ's own tagged form of each row it has asked about. The live
+            // link's text has no inline tags and no XML escapes, memoQ's request
+            // has both, so a row with tags staged from the live link alone never
+            // matched exactly. Staged as memoQ will ask for it where known; the
+            // loose match in StagedTranslations covers rows not yet asked about.
+            var captured = StagedTranslations.CapturedTaggedForms(pair);
+            var taggedFromMemoQ = 0;
+
             foreach (var p in req.Pairs)
             {
                 if (string.IsNullOrEmpty(p.PartId)) continue;
@@ -717,6 +729,12 @@ namespace Supervertaler.MemoQ.Core
                 // that trimmed anyway; trimmed here too, so get_staged shows the
                 // source as the grid does.
                 p.Source = part.Source.TrimEnd();
+                var tagged = StagedTranslations.TaggedFormOf(captured, p.Source);
+                if (tagged != null)
+                {
+                    p.Source = tagged;
+                    taggedFromMemoQ++;
+                }
                 resolved++;
             }
 
@@ -729,6 +747,16 @@ namespace Supervertaler.MemoQ.Core
                 .ToList();
 
             var respaced = req.Pairs.Count(p => StagedPairCheck.HasTrailingWhitespace(p.Target));
+
+            // A source staged without tags that memoQ asks for WITH them, and a
+            // target that has none: still delivered, through the loose match, but
+            // without its tags, and memoQ flags the row. Said now, while the
+            // assistant can still add them. (A source staged in tagged form is the
+            // tag check's business below, so no row is warned about twice.)
+            var untaggedTargets = req.Pairs.Count(p =>
+                !StagedTranslations.HasTags(p.Source)
+                && StagedTranslations.HasTags(StagedTranslations.TaggedFormOf(captured, p.Source))
+                && !StagedTranslations.HasTags(p.Target));
 
             // Tags compared before anything is stored. The QA checks already do
             // this, but only over a document Pre-translate has already written -
@@ -753,13 +781,19 @@ namespace Supervertaler.MemoQ.Core
                         + "Pre-translate or lands on the matching segments - matched by source text. "
                         + "Nothing is written into memoQ until then."
                         + (resolved == 0 ? "" : " " + resolved + " of them took their source text from the row id given, "
-                            + "so no transcription was needed.")
+                            + "so no transcription was needed"
+                            + (taggedFromMemoQ == 0 ? "." : ", " + taggedFromMemoQ + " in memoQ's own tagged form."))
                         + (unknownParts.Count == 0 ? "" : " WARNING: " + unknownParts.Count
                             + " pair(s) named a row id this plugin does not know (" + string.Join(", ", unknownParts.Take(3))
                             + "); their source text was used as given, so check it.")
                         + (respaced == 0 ? "" : " " + respaced + " target(s) had trailing whitespace removed: memoQ adds "
                             + "the source's own when it writes the row, so it is never needed in a staged target.")
-                        + (tagProblems == null ? "" : " WARNING: " + tagProblems)
+                        + (untaggedTargets == 0 ? "" : " WARNING: " + untaggedTargets + " pair(s) are for rows whose source has "
+                            + "inline tags in memoQ, but the target has none. They will be delivered without tags and memoQ will "
+                            + "flag them. get_segments shows such a row's tagged source as taggedSource: copy its tags into the "
+                            + "target and stage it again.")
+                        + (tagProblems == null ? "" : " WARNING: " + tagProblems
+                            + " get_segments shows a row's tags as memoQ sends them, as taggedSource.")
                         + (missing == null ? "" : " WARNING: " + missing)
             }));
         }
@@ -2525,6 +2559,7 @@ namespace Supervertaler.MemoQ.Core
             [DataMember(Name = "partId", EmitDefaultValue = false)] public string PartId { get; set; }
             [DataMember(Name = "source")] public string Source { get; set; }
             [DataMember(Name = "target", EmitDefaultValue = false)] public string Target { get; set; }
+            [DataMember(Name = "taggedSource", EmitDefaultValue = false)] public string TaggedSource { get; set; }
             [DataMember(Name = "staged", EmitDefaultValue = false)] public string Staged { get; set; }
             [DataMember(Name = "isActive", EmitDefaultValue = false)] public bool? IsActive { get; set; }
 

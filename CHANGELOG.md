@@ -6,6 +6,13 @@ matches the Supervertaler for Trados changelog – one bold headline per bullet,
 a ★ on the things a release would be announced for – so the two read alike and
 any release tooling that buckets on these headings works for both.
 
+## [Unreleased]
+
+### Fixed
+
+- **A staged translation for a row with inline tags was never used.** memoQ asks for a translation with the row's tags in it, but a source staged by row id came from the live document link, which shows the text without them – so the two never matched, and the row quietly went to the AI instead. On one job that was 31 rows of 501. Staged translations are now matched with tags and special characters set aside, and a row memoQ has already asked about is staged in memoQ's own tagged form. Where the staged translation has none of the source's tags, it is still delivered, with "inline tags not placed" under the hit, so memoQ's tag check flags it for you rather than the AI silently replacing it.
+- **The AI assistant can now see a row's inline tags.** *get_segments* shows the source as memoQ sends it, tags included, for every row memoQ has asked about, so a staged translation can carry bold, italics and other tags in the right places. Staging warns when a translation for a tagged row has no tags.
+
 ## [0.1.5] – 2026-09-30
 
 ### Changed
