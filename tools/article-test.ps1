@@ -18,7 +18,7 @@
 # article branch, and the button it lives behind stayed grey. Testing the leaf
 # proves the leaf.
 $ErrorActionPreference = 'Stop'
-$EditorExe = 'D:\Google Drive\Dev\Sv\Supervertaler-for-memoQ\src\Supervertaler.PromptEditor\bin\Release\Supervertaler.PromptEditor.exe'
+$EditorExe = 'D:\SynologyDrive\Dev\Sv\Supervertaler-for-memoQ\src\Supervertaler.PromptEditor\bin\Release\Supervertaler.PromptEditor.exe'
 
 Add-Type -AssemblyName System.Windows.Forms
 

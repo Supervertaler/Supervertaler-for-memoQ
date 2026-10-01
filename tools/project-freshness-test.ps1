@@ -21,7 +21,7 @@ $inFlight = [Collections.Generic.HashSet[string]]::new([StringComparer]::Ordinal
     } finally { [void]$inFlight.Remove($name) }
 })
 
-$asm = [Reflection.Assembly]::LoadFrom('D:\Google Drive\Dev\Sv\Supervertaler-for-memoQ\src\Supervertaler.MemoQ\bin\Release\Supervertaler.MemoQ.dll')
+$asm = [Reflection.Assembly]::LoadFrom('D:\SynologyDrive\Dev\Sv\Supervertaler-for-memoQ\src\Supervertaler.MemoQ\bin\Release\Supervertaler.MemoQ.dll')
 $Static = [Reflection.BindingFlags]'Public,NonPublic,Static'
 
 $session  = $asm.GetType('Supervertaler.MemoQ.Core.MemoQSession')

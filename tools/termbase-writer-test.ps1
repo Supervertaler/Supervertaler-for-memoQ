@@ -13,7 +13,7 @@
 # selection file, and the wrapper snapshots it.
 $ErrorActionPreference = 'Stop'
 $MemoQPath = 'C:\Program Files\memoQ\memoQ-12'
-$PluginDll = 'D:\Google Drive\Dev\Sv\Supervertaler-for-memoQ\src\Supervertaler.MemoQ\bin\Release\Supervertaler.MemoQ.dll'
+$PluginDll = 'D:\SynologyDrive\Dev\Sv\Supervertaler-for-memoQ\src\Supervertaler.MemoQ\bin\Release\Supervertaler.MemoQ.dll'
 $LiveDb    = 'D:\Supervertaler\resources\supervertaler.db'
 $Scratch   = Join-Path $env:TEMP 'supervertaler-writer-test'
 

@@ -28,7 +28,7 @@ $script:probed = @{}
 
 $common = [Reflection.Assembly]::LoadFrom("$memoq\MemoQ.Addins.Common.dll")
 $mt     = [Reflection.Assembly]::LoadFrom("$memoq\MemoQ.MTInterfaces.dll")
-$plugin = [Reflection.Assembly]::LoadFrom('D:\Google Drive\Dev\Sv\Supervertaler-for-memoQ\src\Supervertaler.MemoQ\bin\Release\Supervertaler.MemoQ.dll')
+$plugin = [Reflection.Assembly]::LoadFrom('D:\SynologyDrive\Dev\Sv\Supervertaler-for-memoQ\src\Supervertaler.MemoQ\bin\Release\Supervertaler.MemoQ.dll')
 $Static = [Reflection.BindingFlags]'Public,NonPublic,Static'
 
 $fails = 0

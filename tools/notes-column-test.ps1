@@ -11,7 +11,7 @@
 # that a collocation gets its own row, so a cell holding "a / b" is the model
 # disobeying. It happens, and what the extractor did about it used to lose data.
 $ErrorActionPreference = 'Stop'
-$exe = 'D:\Google Drive\Dev\Sv\Supervertaler-for-memoQ\src\Supervertaler.PromptEditor\bin\Release\Supervertaler.PromptEditor.exe'
+$exe = 'D:\SynologyDrive\Dev\Sv\Supervertaler-for-memoQ\src\Supervertaler.PromptEditor\bin\Release\Supervertaler.PromptEditor.exe'
 
 $asm = [Reflection.Assembly]::LoadFrom($exe)
 $B = [Reflection.BindingFlags]'Public,NonPublic,Static'

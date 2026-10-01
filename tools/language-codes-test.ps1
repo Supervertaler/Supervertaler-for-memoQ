@@ -8,7 +8,7 @@
 #   powershell -NoProfile -File tools\language-codes-test.ps1
 $ErrorActionPreference = 'Stop'
 $MemoQPath = 'C:\Program Files\memoQ\memoQ-12'
-$PluginDll = 'D:\Google Drive\Dev\Sv\Supervertaler-for-memoQ\src\Supervertaler.MemoQ\bin\Release\Supervertaler.MemoQ.dll'
+$PluginDll = 'D:\SynologyDrive\Dev\Sv\Supervertaler-for-memoQ\src\Supervertaler.MemoQ\bin\Release\Supervertaler.MemoQ.dll'
 
 $script:probed = @{}
 [AppDomain]::CurrentDomain.add_AssemblyResolve([System.ResolveEventHandler] {
@@ -43,7 +43,7 @@ function Check([string]$name, [bool]$ok, [string]$detail = '') {
 # Read the source rather than the compiled form: a duplicate key would have
 # thrown at class-init, but a row with the wrong number of fields or a repeated
 # two-letter code is a silent wrong answer.
-$source = Get-Content 'D:\Google Drive\Dev\Sv\Supervertaler-for-memoQ\core\src\LanguageCodes.cs' -Raw
+$source = Get-Content 'D:\SynologyDrive\Dev\Sv\Supervertaler-for-memoQ\core\src\LanguageCodes.cs' -Raw
 $rows = [regex]::Matches($source, '"([a-z]{2})\|([a-z]{3})\|([a-z]{3})\|([^"]+)"')
 Write-Host ("table rows: {0}" -f $rows.Count)
 Check 'the table is the full ISO 639-1 set, near enough' ($rows.Count -ge 180) ("only $($rows.Count) rows")

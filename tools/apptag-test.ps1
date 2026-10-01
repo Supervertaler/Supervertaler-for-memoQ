@@ -6,7 +6,7 @@
 # the marker has to be strippable on the way in and regenerated on the way out
 # with no ambiguity. That round trip is what this checks.
 $ErrorActionPreference = 'Stop'
-$EditorExe = 'D:\Google Drive\Dev\Sv\Supervertaler-for-memoQ\src\Supervertaler.PromptEditor\bin\Release\Supervertaler.PromptEditor.exe'
+$EditorExe = 'D:\SynologyDrive\Dev\Sv\Supervertaler-for-memoQ\src\Supervertaler.PromptEditor\bin\Release\Supervertaler.PromptEditor.exe'
 
 $editor = [Reflection.Assembly]::LoadFrom($EditorExe)
 $library = $editor.GetType('Supervertaler.Core.PromptLibrary')

@@ -27,7 +27,7 @@ $inFlight = [Collections.Generic.HashSet[string]]::new([StringComparer]::Ordinal
     } finally { [void]$inFlight.Remove($name) }
 })
 
-$exe = 'D:\Google Drive\Dev\Sv\Supervertaler-for-memoQ\src\Supervertaler.PromptEditor\bin\Release\Supervertaler.PromptEditor.exe'
+$exe = 'D:\SynologyDrive\Dev\Sv\Supervertaler-for-memoQ\src\Supervertaler.PromptEditor\bin\Release\Supervertaler.PromptEditor.exe'
 $asm = [Reflection.Assembly]::LoadFrom($exe)
 $B = [Reflection.BindingFlags]'Public,NonPublic,Instance'
 
@@ -359,7 +359,7 @@ foreach ($case in @(
 # ---- the quick-add dialog -------------------------------------------------
 # In the plugin assembly rather than the editor, which is why this test did not
 # cover it and why a button shipped sitting on top of a text box.
-$plugin = [Reflection.Assembly]::LoadFrom('D:\Google Drive\Dev\Sv\Supervertaler-for-memoQ\src\Supervertaler.MemoQ\bin\Release\Supervertaler.MemoQ.dll')
+$plugin = [Reflection.Assembly]::LoadFrom('D:\SynologyDrive\Dev\Sv\Supervertaler-for-memoQ\src\Supervertaler.MemoQ\bin\Release\Supervertaler.MemoQ.dll')
 $qa = $plugin.GetType('Supervertaler.MemoQ.Core.QuickAddForm')
 $qaCtor = @($qa.GetConstructors([Reflection.BindingFlags]'Public,NonPublic,Instance')) |
           Where-Object { $_.GetParameters().Count -eq 6 }

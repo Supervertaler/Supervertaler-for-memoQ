@@ -2,7 +2,7 @@ $ErrorActionPreference = 'Stop'
 if (Get-Process memoQ -ErrorAction SilentlyContinue) { throw 'memoQ is running: this harness starts its own bridge and must not compete with the live one. Close memoQ first.' }
 if (Get-Process Supervertaler.MemoQ.Preview -ErrorAction SilentlyContinue) { throw 'The Supervertaler preview tool is running (an orphan if memoQ is closed): it would connect to this harness bridge and eat its commands. Stop it from the tray, or: taskkill /IM Supervertaler.MemoQ.Preview.exe /F' }
 $MemoQPath = 'C:\Program Files\memoQ\memoQ-12'
-$Bin = 'D:\Google Drive\Dev\Sv\Supervertaler-for-memoQ\src'
+$Bin = 'D:\SynologyDrive\Dev\Sv\Supervertaler-for-memoQ\src'
 
 # The resolver is compiled C#, not a scriptblock. This harness talks to the
 # plugin's bridge over HTTP, and the bridge answers on thread-pool threads; an

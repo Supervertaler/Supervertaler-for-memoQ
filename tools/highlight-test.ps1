@@ -11,7 +11,7 @@
 # be checked is the premise: if a future change makes Apply() stop raising
 # TextChanged this test fails, and the guard can go. Until then it must stay.
 $ErrorActionPreference = 'Stop'
-$EditorExe = 'D:\Google Drive\Dev\Sv\Supervertaler-for-memoQ\src\Supervertaler.PromptEditor\bin\Release\Supervertaler.PromptEditor.exe'
+$EditorExe = 'D:\SynologyDrive\Dev\Sv\Supervertaler-for-memoQ\src\Supervertaler.PromptEditor\bin\Release\Supervertaler.PromptEditor.exe'
 
 Add-Type -AssemblyName System.Windows.Forms
 Add-Type -AssemblyName System.Drawing

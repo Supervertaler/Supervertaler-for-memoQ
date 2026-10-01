@@ -28,7 +28,7 @@ $inFlight = [Collections.Generic.HashSet[string]]::new([StringComparer]::Ordinal
     } finally { [void]$inFlight.Remove($name) }
 })
 
-$Repo = 'D:\Google Drive\Dev\Sv\Supervertaler-for-memoQ'
+$Repo = 'D:\SynologyDrive\Dev\Sv\Supervertaler-for-memoQ'
 $asm = [Reflection.Assembly]::LoadFrom((Join-Path $Repo 'src\Supervertaler.MemoQ\bin\Release\Supervertaler.MemoQ.dll'))
 $Static = [Reflection.BindingFlags]'Public,NonPublic,Static'
 

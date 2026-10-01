@@ -8,7 +8,7 @@
 # with backwards entries - which is the failure that costs most, because a
 # backwards term still looks like a working feature.
 $ErrorActionPreference = 'Stop'
-$PluginDll = 'D:\Google Drive\Dev\Sv\Supervertaler-for-memoQ\src\Supervertaler.MemoQ\bin\Release\Supervertaler.MemoQ.dll'
+$PluginDll = 'D:\SynologyDrive\Dev\Sv\Supervertaler-for-memoQ\src\Supervertaler.MemoQ\bin\Release\Supervertaler.MemoQ.dll'
 
 $asm = [Reflection.Assembly]::LoadFrom($PluginDll)
 $Static = [Reflection.BindingFlags]'Public,NonPublic,Static'

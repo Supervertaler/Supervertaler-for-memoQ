@@ -9,7 +9,7 @@
 # should be. Hence a test.
 $ErrorActionPreference = 'Stop'
 $MemoQPath = 'C:\Program Files\memoQ\memoQ-12'
-$Root      = 'D:\Google Drive\Dev\Sv\Supervertaler-for-memoQ'
+$Root      = 'D:\SynologyDrive\Dev\Sv\Supervertaler-for-memoQ'
 $PluginDll = "$Root\src\Supervertaler.MemoQ\bin\Release\Supervertaler.MemoQ.dll"
 
 $script:probed = @{}

@@ -7,7 +7,7 @@
 # genuinely does not fit, and the first thing dropped is the project name that
 # every row repeats.
 $ErrorActionPreference = 'Stop'
-$EditorExe = 'D:\Google Drive\Dev\Sv\Supervertaler-for-memoQ\src\Supervertaler.PromptEditor\bin\Release\Supervertaler.PromptEditor.exe'
+$EditorExe = 'D:\SynologyDrive\Dev\Sv\Supervertaler-for-memoQ\src\Supervertaler.PromptEditor\bin\Release\Supervertaler.PromptEditor.exe'
 
 Add-Type -AssemblyName System.Windows.Forms
 

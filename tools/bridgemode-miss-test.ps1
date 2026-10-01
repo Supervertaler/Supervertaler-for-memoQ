@@ -24,7 +24,7 @@ $inFlight = [Collections.Generic.HashSet[string]]::new([StringComparer]::Ordinal
     } finally { [void]$inFlight.Remove($name) }
 })
 
-$asm = [Reflection.Assembly]::LoadFrom('D:\Google Drive\Dev\Sv\Supervertaler-for-memoQ\src\Supervertaler.MemoQ\bin\Release\Supervertaler.MemoQ.dll')
+$asm = [Reflection.Assembly]::LoadFrom('D:\SynologyDrive\Dev\Sv\Supervertaler-for-memoQ\src\Supervertaler.MemoQ\bin\Release\Supervertaler.MemoQ.dll')
 $B = [Reflection.BindingFlags]'Public,NonPublic,Static'
 
 $fails = 0
@@ -37,7 +37,7 @@ function Check($ok, $label) {
 # Read rather than executed: constructing a real EngineContext means building an
 # engine, which seeds settings and can make a billable call. The shape of the
 # branch is what regressed, and the shape is what this guards.
-$src = Get-Content 'D:\Google Drive\Dev\Sv\Supervertaler-for-memoQ\src\Supervertaler.MemoQ\Core\BatchTranslator.cs' -Raw
+$src = Get-Content 'D:\SynologyDrive\Dev\Sv\Supervertaler-for-memoQ\src\Supervertaler.MemoQ\Core\BatchTranslator.cs' -Raw
 $branch = [regex]::Match($src, 'if \(context\.General\.BridgeMode\)\s*\{(?<body>[\s\S]*?)\n            \}')
 
 Check ($branch.Success) "the bridge-mode branch is still where the test expects it"
@@ -165,7 +165,7 @@ Check ($record.Count -eq 2) "Record still has its two-argument form for callers 
 # instructions an agent gets, so a wrong one is a wrong result: the tag wording
 # below described <b> and <t1>, and a real job contained neither, being
 # inline_tag and spec_char throughout.
-$json = Get-Content 'D:\Google Drive\Dev\Sv\Supervertaler-for-memoQ\src\Supervertaler.MemoQ\Resources\mcp-tools.json' -Raw
+$json = Get-Content 'D:\SynologyDrive\Dev\Sv\Supervertaler-for-memoQ\src\Supervertaler.MemoQ\Resources\mcp-tools.json' -Raw
 $cat = $json | ConvertFrom-Json
 $tools = if ($cat -is [array]) { $cat } else { $cat.tools }
 function Tool($n) { return $tools | Where-Object { $_.name -eq $n } }

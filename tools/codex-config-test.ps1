@@ -10,7 +10,7 @@
 # only, with strings made up on the spot. It loads the editor rather than the
 # plugin, starts no bridge and is safe to run with memoQ open.
 $ErrorActionPreference = 'Stop'
-$EditorExe = 'D:\Google Drive\Dev\Sv\Supervertaler-for-memoQ\src\Supervertaler.PromptEditor\bin\Release\Supervertaler.PromptEditor.exe'
+$EditorExe = 'D:\SynologyDrive\Dev\Sv\Supervertaler-for-memoQ\src\Supervertaler.PromptEditor\bin\Release\Supervertaler.PromptEditor.exe'
 
 Add-Type -AssemblyName System.Windows.Forms | Out-Null
 $asm = [Reflection.Assembly]::LoadFrom($EditorExe)

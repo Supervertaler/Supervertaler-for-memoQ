@@ -12,7 +12,7 @@
 # way. It does reach the network and downloads tens of megabytes, twice, which
 # is why it is not part of build.sh.
 $ErrorActionPreference = 'Stop'
-$EditorExe = 'D:\Google Drive\Dev\Sv\Supervertaler-for-memoQ\src\Supervertaler.PromptEditor\bin\Release\Supervertaler.PromptEditor.exe'
+$EditorExe = 'D:\SynologyDrive\Dev\Sv\Supervertaler-for-memoQ\src\Supervertaler.PromptEditor\bin\Release\Supervertaler.PromptEditor.exe'
 $Scratch = Join-Path $env:TEMP ('sv-mcp-download-' + [Guid]::NewGuid().ToString('N').Substring(0, 8))
 
 Add-Type -AssemblyName System.Windows.Forms | Out-Null

@@ -42,7 +42,7 @@ used so far.
 ### Contract facts recovered from the SDK packages (2026-09-02)
 
 All five packages were read in full: specification, assembly surface, sample
-source. The full write-up is private, in `D:\Google Drive\Skills\memoQ SDK
+source. The full write-up is private, in `D:\SynologyDrive\Skills\memoQ SDK
 findings 2026-09-02.md`. The facts below change how this plugin must be written.
 
 **MT SDK**
@@ -242,7 +242,7 @@ would hide a broken resolver.
 
 Still worth asking memoQ for redistribution, since it spares the customer an
 install they may have no other use for - but it is now an improvement, not a
-dependency. See `D:\Google Drive\Skills\memoQ call brief 2026-09-19.md`.
+dependency. See `D:\SynologyDrive\Skills\memoQ call brief 2026-09-19.md`.
 **Status 2026-09-17:** Ádám Gaugecz forwarded the question to Gábor Nagy and is
 arranging a call.
 
@@ -873,7 +873,7 @@ What follows from it is a rule about *writing*, not about code:
   never have found it.
 - This happened on 2026-09-19: a licence bypass was filed in full on the public
   Trados tracker and was readable for about an hour before being deleted. The
-  private write-up is at `D:\Google Drive\Skills\Supervertaler licence hole
+  private write-up is at `D:\SynologyDrive\Skills\Supervertaler licence hole
   (PRIVATE) 2026-09-19.md`.
 
 The licensing design that follows from the same decision: the client is not a

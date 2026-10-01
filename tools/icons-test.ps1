@@ -7,7 +7,7 @@
 # which is what a pair of wrong codepoints landing on the font's fallback looks
 # like.
 $ErrorActionPreference = 'Stop'
-$Root      = 'D:\Google Drive\Dev\Sv\Supervertaler-for-memoQ'
+$Root      = 'D:\SynologyDrive\Dev\Sv\Supervertaler-for-memoQ'
 $EditorExe = "$Root\src\Supervertaler.PromptEditor\bin\Release\Supervertaler.PromptEditor.exe"
 
 Add-Type -AssemblyName System.Drawing

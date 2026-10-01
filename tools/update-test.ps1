@@ -18,7 +18,7 @@ $script:probed = @{}
     }
     return $null
 })
-$plugin = [Reflection.Assembly]::LoadFrom('D:\Google Drive\Dev\Sv\Supervertaler-for-memoQ\src\Supervertaler.MemoQ\bin\Release\Supervertaler.MemoQ.dll')
+$plugin = [Reflection.Assembly]::LoadFrom('D:\SynologyDrive\Dev\Sv\Supervertaler-for-memoQ\src\Supervertaler.MemoQ\bin\Release\Supervertaler.MemoQ.dll')
 $Static = [Reflection.BindingFlags]'Public,NonPublic,Static'
 $fails = 0
 function Check($ok, $label) { if (-not $ok) { $script:fails++ }; Write-Host "$(if ($ok) {'PASS'} else {'FAIL'}) $label" }
@@ -72,7 +72,7 @@ Check ([string](Call 'InfoSuffix' @()) -eq '') "no notice on memoQ's hits under 
 Check ([string](Call 'CurrentVersion' @()) -match '^\d+\.\d+\.\d+$') "this build's version has three parts: $(Call 'CurrentVersion' @())"
 
 # ---- 3. only the installer GitHub published is ever run --------------------------
-$setup = 'D:\Google Drive\Dev\Sv\Supervertaler-for-memoQ\dist\Supervertaler-for-memoQ-Setup.exe'
+$setup = 'D:\SynologyDrive\Dev\Sv\Supervertaler-for-memoQ\dist\Supervertaler-for-memoQ-Setup.exe'
 function Verify([string]$path, $release) { $a = New-Object object[] 2; $a[0] = $path; $a[1] = $release; return Call 'Verify' $a }
 if ((Test-Path $setup) -and (Get-Item $setup).Length -eq 33108139) {
     Check ($null -eq (Verify $setup $r)) 'the real 0.1.1 installer passes: right size, right SHA-256'

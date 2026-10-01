@@ -11,7 +11,7 @@
 # Agreed character for character with the Trados side on 2026-09-19. If a case
 # here is changed, the same change belongs there.
 $ErrorActionPreference = 'Stop'
-$PluginDll = 'D:\Google Drive\Dev\Sv\Supervertaler-for-memoQ\src\Supervertaler.MemoQ\bin\Release\Supervertaler.MemoQ.dll'
+$PluginDll = 'D:\SynologyDrive\Dev\Sv\Supervertaler-for-memoQ\src\Supervertaler.MemoQ\bin\Release\Supervertaler.MemoQ.dll'
 
 $asm = [Reflection.Assembly]::LoadFrom($PluginDll)
 $Static = [Reflection.BindingFlags]'Public,NonPublic,Static'

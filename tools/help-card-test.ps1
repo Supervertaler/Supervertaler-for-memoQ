@@ -14,7 +14,7 @@
 $ErrorActionPreference = 'Stop'
 [Console]::OutputEncoding = [Text.Encoding]::UTF8
 
-$Repo = 'D:\Google Drive\Dev\Sv\Supervertaler-for-memoQ'
+$Repo = 'D:\SynologyDrive\Dev\Sv\Supervertaler-for-memoQ'
 $PluginDll = Join-Path $Repo 'src\Supervertaler.MemoQ\bin\Release\Supervertaler.MemoQ.dll'
 $ToolsJson = Join-Path $Repo 'src\Supervertaler.MemoQ\Resources\mcp-tools.json'
 

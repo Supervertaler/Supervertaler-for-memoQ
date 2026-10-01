@@ -2,7 +2,7 @@
 # wrapped the way memoQ expects, and that the store call returns indices.
 $ErrorActionPreference = 'Stop'
 $MemoQPath = 'C:\Program Files\memoQ\memoQ-12'
-$PluginDll = 'D:\Google Drive\Dev\Sv\Supervertaler-for-memoQ\src\Supervertaler.MemoQ\bin\Release\Supervertaler.MemoQ.dll'
+$PluginDll = 'D:\SynologyDrive\Dev\Sv\Supervertaler-for-memoQ\src\Supervertaler.MemoQ\bin\Release\Supervertaler.MemoQ.dll'
 
 $script:probed = @{}
 [AppDomain]::CurrentDomain.add_AssemblyResolve([System.ResolveEventHandler] {
