@@ -506,17 +506,24 @@ namespace Supervertaler.MemoQ.Core
                                + "a paragraph of three sentences that memoQ shows as three grid rows is ONE item here, with the whole "
                                + "paragraph's source and target. Order and targets are real; use sourceStart/sourceLength with "
                                + "go_to_segment to land on one sentence of a paragraph.",
-                        Segments = rows.Skip(offset).Take(limit).Select((r, i) => new SegmentBody
+                        Segments = rows.Skip(offset).Take(limit).Select((r, i) =>
                         {
-                            Index = offset + i + 1,
-                            PartId = r.PartId,
-                            Source = r.Source,
                             // The live link hides inline tags. Where memoQ has asked about
                             // this row, its tagged form - so a staged target can carry them.
-                            TaggedSource = StagedTranslations.TaggedFormOf(taggedForms, r.Source),
-                            Target = string.IsNullOrEmpty(r.Target) ? null : r.Target,
-                            Staged = StagedTranslations.TryGetPeek(r.Source, livePair)?.Target,
-                            IsActive = r.PartId == active ? true : (bool?)null
+                            var tagged = StagedTranslations.TaggedFormOf(taggedForms, r.Source);
+                            return new SegmentBody
+                            {
+                                Index = offset + i + 1,
+                                PartId = r.PartId,
+                                Source = r.Source,
+                                TaggedSource = tagged,
+                                Target = string.IsNullOrEmpty(r.Target) ? null : r.Target,
+                                // Looked up as memoQ will ask for it. By the live text, a pair
+                                // staged earlier without tags matched exactly and was shown in
+                                // place of the tagged one memoQ actually receives.
+                                Staged = StagedTranslations.TryGetPeek(tagged ?? r.Source, livePair)?.Target,
+                                IsActive = r.PartId == active ? true : (bool?)null
+                            };
                         }).ToArray()
                     }));
                     return;

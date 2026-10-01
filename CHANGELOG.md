@@ -11,6 +11,7 @@ any release tooling that buckets on these headings works for both.
 ### Fixed
 
 - **Windows showed the plugin and the editor as version 0.1.0** in a file's Properties, whatever version was installed. They now show the real version, as the title bar and the update check always did.
+- **The AI assistant was shown the wrong staged translation for a row with inline tags** when it had been staged twice, first without tags and then with them. memoQ always received the tagged one; *get_segments* now shows that one too.
 
 ## [0.1.6] – 2026-10-01
 
