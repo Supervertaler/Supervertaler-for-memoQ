@@ -630,7 +630,12 @@ elevated.
    keyed on source text, and they reach the grid when the user runs
    Pre-translate or lands on the segment (checked before cache and LLM in
    SessionRunner and BatchTranslator, so a fully staged document costs zero
-   LLM calls and needs no API key).
+   LLM calls and needs no API key). `Core/CaptureStore.cs` records every
+   source segment the plugin sees, which after one Pre-translate pass is the
+   whole document — that is what get_project/get_segments serve. The bridge
+   also exposes the glossary (lookup/add) and the shared prompt library
+   (list/get/save), so Claude can draft a project prompt and the user selects
+   it in the options dialog.
 
    **Two keys per staged pair (2026-10-01).** memoQ asks in its segment XML
    (tags as elements, `&amp;`, `<spec_char val=".."/>`); the live link's text has
@@ -641,12 +646,7 @@ elevated.
    memoQ has asked about the row, and `get_segments` shows it as `taggedSource`.
    A loose hit whose target lacks the source's tags is still delivered, marked
    "inline tags not placed". A tag is `</?` plus a letter, never a bare `<`:
-   the live link's "a < b" is text. `Core/CaptureStore.cs` records every
-   source segment the plugin sees, which after one Pre-translate pass is the
-   whole document — that is what get_project/get_segments serve. The bridge
-   also exposes the glossary (lookup/add) and the shared prompt library
-   (list/get/save), so Claude can draft a project prompt and the user selects
-   it in the options dialog.
+   the live link's "a < b" is text.
 
    **Bridge mode** (`BridgeMode` setting, user-facing label "Pre-translate only
    captures and delivers staged translations") is scoped to the batch path only.
