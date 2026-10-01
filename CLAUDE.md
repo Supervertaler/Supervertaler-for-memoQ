@@ -630,7 +630,18 @@ elevated.
    keyed on source text, and they reach the grid when the user runs
    Pre-translate or lands on the segment (checked before cache and LLM in
    SessionRunner and BatchTranslator, so a fully staged document costs zero
-   LLM calls and needs no API key). `Core/CaptureStore.cs` records every
+   LLM calls and needs no API key).
+
+   **Two keys per staged pair (2026-10-01).** memoQ asks in its segment XML
+   (tags as elements, `&amp;`, `<spec_char val=".."/>`); the live link's text has
+   none of that. Staging only by exact text missed every tagged row, 31 of 501 on
+   one job, and they silently went to the model. So each entry also has a LOOSE
+   key (tags stripped, spec_char values restored, escapes undone); lookups try
+   exact, then loose. Staging by partId uses memoQ's captured tagged form when
+   memoQ has asked about the row, and `get_segments` shows it as `taggedSource`.
+   A loose hit whose target lacks the source's tags is still delivered, marked
+   "inline tags not placed". A tag is `</?` plus a letter, never a bare `<`:
+   the live link's "a < b" is text. `Core/CaptureStore.cs` records every
    source segment the plugin sees, which after one Pre-translate pass is the
    whole document — that is what get_project/get_segments serve. The bridge
    also exposes the glossary (lookup/add) and the shared prompt library
