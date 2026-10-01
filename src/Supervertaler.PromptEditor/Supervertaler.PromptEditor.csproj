@@ -20,7 +20,7 @@
     <Product>Supervertaler for memoQ</Product>
     <Description>Prompts, glossary and settings for Supervertaler for memoQ</Description>
     <Copyright>Copyright (c) 2026 Michael Beijer</Copyright>
-    <Version>0.1.6</Version>
+    <Version>0.1.7</Version>
     <ApplicationIcon>..\Supervertaler.MemoQ\Resources\sv-icon.ico</ApplicationIcon>
     <!-- Declares DPI awareness, so the window is not bitmap-stretched into
          blur on a scaled display. See app.manifest. -->

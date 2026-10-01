@@ -14,7 +14,7 @@
     <Authors>Michael Beijer</Authors>
     <Company>Supervertaler</Company>
     <Product>Supervertaler for memoQ</Product>
-    <Version>0.1.6</Version>
+    <Version>0.1.7</Version>
     <Nullable>disable</Nullable>
     <!--
       A memoQ *preview tool*: a separate process memoQ launches and talks to
