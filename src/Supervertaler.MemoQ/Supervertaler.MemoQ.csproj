@@ -20,7 +20,6 @@
     <Description>Supervertaler for memoQ — AI translation engine for memoQ</Description>
     <Copyright>Copyright (c) 2026 Michael Beijer</Copyright>
     <Version>0.1.6</Version>
-    <InformationalVersion>0.1.0</InformationalVersion>
   </PropertyGroup>
 
   <!--

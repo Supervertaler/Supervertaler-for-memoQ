@@ -6,6 +6,12 @@ matches the Supervertaler for Trados changelog – one bold headline per bullet,
 a ★ on the things a release would be announced for – so the two read alike and
 any release tooling that buckets on these headings works for both.
 
+## [Unreleased]
+
+### Fixed
+
+- **Windows showed the plugin and the editor as version 0.1.0** in a file's Properties, whatever version was installed. They now show the real version, as the title bar and the update check always did.
+
 ## [0.1.6] – 2026-10-01
 
 ### Fixed
