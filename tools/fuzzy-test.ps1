@@ -70,13 +70,20 @@ $build1 = $prompt.GetMethod('BuildBatchUserPrompt', $PublicStatic)
 $argv = [object[]]::new(1); $argv[0] = $inputs
 $user = $build1.Invoke($null, $argv)
 
-$hasBlock = $user -like '*CLOSEST APPROVED TRANSLATIONS*'
+$hasBlock = $user -like '*TRANSLATION MEMORY MATCHES*REFERENCE ONLY*'
 # One block per segment since core's #116 layout: "Segment 2", then the
-# memory's source and the approved translation on lines of their own.
+# memory's source and its translation on lines of their own.
 $block = $user.Substring(0, [Math]::Max(0, $user.IndexOf('**SEGMENTS TO TRANSLATE')))
-$namesRow = $block -match '(?s)Segment 2\b.*approved:\s+Een inrichting omvattende een widget\.'
+$namesRow = $block -match '(?s)Segment 2\b.*translation in memory:\s+Een inrichting omvattende een widget\.'
 $noRow1 = $block -notmatch 'Segment 1\b'
 Write-Host "$(if ($hasBlock -and $namesRow -and $noRow1) {'PASS'} else {'FAIL'}) batch prompt: block=$hasBlock namesRow2=$namesRow onlyRowsWithAMatch=$noRow1"
+
+# Trados 198, taken by memoQ too: a match is a reference to check, never
+# "approved" wording to follow. memoQ has no match rate, so the segment's own
+# text is shown beside the memory's for the comparison.
+$own = $block -match 'this segment:\s+A device comprising a widget and a lever\.'
+$noAuthority = ($block -notmatch '(?i)approved') -and ($block -notmatch '(?i)follow them')
+Write-Host "$(if ($own -and $noAuthority) {'PASS'} else {'FAIL'}) batch match is reference-only and shows this segment: own=$own noAuthority=$noAuthority"
 
 # Without any fuzzy text the prompt must be byte-identical to the old shape.
 $plain = [Activator]::CreateInstance($listType)
@@ -110,15 +117,21 @@ $args = [object[]]@($bundle, $settings, 'eng', 'nld', $null, $null, $null, 'Tran
 $built = $build.Invoke($null, $args)
 $system = GetM $built 'User'
 
-$hasMatch = $system -like '*Closest approved translation*'
-$hasTarget = $system -like '*Een inrichting omvattende een widget.*'
+$hasMatch = $system -like '*TRANSLATION MEMORY MATCH*REFERENCE ONLY*'
+$hasTarget = $system -match 'translation in memory:\s+Een inrichting omvattende een widget\.'
 Write-Host "$(if ($hasMatch -and $hasTarget) {'PASS'} else {'FAIL'}) interactive prompt: header=$hasMatch target=$hasTarget"
+
+# The same stance as the batch block, so a segment is not told "check it" in
+# Pre-translate and "follow it" when the translator lands on it.
+$ownI = $system -match 'this segment:\s+A device comprising a widget and a lever\.'
+$noAuthI = ($system -notmatch '(?i)approved translation') -and ($system -notmatch '(?i)follow it:')
+Write-Host "$(if ($ownI -and $noAuthI) {'PASS'} else {'FAIL'}) interactive match is reference-only and shows this segment: own=$ownI noAuthority=$noAuthI"
 
 # Document context off must not discard it.
 SetM $settingsType $settings 'UseDocumentContext' $false
 $built2 = $build.Invoke($null, [object[]]@($bundle, $settings, 'eng', 'nld', $null, $null, $null, 'Translate.', $null, $off, $null))
 $system2 = GetM $built2 'User'
-$stillThere = $system2 -like '*Closest approved translation*'
+$stillThere = $system2 -like '*TRANSLATION MEMORY MATCH*REFERENCE ONLY*'
 Write-Host "$(if ($stillThere) {'PASS'} else {'FAIL'}) survives document context being switched off"
 SetM $settingsType $settings 'UseDocumentContext' $true
 # A bundle with no fuzzy item must produce no header.
@@ -126,7 +139,7 @@ $empty = [Activator]::CreateInstance($bundleType)
 SetM $bundleType $empty 'Source' (Seg 'Plain segment.')
 $built3 = $build.Invoke($null, [object[]]@($empty, $settings, 'eng', 'nld', $null, $null, $null, 'Translate.', $null, $off, $null))
 $system3 = GetM $built3 'User'
-Write-Host "$(if (-not ($system3 -like '*Closest approved*')) {'PASS'} else {'FAIL'}) no header without a match"
+Write-Host "$(if (-not ($system3 -like '*TRANSLATION MEMORY MATCH*')) {'PASS'} else {'FAIL'}) no header without a match"
 
 # ---- 3. failures are wrapped the way memoQ expects ------------------------
 $batch = $plugin.GetType('Supervertaler.MemoQ.Core.BatchTranslator')

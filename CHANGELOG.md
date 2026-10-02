@@ -6,6 +6,12 @@ matches the Supervertaler for Trados changelog – one bold headline per bullet,
 a ★ on the things a release would be announced for – so the two read alike and
 any release tooling that buckets on these headings works for both.
 
+## [Unreleased]
+
+### Changed
+
+- **Translation memory matches are now a reference for the AI to check, not wording to follow.** A match memoQ forwards to Supervertaler used to be presented as an approved translation to keep. But a memory can hold translations made for other documents, products or clients, and they can be wrong. The AI now checks the match against the segment's source and the document, reuses its wording only where it is correct, lets your termbase and the document take precedence, and translates from the source when in doubt. The segment's own text is shown beside the memory's so the two can be compared word by word. This applies in Pre-translate and when you visit a segment alike, and matches what Supervertaler for Trados now does.
+
 ## [0.1.7] – 2026-10-02
 
 ### Fixed

@@ -274,10 +274,12 @@ namespace Supervertaler.MemoQ.Core
 
         /// <summary>
         /// The best fuzzy translation-memory match, when the user has routed it to
-        /// us under memoQ's <em>Send best fuzzy TM match to</em>. It is a rendering
-        /// of nearly this same sentence that a human wrote and approved, so it is
-        /// presented as the thing to adapt rather than as background reading, and
-        /// it comes before everything else for the same reason.
+        /// us under memoQ's <em>Send best fuzzy TM match to</em>. Evidence, not
+        /// authority: a memory pools work from other documents, products and
+        /// clients, and can be wrong. Same words and layout as core's batch block
+        /// (<see cref="TranslationPrompt.BuildMemoryBlock"/>), so a segment is not
+        /// told "check it" in Pre-translate and "follow it" when visited. memoQ
+        /// gives no match rate, so the segment's own text is shown for comparison.
         /// </summary>
         private static void AppendFuzzyMatch(StringBuilder sb, TranslationBundle bundle)
         {
@@ -287,12 +289,21 @@ namespace Supervertaler.MemoQ.Core
 
             if (match == null) return;
 
-            sb.AppendLine("Closest approved translation from the client's translation memory. A human "
-                + "wrote and approved it for a nearly identical source, so follow it: keep its wording "
-                + "and terminology wherever the source agrees, and change only what the segment to "
-                + "translate actually differs in.");
-            sb.AppendLine("- " + TagBridge.ToPlainText(match.SourceSegment));
-            sb.AppendLine("  -> " + TagBridge.ToPlainText(match.TargetSegment));
+            sb.AppendLine("**TRANSLATION MEMORY MATCH – REFERENCE ONLY**");
+            sb.AppendLine();
+            sb.AppendLine("This is an earlier translation of a similar sentence, found in the project's "
+                + "translation memory. A memory can hold translations made for other documents, "
+                + "products or clients, and they can be wrong. Check it against the segment's source "
+                + "and the document before using any of it. Reuse its wording and terminology only "
+                + "where it is correct for this segment in this document; the termbase and the "
+                + "document take precedence. Where it does not fit, or you are in doubt, translate "
+                + "from the source. The segment's own text is shown above the memory's: compare them "
+                + "word by word, because a small difference can change the meaning.");
+            sb.AppendLine();
+            if (bundle.Source != null && !bundle.Source.IsEmptyText)
+                sb.AppendLine("  this segment:          " + TagBridge.ToPlainText(bundle.Source));
+            sb.AppendLine("  source in memory:      " + TagBridge.ToPlainText(match.SourceSegment));
+            sb.AppendLine("  translation in memory: " + TagBridge.ToPlainText(match.TargetSegment));
             sb.AppendLine();
         }
 

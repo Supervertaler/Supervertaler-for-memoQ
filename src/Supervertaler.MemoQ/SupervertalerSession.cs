@@ -161,9 +161,9 @@ namespace Supervertaler.MemoQ
             var bundle = new TranslationBundle { Source = source };
 
             // The best fuzzy TM match, when the user has routed it to us under
-            // "Send best fuzzy TM match to". It is a human-approved rendering of
-            // nearly this segment, so it goes into the prompt as the thing to
-            // adapt rather than as background context.
+            // "Send best fuzzy TM match to". It goes into the prompt as a
+            // reference to check against the source, not wording to follow: a
+            // memory can hold translations made for other clients, and be wrong.
             if (tmSource != null && tmTarget != null
                 && !tmSource.IsEmptyText && !tmTarget.IsEmptyText)
             {
