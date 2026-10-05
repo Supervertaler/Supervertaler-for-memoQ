@@ -6,6 +6,12 @@ matches the Supervertaler for Trados changelog – one bold headline per bullet,
 a ★ on the things a release would be announced for – so the two read alike and
 any release tooling that buckets on these headings works for both.
 
+## [Unreleased]
+
+### Fixed
+
+- **A translation that ran over more than one line could carry extra carriage returns.** When the AI split a segment's translation across lines during Pre-translate, the line break reached memoQ with one or two carriage-return characters in front of it that the source did not have. The line break now arrives exactly as a plain line feed.
+
 ## [0.1.8] – 2026-10-02
 
 ### Changed
