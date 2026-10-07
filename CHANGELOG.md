@@ -13,6 +13,10 @@ any release tooling that buckets on these headings works for both.
 - ★ **Memory banks and prompts can come from a team folder.** If your team shares its memory banks and prompts from a folder on a file server, set up in Supervertaler for Trados, Supervertaler for memoQ now uses it too, while your licence, settings, API keys and termbases stay your own. If the team folder cannot be reached when memoQ or the editor starts, your own banks and prompts are used until you restart, and you are told: a warning when the editor opens, the team folder and its status in the editor's Settings, and a note in the AI assistant's list of memory banks. The editor also warns you if memoQ and the editor ended up on different folders.
 - **GPT-6.1 Sol and the rest of OpenAI's GPT-6 models are available.** The OpenAI list is now GPT-6 Astra, GPT-6.1 Sol and GPT-6 Luna. A new OpenAI setup starts on GPT-6.1 Sol, the recommended balance of quality and price, rather than the most expensive model at the top of the list. A model you have already chosen stays as it is, and is still costed correctly.
 
+### Changed
+
+- **A licence counts only for the computer and Windows account that activated it.** If you rename your computer or reinstall Windows, the editor tells you when it opens, everything stays available that day, and entering your licence key again in Help → Licence activates it here.
+
 ### Fixed
 
 - **A translation that ran over more than one line could carry extra carriage returns.** When the AI split a segment's translation across lines during Pre-translate, the line break reached memoQ with one or two carriage-return characters in front of it that the source did not have. The line break now arrives exactly as a plain line feed.

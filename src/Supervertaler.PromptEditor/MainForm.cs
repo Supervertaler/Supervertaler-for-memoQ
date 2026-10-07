@@ -866,6 +866,23 @@ namespace Supervertaler.PromptEditor
                     "bought Supervertaler.",
                     "Supervertaler licence", MessageBoxButtons.OK, MessageBoxIcon.Warning);
             }
+
+            // Only once it matters: during the person's own trial the licence
+            // window's note is enough. Every start while it lasts, as above.
+            if (announceDamage && view.ForeignActivationFound
+                && (view.State == Supervertaler.Core.LicenceState.Unknown || view.State == Supervertaler.Core.LicenceState.Expired))
+            {
+                MessageBox.Show(this,
+                    "The licence in your data folder was activated for another computer or Windows account. " +
+                    "A licence counts only for the computer and account that activated it." +
+                    Environment.NewLine + Environment.NewLine +
+                    (view.State == Supervertaler.Core.LicenceState.Unknown
+                        ? "Everything stays available today, so you can finish what you are working on first. "
+                        : "AI translation is paused on this computer. ") +
+                    "If the licence is yours – for example this computer under an earlier name, or before Windows " +
+                    "was reinstalled – choose Help, Licence and enter its key to activate it here.",
+                    "Supervertaler licence", MessageBoxButtons.OK, MessageBoxIcon.Warning);
+            }
         }
 
         // -- team folder ---------------------------------------------------

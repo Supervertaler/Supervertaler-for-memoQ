@@ -274,7 +274,7 @@ $viewT = $asm.GetType('Supervertaler.PromptEditor.LicenceView')
 $dlgT  = $asm.GetType('Supervertaler.PromptEditor.LicenceDialog')
 $stT   = $asm.GetType('Supervertaler.Core.LicenceState')
 
-function View($state, $hasKey, $days, $damaged) {
+function View($state, $hasKey, $days, $damaged, $foreign = $false) {
     $v = [Activator]::CreateInstance($viewT, $true)
     $viewT.GetField('State').SetValue($v, [Enum]::Parse($stT, $state))
     $viewT.GetField('HasKey').SetValue($v, [bool]$hasKey)
@@ -283,6 +283,7 @@ function View($state, $hasKey, $days, $damaged) {
     $viewT.GetField('TrialEndsUtc').SetValue($v, [DateTime]::UtcNow.AddDays($days))
     $viewT.GetField('LastValidatedUtc').SetValue($v, [DateTime]::UtcNow.AddDays(-2))
     $viewT.GetField('DamagedFileFound').SetValue($v, [bool]$damaged)
+    $viewT.GetField('ForeignActivationFound').SetValue($v, [bool]$foreign)
     return $v
 }
 
@@ -292,7 +293,12 @@ $cases = @(
     @{ what = 'trial ended';                  v = (View 'Expired'  $false 0  $false) },
     @{ what = 'key not confirmed for 30 days'; v = (View 'Expired'  $true  0  $false) },
     @{ what = 'unreadable';                   v = (View 'Unknown'  $false 0  $false) },
-    @{ what = 'damaged file, key needed';     v = (View 'Expired'  $false 0  $true)  }
+    @{ what = 'damaged file, key needed';     v = (View 'Expired'  $false 0  $true)  },
+    # Activated for another computer or account: the first day, a trial of its
+    # own, and after both - each with the note above the key box.
+    @{ what = 'another account, first day';   v = (View 'Unknown'  $false 0  $false $true) },
+    @{ what = 'another account, own trial';   v = (View 'Trial'    $false 14 $false $true) },
+    @{ what = 'another account, key needed';  v = (View 'Expired'  $false 0  $false $true) }
 )
 
 foreach ($c in $cases) {
@@ -317,6 +323,26 @@ try {
     Check (& $hasWarning $damaged) 'a damaged licence file gets its warning'
     Check (-not (& $hasWarning $clean)) 'and nothing else does'
 } finally { $damaged.Dispose(); $clean.Dispose() }
+
+# The note for a licence activated for another computer or account: shown in
+# every state but Licensed, above the key box, and the first day's headline says
+# what happened rather than "could not be read".
+$noteFor = { param($f) @($f.Controls | Where-Object { $_ -is [Windows.Forms.Label] -and $_.Text -match 'activated for another computer or Windows account' }) }
+foreach ($st in 'Unknown', 'Trial', 'Expired') {
+    $f = [Activator]::CreateInstance($dlgT, [object[]]@((View $st $false 5 $false $true)))
+    try {
+        $note = & $noteFor $f
+        $box = @($f.Controls | Where-Object { $_ -is [Windows.Forms.TextBox] })
+        Check ($note.Count -eq 1 -and $box.Count -eq 1 -and $note[0].Bottom -le $box[0].Top) "another account's licence ($st): the note is shown, above the key box"
+    } finally { $f.Dispose() }
+}
+$plain = [Activator]::CreateInstance($dlgT, [object[]]@((View 'Unknown' $false 0 $false)))
+$first = [Activator]::CreateInstance($dlgT, [object[]]@((View 'Unknown' $false 0 $false $true)))
+try {
+    Check ((& $noteFor $plain).Count -eq 0) 'and an ordinary unreadable licence gets no such note'
+    Check (@($first.Controls | Where-Object { $_.Text -eq 'Licence activated for another computer or account' }).Count -eq 1) 'the first day says what happened'
+    Check (@($first.Controls | Where-Object { $_.Text -match 'available today' }).Count -eq 1) '  and that everything stays available today'
+} finally { $plain.Dispose(); $first.Dispose() }
 
 # ---- the chooser, with the caption that now carries the project note -------
 # Its caption was a fixed single line, 18 pixels high. The bank chooser's own

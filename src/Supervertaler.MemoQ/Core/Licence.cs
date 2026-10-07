@@ -61,9 +61,22 @@ namespace Supervertaler.MemoQ.Core
         {
             get
             {
-                bool hasKey;
-                try { hasKey = !SharedSettings.InHarness && SupervertalerLicence.Instance.HasKey; }
-                catch { hasKey = false; }
+                bool hasKey, foreign;
+                try
+                {
+                    hasKey = !SharedSettings.InHarness && SupervertalerLicence.Instance.HasKey;
+                    foreign = !SharedSettings.InHarness && SupervertalerLicence.Instance.ForeignActivationFound;
+                }
+                catch { hasKey = false; foreign = false; }
+
+                // A licence counts only for the computer and Windows account that
+                // activated it - which after a rename or a reinstall is the
+                // customer's own licence, under their old name.
+                if (foreign)
+                    return "Supervertaler's licence in your data folder was activated for another computer or " +
+                           "Windows account, so AI translation is paused here. If it is yours, open the " +
+                           "Supervertaler editor and choose Help, Licence to enter its key and activate it on " +
+                           "this computer. Your termbases, prompts and memory banks are unaffected.";
 
                 return hasKey
                     ? "Supervertaler's licence has not been confirmed online for 30 days, so AI " +

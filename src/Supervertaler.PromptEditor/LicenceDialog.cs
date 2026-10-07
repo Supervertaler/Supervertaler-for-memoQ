@@ -21,6 +21,9 @@ namespace Supervertaler.PromptEditor
         public DateTime LastValidatedUtc;
         public bool DamagedFileFound;
 
+        /// <summary>The data folder's licence was activated for another computer or Windows account, and this one has none of its own.</summary>
+        public bool ForeignActivationFound;
+
         /// <summary>The licence as it stands. Unknown if it cannot be read at all, which is never a refusal.</summary>
         internal static LicenceView Current()
         {
@@ -36,6 +39,7 @@ namespace Supervertaler.PromptEditor
                     MaskedKey = l.MaskedKey ?? "",
                     LastValidatedUtc = l.LastValidatedUtc,
                     DamagedFileFound = l.DamagedFileFound,
+                    ForeignActivationFound = l.ForeignActivationFound,
                 };
             }
             catch
@@ -143,6 +147,19 @@ namespace Supervertaler.PromptEditor
                     Color.Firebrick);
             }
 
+            // A licence counts only for the computer and Windows account that
+            // activated it. Most often met after renaming the computer or
+            // reinstalling Windows, so it says how to bring the licence back.
+            if (view.ForeignActivationFound && view.State != LicenceState.Licensed)
+            {
+                Paragraph(
+                    "The licence in your data folder was activated for another computer or Windows account – " +
+                    "for example this computer under an earlier name, or before Windows was reinstalled. A licence " +
+                    "counts only for the computer and account that activated it. If it is yours, enter its key " +
+                    "below to activate it here.",
+                    Color.Firebrick);
+            }
+
             Paragraph(
                 "One Supervertaler licence covers Supervertaler for Trados and Supervertaler for memoQ. " +
                 "A key already activated on this computer counts once, whichever of them it was entered in.",
@@ -244,7 +261,9 @@ namespace Supervertaler.PromptEditor
                 case LicenceState.Expired:
                     return v.HasKey ? "Licence not confirmed for 30 days" : "Free trial ended";
                 default:
-                    return "Licence could not be read";
+                    return v.ForeignActivationFound
+                        ? "Licence activated for another computer or account"
+                        : "Licence could not be read";
             }
         }
 
@@ -268,7 +287,9 @@ namespace Supervertaler.PromptEditor
                         : "AI translation is paused until a licence key is entered. Terminology, termbases, " +
                           "prompts and memory banks keep working.";
                 default:
-                    return "Everything keeps working. Supervertaler will try again next time it starts.";
+                    return v.ForeignActivationFound
+                        ? "Everything stays available today, so you can finish what you are working on first."
+                        : "Everything keeps working. Supervertaler will try again next time it starts.";
             }
         }
     }
