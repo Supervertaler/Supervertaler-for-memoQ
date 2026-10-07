@@ -172,7 +172,7 @@ def main():
     body = io.StringIO()
     body.write(f"# Supervertaler for memoQ {version}\n\n")
     body.write("AI translation inside memoQ: an MT engine, a terminology provider, and a companion "
-               "window for everything memoQ gives a plugin no room for. Requires memoQ 12. One "
+               "window for everything memoQ gives a plugin no room for. For memoQ 11 and 12. One "
                "Supervertaler licence covers Supervertaler for Trados and Supervertaler for memoQ.\n\n")
     if stars:
         body.write("## Highlights\n\n")
