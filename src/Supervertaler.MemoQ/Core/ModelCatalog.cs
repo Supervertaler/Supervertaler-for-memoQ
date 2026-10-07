@@ -59,6 +59,18 @@ namespace Supervertaler.MemoQ.Core
             return key != null && LlmModelCatalog.CanFetch(key);
         }
 
+        /// <summary>
+        /// The model to select when none is configured: core's named default for
+        /// the provider. Not the short list's first entry, which is ordered most
+        /// capable first - for OpenAI that is the most expensive model, and the
+        /// default Michael chose is GPT-6.1 Sol.
+        /// </summary>
+        public static string DefaultModelId(string provider)
+        {
+            var key = LlmProviders.CoreKey(provider);
+            return key == null ? null : LlmModels.DefaultModelId(key);
+        }
+
         /// <summary>The short list: what to show when "Show all models" is off.</summary>
         public static List<Entry> Curated(string provider)
         {

@@ -123,6 +123,9 @@
     <Compile Include="..\Supervertaler.MemoQ\Core\ModelCatalog.cs">
       <Link>Shared\ModelCatalog.cs</Link>
     </Compile>
+    <Compile Include="..\Supervertaler.MemoQ\Core\TeamFolderStatus.cs">
+      <Link>Shared\TeamFolderStatus.cs</Link>
+    </Compile>
     <Compile Include="..\Supervertaler.MemoQ\Core\MemoQSession.cs">
       <Link>Shared\MemoQSession.cs</Link>
     </Compile>

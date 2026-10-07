@@ -134,6 +134,8 @@ namespace Supervertaler.PromptEditor
             [DataMember(Name = "documents")] public DocumentInfo[] Documents { get; set; }
             [DataMember(Name = "liveDocuments")] public LiveDocumentInfo[] LiveDocuments { get; set; }
             [DataMember(Name = "note")] public string Note { get; set; }
+            /// <summary>Where memoQ's plugin takes memory banks and prompts from this session.</summary>
+            [DataMember(Name = "contentRoot")] public string ContentRoot { get; set; }
         }
 
         /// <summary>A document the preview tool has reported - present whether or not MT plugins are enabled for the project.</summary>

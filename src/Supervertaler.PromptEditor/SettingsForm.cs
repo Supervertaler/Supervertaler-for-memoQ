@@ -261,6 +261,18 @@ namespace Supervertaler.PromptEditor
                 + "never your documents or translations.", fieldX, fieldW);
             y += 14;
 
+            // The team folder is set in Supervertaler for Trados and memoQ follows
+            // it, so this is a report, not a setting. Only shown when one is set,
+            // and in a warning colour when this session is not using it.
+            var team = TeamFolderStatus.Line();
+            if (team != null)
+            {
+                Caption("Team folder", y);
+                var line = Hint(team + " Set in Supervertaler for Trados.", fieldX, fieldW);
+                if (TeamFolderStatus.FellBack) line.ForeColor = Color.Firebrick;
+                y += 14;
+            }
+
             // No memory bank here. It sits on the main window's context bar with
             // the prompt and the glossary, because those three are what changes
             // between jobs - what the model knows before it is shown a segment -
@@ -410,12 +422,18 @@ namespace Supervertaler.PromptEditor
 
             // Re-select what is configured, or leave it in the box when neither
             // list carries it - which is normal for a gateway. With nothing
-            // configured at all, the first recommendation is the answer: this
-            // list is ordered, and its first entry is the one to reach for.
+            // configured at all, the provider's default is the answer - not the
+            // list's first entry, which is the most capable and, for OpenAI, the
+            // most expensive.
             var match = entries.FirstOrDefault(e =>
                 string.Equals(e.Id, typed, StringComparison.OrdinalIgnoreCase));
 
-            if (match == null && string.IsNullOrWhiteSpace(typed)) match = entries.FirstOrDefault();
+            if (match == null && string.IsNullOrWhiteSpace(typed))
+            {
+                var preferred = ModelCatalog.DefaultModelId(Provider);
+                match = entries.FirstOrDefault(e => string.Equals(e.Id, preferred, StringComparison.OrdinalIgnoreCase))
+                        ?? entries.FirstOrDefault();
+            }
 
             if (match != null)
             {

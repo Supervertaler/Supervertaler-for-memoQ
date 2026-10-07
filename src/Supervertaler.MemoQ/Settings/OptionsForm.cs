@@ -902,12 +902,18 @@ namespace Supervertaler.MemoQ.Settings
 
             // Re-select what is configured, or leave it in the box when neither
             // list carries it - which is normal for a gateway. With nothing
-            // configured at all, the first recommendation is the answer: this
-            // list is ordered, and its first entry is the one to reach for.
+            // configured at all, the provider's default is the answer - not the
+            // list's first entry, which is the most capable and, for OpenAI, the
+            // most expensive.
             var match = entries.FirstOrDefault(e =>
                 string.Equals(e.Id, wanted, StringComparison.OrdinalIgnoreCase));
 
-            if (match == null && string.IsNullOrWhiteSpace(wanted)) match = entries.FirstOrDefault();
+            if (match == null && string.IsNullOrWhiteSpace(wanted))
+            {
+                var preferred = ModelCatalog.DefaultModelId(provider);
+                match = entries.FirstOrDefault(e => string.Equals(e.Id, preferred, StringComparison.OrdinalIgnoreCase))
+                        ?? entries.FirstOrDefault();
+            }
 
             if (match != null)
             {

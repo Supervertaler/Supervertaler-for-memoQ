@@ -57,6 +57,12 @@ namespace Supervertaler.MemoQ
             PluginLog.Write("Initialize: settings directory = "
                 + (environment?.PluginSettingsDirectory ?? "(null)"));
 
+            // Said once per session when a team folder is set, and loudly when it
+            // is not in use: the banks and prompts are then the user's own.
+            var team = Core.TeamFolderStatus.Line();
+            if (team != null)
+                PluginLog.Write((Core.TeamFolderStatus.FellBack ? "Team folder NOT IN USE: " : "Team folder: ") + team);
+
             // First, before anything can touch the licence: core's licence code
             // logs through a hook that has to be in place when it first loads,
             // or its messages are lost. The online check it starts runs in the

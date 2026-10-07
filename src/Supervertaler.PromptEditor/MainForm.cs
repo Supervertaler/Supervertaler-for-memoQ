@@ -753,6 +753,7 @@ namespace Supervertaler.PromptEditor
                 ScrollTreeHome();
 
                 ShowLicenceNotices();
+                ShowTeamFolderNotices();
                 AskUsageStatsOnce();
                 _ = CheckForUpdatesAsync(userAsked: false);
             };
@@ -865,6 +866,52 @@ namespace Supervertaler.PromptEditor
                     "bought Supervertaler.",
                     "Supervertaler licence", MessageBoxButtons.OK, MessageBoxIcon.Warning);
             }
+        }
+
+        // -- team folder ---------------------------------------------------
+
+        /// <summary>
+        /// Says so when the team folder - the shared memory banks and prompts set
+        /// in Supervertaler for Trados - is not what this session is using. A
+        /// message box at every start while it lasts, as for a damaged licence:
+        /// the AI is otherwise given the translator's own banks while they believe
+        /// it has the team's. Then, if memoQ is running, checks that its plugin
+        /// decided the same way; the two processes check the folder separately.
+        /// </summary>
+        private void ShowTeamFolderNotices()
+        {
+            if (SharedSettings.InHarness) return;
+
+            if (TeamFolderStatus.FellBack)
+                MessageBox.Show(this, TeamFolderStatus.Line() + Environment.NewLine + Environment.NewLine
+                    + "Until then, the memory banks and prompts you see here are your own, not the team's.",
+                    "Supervertaler team folder", MessageBoxButtons.OK, MessageBoxIcon.Warning);
+
+            _ = CompareTeamFolderWithMemoQAsync();
+        }
+
+        private async System.Threading.Tasks.Task CompareTeamFolderWithMemoQAsync()
+        {
+            // Only worth asking when a team folder is set: with none, both
+            // processes use the data folder and cannot disagree.
+            if (SupervertalerPaths.TeamFolder == null) return;
+
+            string mismatch;
+            try
+            {
+                var client = MemoQBridgeClient.TryConnect(out _);
+                if (client == null) return;   // memoQ not running: nothing to disagree with
+                using (client)
+                {
+                    var project = await client.GetProjectAsync();
+                    mismatch = TeamFolderStatus.Mismatch(project?.ContentRoot);
+                }
+            }
+            catch (Exception) { return; }     // an unanswered check is not a finding
+
+            if (mismatch == null || IsDisposed) return;
+            MessageBox.Show(this, mismatch, "Supervertaler team folder",
+                MessageBoxButtons.OK, MessageBoxIcon.Warning);
         }
 
         // -- window geometry -----------------------------------------------

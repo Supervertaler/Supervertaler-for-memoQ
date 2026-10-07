@@ -462,6 +462,11 @@ namespace Supervertaler.MemoQ.Core
                         ImportPath = d.ImportPath
                     }).ToArray()
                     : null,
+                // Where this process takes memory banks and prompts from, so the
+                // editor can tell when it and memoQ have decided differently, and
+                // the sentence about the team folder for an assistant to relay.
+                ContentRoot = global::Supervertaler.Core.SupervertalerPaths.ContentRoot,
+                TeamFolder = TeamFolderStatus.Line(),
                 Note = docs.Count == 0
                     ? "No segments captured yet. The plugin only sees what memoQ sends it: "
                       + "ask the user to run Pre-translate once (any model) or visit some segments, "
@@ -2518,6 +2523,8 @@ namespace Supervertaler.MemoQ.Core
             [DataMember(Name = "previewToolConnected")] public bool PreviewToolConnected { get; set; }
             [DataMember(Name = "activeTermbases", EmitDefaultValue = false)] public string[] ActiveTermbases { get; set; }
             [DataMember(Name = "liveDocuments", EmitDefaultValue = false)] public LiveDocumentBody[] LiveDocuments { get; set; }
+            [DataMember(Name = "contentRoot", EmitDefaultValue = false)] public string ContentRoot { get; set; }
+            [DataMember(Name = "teamFolder", EmitDefaultValue = false)] public string TeamFolder { get; set; }
             [DataMember(Name = "note", EmitDefaultValue = false)] public string Note { get; set; }
         }
 

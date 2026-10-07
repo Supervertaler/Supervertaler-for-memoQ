@@ -83,8 +83,9 @@ $claude = Ids ($curated.Invoke($null, [object[]]@($anthropic)))
 Check ($claude -contains 'claude-fable-5-1') "Fable 5.1 is on the short list"
 Check ($claude -notcontains 'claude-fable-5') "Fable 5 is gone, superseded"
 $gpt = Ids ($curated.Invoke($null, [object[]]@($openai)))
-Check ($gpt -contains 'gpt-5.6-sol') "GPT-5.6 Sol is on the short list"
-Check ($gpt -notcontains 'gpt-5.5') "GPT-5.5 is gone, superseded by 5.6 Sol"
+Check ($gpt -contains 'gpt-6.1-sol') "GPT-6.1 Sol is on the short list"
+Check ($gpt -notcontains 'gpt-5.6-sol') "GPT-5.6 Sol is gone, superseded by the GPT-6 tiers"
+Check ($gpt -notcontains 'gpt-5.5') "GPT-5.5 is gone too"
 
 # ---- 4. the dropdown label ----------------------------------------------
 # The name with its verdict after it, because a name alone is what made the old
@@ -267,9 +268,11 @@ try {
     Check ($keyBox.Text -ne 'typed-for-anthropic') `
         "switching provider does not leave the old provider's key in the box: '$($keyBox.Text)'"
 
-    $firstOpenAi = (Ids ($curated.Invoke($null, [object[]]@($openai))))[0]
+    # The provider's named default, not the list's first entry: the OpenAI list
+    # is ordered most capable first, which puts the most expensive model on top.
+    $defaultOpenAi = $plugin.GetType('Supervertaler.MemoQ.Core.ModelCatalog').GetMethod('DefaultModelId').Invoke($null, @($openai))
     $chosen = $settingsFormT.GetMethod('ChosenModelId', $Instance).Invoke($settingsForm, @())
-    Check ($chosen -eq $firstOpenAi) "and moves the model to the new provider's first recommendation: $chosen"
+    Check ($chosen -eq $defaultOpenAi -and $chosen -eq 'gpt-6.1-sol') "and moves the model to the new provider's default: $chosen"
 
     $providerBox.SelectedItem = $anthropic
     Check ($keyBox.Text -eq 'typed-for-anthropic') "a key typed for a provider comes back on returning to it"

@@ -48,7 +48,7 @@ namespace Supervertaler.MemoQ.Core
                 {
                     Available = false,
                     Root = root,
-                    Note = "No memory banks found under " + root + "."
+                    Note = WithTeamFolder("No memory banks found under " + root + ".")
                 };
             }
 
@@ -71,12 +71,25 @@ namespace Supervertaler.MemoQ.Core
                 Root = root,
                 ActiveBank = string.IsNullOrWhiteSpace(activeBank) ? null : activeBank,
                 Banks = banks,
-                Note = string.IsNullOrWhiteSpace(activeBank)
+                Note = WithTeamFolder(string.IsNullOrWhiteSpace(activeBank)
                     ? "No bank is selected for this project, so name the one you want in the bank argument. "
                     + "Do not guess: a bank supplies client-specific terminology and style, and the wrong one "
                     + "is worse than none."
-                    : null
+                    : null)
             };
+        }
+
+        /// <summary>
+        /// <paramref name="note"/> led by a warning when a team folder is set but
+        /// not in use: these are then the user's own banks, not the team's, and
+        /// the assistant should say so rather than present them as the team's.
+        /// </summary>
+        private static string WithTeamFolder(string note)
+        {
+            if (!TeamFolderStatus.FellBack) return note;
+            var warning = "WARNING: " + TeamFolderStatus.Line()
+                + " Tell the user: these are their own memory banks, not the team's.";
+            return note == null ? warning : warning + " " + note;
         }
 
         private static int CountArticles(string bankName)
