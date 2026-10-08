@@ -140,7 +140,7 @@ namespace Supervertaler.MemoQ.Core
                     return _cache;
 
                 var map = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
-                foreach (var raw in File.ReadAllLines(path, Encoding.UTF8))
+                foreach (var raw in SettingsFile.ReadAllLines(path))
                 {
                     var line = raw.TrimStart('﻿').Trim();
                     if (line.Length == 0 || line[0] == '#') continue;
@@ -188,7 +188,7 @@ namespace Supervertaler.MemoQ.Core
                 sb.Append(pair.Key).Append('=').AppendLine(pair.Value);
             }
 
-            File.WriteAllText(Path, sb.ToString(), new UTF8Encoding(false));
+            SettingsFile.WriteAllText(Path, sb.ToString(), byteOrderMark: false);
 
             // Adopt what was just written rather than forcing the next reader to
             // parse it back.

@@ -6,6 +6,12 @@ matches the Supervertaler for Trados changelog – one bold headline per bullet,
 a ★ on the things a release would be announced for – so the two read alike and
 any release tooling that buckets on these headings works for both.
 
+## [Unreleased]
+
+### Fixed
+
+- **Settings could be lost when memoQ and the editor saved at the same moment.** Both read and write the same settings files – the chosen prompt, Claude Desktop mode, termbases, memory bank – and a file read while the other was saving could fail, or be saved back incomplete, quietly dropping settings. Every settings file is now saved in one step, so the other side always reads either the old file or the new one, whole.
+
 ## [0.1.9] – 2026-10-08
 
 ### Added

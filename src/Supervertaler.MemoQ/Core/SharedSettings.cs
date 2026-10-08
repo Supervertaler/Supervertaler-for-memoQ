@@ -373,7 +373,7 @@ namespace Supervertaler.MemoQ.Core
                         var stamp = File.GetLastWriteTimeUtc(path);
                         if (_instructions == null || stamp != _instructionsStamp)
                         {
-                            _instructions = File.ReadAllText(path, Encoding.UTF8);
+                            _instructions = SettingsFile.ReadAllText(path);
                             _instructionsStamp = stamp;
                         }
                     }
@@ -396,7 +396,7 @@ namespace Supervertaler.MemoQ.Core
         {
             try
             {
-                File.WriteAllText(InstructionsPath, value ?? string.Empty, new UTF8Encoding(false));
+                SettingsFile.WriteAllText(InstructionsPath, value ?? string.Empty, byteOrderMark: false);
                 lock (_lock)
                 {
                     _instructions = null;
@@ -517,7 +517,7 @@ namespace Supervertaler.MemoQ.Core
                             var stamp = File.GetLastWriteTimeUtc(path);
                             if (_map == null || stamp != _stamp)
                             {
-                                _map = Parse(File.ReadAllText(path, Encoding.UTF8));
+                                _map = Parse(SettingsFile.ReadAllText(path));
                                 _stamp = stamp;
                             }
                         }
@@ -553,7 +553,7 @@ namespace Supervertaler.MemoQ.Core
                 try
                 {
                     var path = Path;
-                    var existing = File.Exists(path) ? File.ReadAllText(path, Encoding.UTF8) : string.Empty;
+                    var existing = File.Exists(path) ? SettingsFile.ReadAllText(path) : string.Empty;
 
                     var sb = new StringBuilder();
                     var replaced = false;
@@ -572,7 +572,9 @@ namespace Supervertaler.MemoQ.Core
 
                     if (!replaced) sb.Append(key).Append('=').Append(value ?? string.Empty).Append("\r\n");
 
-                    File.WriteAllText(path, sb.ToString(), Encoding.UTF8);
+                    // Swapped in whole: the other process reads this file too, and
+                    // a half-written one read back here would be saved as the whole.
+                    SettingsFile.WriteAllText(path, sb.ToString(), byteOrderMark: true);
 
                     // Force the next read to re-parse rather than wait out the
                     // freshness interval: the writer expects to see its own value.

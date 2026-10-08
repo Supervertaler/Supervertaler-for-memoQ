@@ -102,7 +102,7 @@ namespace Supervertaler.MemoQ.Core
                 try
                 {
                     if (File.Exists(CachePath))
-                        _known = Deserialize<ReleaseInfo>(File.ReadAllText(CachePath, Encoding.UTF8));
+                        _known = Deserialize<ReleaseInfo>(SettingsFile.ReadAllText(CachePath));
                 }
                 catch { /* a torn or foreign file is just no answer */ }
                 return _known;
@@ -118,17 +118,15 @@ namespace Supervertaler.MemoQ.Core
             }
             try
             {
-                Directory.CreateDirectory(SharedSettings.Directory);
-                var temp = CachePath + "." + Guid.NewGuid().ToString("N") + ".tmp";
-                File.WriteAllText(temp, Serialize(info), Encoding.UTF8);
-                if (File.Exists(CachePath)) File.Replace(temp, CachePath, null);
-                else File.Move(temp, CachePath);
+                // File.Replace, used before, refuses outright while anyone has the
+                // file open - and the plugin and the editor both read it.
+                SettingsFile.WriteAllText(CachePath, Serialize(info), byteOrderMark: true);
             }
             catch
             {
-                // Another process replacing it at the same moment wrote the same
-                // answer. Leave no temp file behind either way.
-                try { foreach (var f in Directory.GetFiles(SharedSettings.Directory, "update-check.json.*.tmp")) File.Delete(f); } catch { }
+                // Not written: the previous answer stands, and the next check
+                // writes again. AtomicFile leaves no temporary file behind; the
+                // old sweep here also deleted other processes' writes in flight.
             }
         }
 

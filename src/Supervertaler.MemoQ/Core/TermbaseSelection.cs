@@ -263,7 +263,7 @@ namespace Supervertaler.MemoQ.Core
                     var flags = new Dictionary<long, Flags>();
                     var read = new Dictionary<string, List<long>>(StringComparer.OrdinalIgnoreCase);
 
-                    foreach (var raw in File.ReadAllLines(Path, Encoding.UTF8))
+                    foreach (var raw in SettingsFile.ReadAllLines(Path))
                     {
                         var line = (raw ?? "").Trim();
                         if (line.Length == 0 || line[0] == '#') continue;
@@ -369,13 +369,11 @@ namespace Supervertaler.MemoQ.Core
                     sb.Append("read\t").Append(pair.Key).Append('\t')
                       .AppendLine(string.Join(",", pair.Value.Select(i => i.ToString(CultureInfo.InvariantCulture))));
 
-                // Written beside and moved into place: the plugin may be reading
-                // this file while the editor saves it, and a half-written file is
-                // a forgotten selection rather than a parse error.
-                var temp = Path + ".tmp";
-                File.WriteAllText(temp, sb.ToString(), new UTF8Encoding(false));
-                if (File.Exists(Path)) File.Delete(Path);
-                File.Move(temp, Path);
+                // Swapped in whole: the plugin may be reading this file while the
+                // editor saves it, and a half-written file is a forgotten selection
+                // rather than a parse error. (Delete-then-move, as before, left a
+                // moment with no file at all - the same forgotten selection.)
+                SettingsFile.WriteAllText(Path, sb.ToString(), byteOrderMark: false);
 
                 var file = new FileInfo(Path);
                 _length = file.Length;
