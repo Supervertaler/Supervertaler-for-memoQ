@@ -87,6 +87,13 @@ findings 2026-09-02.md`. The facts below change how this plugin must be written.
 - `IEnvironment.BuildWordsOfSegment` is memoQ's own tokeniser.
 - `TerminologyResult` also carries `Confidence` (0–101, 101 = exact with
   context), `ExternalId` and four metadata lists memoQ renders itself.
+- **`PluginConfigured` is asked once per language pair per session.** On the
+  first term lookup for a pair, memoQ builds that pair's engine list from the
+  plugins answering yes and keeps it until it closes; only
+  `IEnvironment.PluginAvailabilityChanged()` or toggling Enable plugin clears it
+  (`TBAddinManager.getEnginesForLanguages`, same in memoQ 11 and 12). So it must
+  never depend on per-project state: answering "this project has no termbases"
+  shut the plugin out until a restart (fixed 2026-10-10). Ours is always true.
 
 **TM SDK**
 

@@ -6,6 +6,12 @@ matches the Supervertaler for Trados changelog – one bold headline per bullet,
 a ★ on the things a release would be announced for – so the two read alike and
 any release tooling that buckets on these headings works for both.
 
+## [Unreleased]
+
+### Fixed
+
+- **Termbase hits could stay missing until memoQ was restarted.** memoQ decides once per session whether to use Supervertaler's terminology, at its first term lookup, and Supervertaler said no whenever the project it was following had no termbases ticked – early in a session, that can still be the previous project. A termbase ticked afterwards then gave no highlights and no hits, however often the project was reopened. Supervertaler now always takes part, and a termbase you tick shows its terms on the next segment you land on, with memoQ left open. In *Options › Terminology plugins*, *Supervertaler terms* no longer reads *Not configured*.
+
 ## [0.1.10] – 2026-10-08
 
 ### Fixed

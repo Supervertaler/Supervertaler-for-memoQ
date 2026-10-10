@@ -184,12 +184,18 @@ done
 # build, so it is always newer than the output and would trip this on principle.
 # The two standalone exes are pruned too: their sources never enter the DLL,
 # so an edit to the preview tool must not read as "the plugin is stale".
-STALE="$(find "$ROOT/src" \( -path '*/obj' -o -path '*/Supervertaler.PromptEditor' -o -path '*/Supervertaler.MemoQ.Preview' \) -prune -o     \( -name '*.cs' -o -name '*.csproj' \) -newer "$OUTPUT" -print -quit)"
-if [[ -n "$STALE" ]]; then
-    echo "ERROR: $(basename "$OUTPUT") is older than $STALE" >&2
-    echo "       The build produced no fresh output — refusing to deploy a stale DLL." >&2
-    exit 1
-fi
+# So is the terminology provider, which has its own DLL and is checked against
+# its own folder below: a fix made only there leaves the MT plugin rightly
+# untouched, and judging that DLL by it refused every such build.
+STALE="$(find "$ROOT/src" \( -path '*/obj' -o -path '*/Supervertaler.PromptEditor' -o -path '*/Supervertaler.MemoQ.Preview' -o -path '*/Supervertaler.MemoQ.Terms' \) -prune -o     \( -name '*.cs' -o -name '*.csproj' \) -newer "$OUTPUT" -print -quit)"
+STALE_TB="$(find "$ROOT/src/Supervertaler.MemoQ.Terms" -path '*/obj' -prune -o \( -name '*.cs' -o -name '*.csproj' \) -newer "$OUTPUT_TB" -print -quit)"
+for pair in "$OUTPUT|$STALE" "$OUTPUT_TB|$STALE_TB"; do
+    if [[ -n "${pair#*|}" ]]; then
+        echo "ERROR: $(basename "${pair%%|*}") is older than ${pair#*|}" >&2
+        echo "       The build produced no fresh output — refusing to deploy a stale DLL." >&2
+        exit 1
+    fi
+done
 
 # --- smoke test -------------------------------------------------------------
 # The smoke test builds an engine, which seeds the shared settings file from the

@@ -6,6 +6,7 @@
 $ErrorActionPreference = 'Stop'
 $MemoQPath = 'C:\Program Files\memoQ\memoQ-12'
 $PluginDll = 'D:\SynologyDrive\Dev\Sv\Supervertaler-for-memoQ\src\Supervertaler.MemoQ\bin\Release\Supervertaler.MemoQ.dll'
+$TermsDll = 'D:\SynologyDrive\Dev\Sv\Supervertaler-for-memoQ\src\Supervertaler.MemoQ.Terms\bin\Release\Supervertaler.MemoQ.Terms.dll'
 
 $script:probed = @{}
 [AppDomain]::CurrentDomain.add_AssemblyResolve([System.ResolveEventHandler] {
@@ -73,8 +74,17 @@ function Save($project, $readIds, $flags) {
     $sel.GetMethod('Save', $NonPublicStatic).Invoke($null, $a)
 }
 
+# The terminology provider. memoQ asks it PluginConfigured once per language
+# pair per session and keeps the answer until it closes, so a "no" given while
+# a project had nothing ticked shut the provider out until a restart - ticking a
+# termbase mid-session then did nothing. Whatever the selection says, the answer
+# must be yes; an empty selection is answered per lookup, with no hits.
+$tbDirector = [Activator]::CreateInstance(
+    [Reflection.Assembly]::LoadFrom($TermsDll).GetType('Supervertaler.MemoQ.SupervertalerTBPluginDirector'))
+
 # -- nothing chosen yet ------------------------------------------------------
 Check 'no file means no termbases, not all of them' ((ReadFor $projectA).Count -eq 0)
+Check 'the terminology provider is configured with nothing ticked' ($tbDirector.PluginConfigured -eq $true)
 
 # -- a selection round-trips -------------------------------------------------
 $flags = @(
@@ -112,6 +122,7 @@ Check 'without disturbing the first' ((ReadFor $projectA).Count -eq 3)
 Set-Content -Path $path -Value "this is not`tthe format`nread`tnonsense" -Encoding UTF8
 $damaged = ReadFor $projectA
 Check 'a damaged file yields nothing rather than throwing' ($damaged.Count -eq 0)
+Check 'and leaves the terminology provider configured' ($tbDirector.PluginConfigured -eq $true)
 
 # And it recovers: writing again replaces the wreckage.
 Save $projectA @(13) $flags

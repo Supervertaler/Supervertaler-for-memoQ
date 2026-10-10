@@ -63,32 +63,24 @@ namespace Supervertaler.MemoQ
         public override bool IsActivated => _activated;
 
         /// <summary>
-        /// memoQ hides an unconfigured provider rather than offering something that
-        /// cannot work - so this is true whenever the project has termbases ticked
-        /// Read. There was once a second source, a glossary file, and for a day
-        /// this asked only about that, which left a project with termbases and no
-        /// file never offered the provider at all.
+        /// Always true. Whether a project has termbases is answered per lookup,
+        /// never here.
+        ///
+        /// <para>memoQ asks this once per language pair per session: on the first
+        /// term lookup for a pair it builds the engine list from the plugins that
+        /// say yes, and keeps that list until memoQ closes
+        /// (TBAddinManager.getEnginesForLanguages, the same in memoQ 11 and 12).
+        /// This used to answer "does the current project have termbases ticked?",
+        /// so a project opened with none - or one opened after such a project,
+        /// since the plugin learns which project is open only once memoQ tells it
+        /// something - shut the plugin out until memoQ restarted. Ticking a termbase mid-session then
+        /// did nothing at all, and the visited-row capture in Lookup, which the
+        /// AI assistant reads, went quiet with it.</para>
+        ///
+        /// <para>The plugin can always work: a project with nothing ticked gets no
+        /// hits, at the cost of a lock and a clock check per row.</para>
         /// </summary>
-        public override bool PluginConfigured => AnyTermbaseSelected;
-
-        /// <summary>
-        /// Whether this project has termbases ticked. Never throws: this is asked
-        /// while memoQ builds its list of providers.
-        /// </summary>
-        private static bool AnyTermbaseSelected
-        {
-            get
-            {
-                try
-                {
-                    return TermbaseSelection.ReadFor(CurrentProject).Count > 0;
-                }
-                catch
-                {
-                    return false;
-                }
-            }
-        }
+        public override bool PluginConfigured => true;
 
         /// <summary>
         /// The memoQ project in force, as the MT engine last recorded it. The TB
