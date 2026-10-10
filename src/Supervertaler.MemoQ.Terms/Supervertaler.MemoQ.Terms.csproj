@@ -31,7 +31,7 @@
     <Company>Supervertaler</Company>
     <Description>Supervertaler for memoQ — terminology provider</Description>
     <Copyright>Copyright (c) 2026 Michael Beijer</Copyright>
-    <Version>0.1.10</Version>
+    <Version>0.1.11</Version>
   </PropertyGroup>
 
   <PropertyGroup>
