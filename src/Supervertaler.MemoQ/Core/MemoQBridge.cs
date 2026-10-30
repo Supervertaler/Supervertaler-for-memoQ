@@ -1062,18 +1062,23 @@ namespace Supervertaler.MemoQ.Core
             var req = Read<AutoPromptRequest>(ctx) ?? new AutoPromptRequest();
             var context = _context;
             var general = context?.General;
-            var apiKey = context?.ApiKey;
 
-            if (general == null || (Settings.LlmProviders.NeedsKey(general.Provider) && string.IsNullOrWhiteSpace(apiKey)))
+            // A missing key, or one this computer cannot unlock, is said here rather
+            // than sent to the provider blank (ApiKeys.ForRequest).
+            var key = general == null ? default(ApiKeys.Resolved) : context.ResolveApiKey(general.Provider);
+            if (general == null || key.Problem != null || (Settings.LlmProviders.NeedsKey(general.Provider) && !key.HasKey))
             {
                 TryWrite(ctx, 409, Json(new ErrorBody
                 {
-                    Error = "No API key is configured in memoQ's Supervertaler settings. "
+                    Error = key.Problem != null
+                        ? key.Problem + " AutoPrompt uses the plugin's provider and key."
+                        : "No API key is configured in memoQ's Supervertaler settings. "
                           + "AutoPrompt uses the plugin's provider and key; set them under "
                           + "Resource console > MT settings > Supervertaler > Configure plugin."
                 }));
                 return;
             }
+            var apiKey = key.Key;
 
             var doc = ResolveAutoPromptSource(req.Document);
             if (doc.Sources.Count == 0)
@@ -1407,7 +1412,8 @@ namespace Supervertaler.MemoQ.Core
 
             try
             {
-                var plan = PlanAutoPrompt(req, doc, general, context.ApiKey, mayClassify: false);
+                // No key: a preview makes no request, so it never classifies.
+                var plan = PlanAutoPrompt(req, doc, general, null, mayClassify: false);
 
                 TryWrite(ctx, 200, Json(new AutoPromptPreviewResponse
                 {
@@ -1664,13 +1670,14 @@ namespace Supervertaler.MemoQ.Core
             var req = Read<AutoPromptRequest>(ctx) ?? new AutoPromptRequest();
             var context = _context;
             var general = context?.General;
-            var apiKey = context?.ApiKey;
 
-            if (general == null || (Settings.LlmProviders.NeedsKey(general.Provider) && string.IsNullOrWhiteSpace(apiKey)))
+            var key = general == null ? default(ApiKeys.Resolved) : context.ResolveApiKey(general.Provider);
+            if (general == null || key.Problem != null || (Settings.LlmProviders.NeedsKey(general.Provider) && !key.HasKey))
             {
-                TryWrite(ctx, 409, Json(new ErrorBody { Error = "No API key is configured in memoQ's Supervertaler settings." }));
+                TryWrite(ctx, 409, Json(new ErrorBody { Error = key.Problem ?? "No API key is configured in memoQ's Supervertaler settings." }));
                 return;
             }
+            var apiKey = key.Key;
 
             var doc = ResolveAutoPromptSource(req.Document);
             if (doc.Sources.Count == 0)

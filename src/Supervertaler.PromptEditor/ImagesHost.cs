@@ -474,6 +474,8 @@ namespace Supervertaler.PromptEditor
             var model = (SharedSettings.ModelOr("") ?? "").Trim();
             if (model.Length == 0) { Say("No model is chosen. Pick one under Settings first."); return; }
             var key = ApiKeys.Resolve(provider, null);
+            // A stored key this computer cannot unlock is said in core's words, never sent blank.
+            if (key.Problem != null) { Say(key.Problem); return; }
             if (LlmProviders.NeedsKey(provider) && !key.HasKey) { Say("No API key for " + provider + ". Enter one under Settings first."); return; }
             var endpoint = (SharedSettings.EndpointOr("") ?? "").Trim();
 

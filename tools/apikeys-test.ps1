@@ -6,13 +6,23 @@
 # Passing the user-facing word through unmapped reads somebody else's key and
 # fails with a message about the key being invalid.
 #
-# The second is this harness. The key file is the user's real one, in their
-# real data folder - there is no test copy - so every path that could write it
-# must be inert under SUPERVERTALER_HARNESS. That is asserted here against the
-# file itself, not against the flag.
+# The second is this harness. The key files are the user's real ones - the plain
+# file in their data folder and, since core's step 1 of
+# docs/design/api-key-protection.md, the locked file in their profile - so every
+# path that could write them must be inert under SUPERVERTALER_HARNESS. That is
+# asserted here against the files themselves, not against the flag. Section 4,
+# which has to write, writes copies in a temporary folder: the locked file is
+# redirected before anything else runs, and the data root before section 4,
+# because redirecting the data root does not move the locked file.
+#
+#   powershell -NoProfile -File tools\run-harness.ps1 -Harness tools\apikeys-test.ps1
+#
+# The key handling itself - unreadable keys, the sync, the dialogs - is
+# tools\apikeys-lock-test.ps1.
 $ErrorActionPreference = 'Stop'
 $MemoQPath = 'C:\Program Files\memoQ\memoQ-12'
-$PluginDll = 'D:\SynologyDrive\Dev\Sv\Supervertaler-for-memoQ\src\Supervertaler.MemoQ\bin\Release\Supervertaler.MemoQ.dll'
+# Its own checkout, so a worktree's run tests that worktree's build.
+$PluginDll = "$PSScriptRoot\..\src\Supervertaler.MemoQ\bin\Release\Supervertaler.MemoQ.dll"
 
 $script:probed = @{}
 [AppDomain]::CurrentDomain.add_AssemblyResolve([System.ResolveEventHandler] {
@@ -52,6 +62,27 @@ function Check($ok, $label) {
     Write-Host "$(if ($ok) {'PASS'} else {'FAIL'}) $label"
 }
 
+# The real key files and their neighbours, by name, size and time - never their
+# contents, which are real keys. Compared again at the very end.
+function Stamp($path) {
+    $dir = Split-Path $path
+    if (-not (Test-Path -LiteralPath $dir)) { return '' }
+    (Get-ChildItem -LiteralPath $dir -Filter 'api-keys*' -Force -File | Sort-Object Name |
+        ForEach-Object { '{0}|{1}|{2}|{3}' -f $_.Name, $_.Length, $_.LastWriteTimeUtc.Ticks, $_.CreationTimeUtc.Ticks }) -join ';'
+}
+$path = $filePath.GetValue($null)
+$realLocked = $store.GetProperty('DefaultLockedFilePath', $Static).GetValue($null)
+$plainBefore = Stamp $path
+$lockedBefore = Stamp $realLocked
+
+# Before anything can save a key: core writes the locked file beside every save,
+# and it is in the profile, where no redirected data folder would move it.
+$tmp = Join-Path ([IO.Path]::GetTempPath()) ('sv-apikeys-' + [Guid]::NewGuid().ToString('N'))
+New-Item -ItemType Directory -Path $tmp | Out-Null
+$tmpLocked = Join-Path $tmp 'profile\api-keys.locked.json'
+$store.GetMethod('RedirectLockedFile', $Static).Invoke($null, @([string]$tmpLocked))
+if ($store.GetProperty('LockedFilePath', $Static).GetValue($null) -ne $tmpLocked) { throw "The locked key file could not be redirected; stopping before anything writes." }
+
 # ---- 1. the Google trap --------------------------------------------------
 Check ($coreKey.Invoke($null, [object[]]@($anthropic)) -eq 'claude') "Anthropic maps to claude"
 Check ($coreKey.Invoke($null, [object[]]@($openai)) -eq 'openai') "OpenAI maps to openai"
@@ -90,9 +121,6 @@ Check ($null -eq $checkShape.Invoke($null, [object[]]@('no-such-provider', 'what
     "a provider with no known shape accepts anything"
 
 # ---- 3. a harness never touches the real key file ------------------------
-$path = $filePath.GetValue($null)
-$before = if (Test-Path $path) { [IO.File]::ReadAllBytes($path) } else { $null }
-
 $resolved = $resolve.Invoke($null, [object[]]@($anthropic, 'from-the-resource'))
 $key = $resolved.GetType().GetField('Key').GetValue($resolved)
 $source = $resolved.GetType().GetField('Source').GetValue($resolved)
@@ -101,11 +129,8 @@ Check ([string]::IsNullOrEmpty($key)) "resolving under a harness yields no key: 
 Check ($remember.Invoke($null, [object[]]@($anthropic, 'sk-ant-harness-must-not-write-this'))) `
     "remembering a key under a harness reports success without writing"
 
-$after = if (Test-Path $path) { [IO.File]::ReadAllBytes($path) } else { $null }
-$same = if ($null -eq $before -and $null -eq $after) { $true }
-        elseif ($null -eq $before -or $null -eq $after) { $false }
-        else { -not (Compare-Object $before $after) }
-Check $same "the real key file is byte-identical after all of that"
+Check ((Stamp $path) -ceq $plainBefore) "the real key file is untouched after all of that"
+Check (-not (Test-Path -LiteralPath $tmpLocked)) "  and nothing reached even the redirected locked file"
 
 # And it is genuinely the shared file, in the shared place, rather than a copy
 # somewhere only memoQ looks.
@@ -118,13 +143,17 @@ Check ($null -eq $storeGet.Invoke($null, [object[]]@('no-such-provider'))) "an u
 # failed save - because a dialog saves every field whether or not it was
 # touched, so the commonest case of all is writing the value already there.
 #
-# There is no test copy of this file, so it is snapshotted and put back. The
-# provider id is one no product uses; the real entries are checked untouched
-# before the restore, which is the property that matters.
+# In a temporary data folder, with a made-up key standing in for a real entry:
+# until core's step 1 this wrote the user's own file and put it back afterwards,
+# and a save in memoQ in between would have been lost.
 $store_set = $store.GetMethod('Set', $Static)
 $probe = 'sv-harness-probe'
 
-$snapshot = if (Test-Path $path) { [IO.File]::ReadAllBytes($path) } else { $null }
+$plugin.GetType('Supervertaler.Core.SupervertalerPaths').GetMethod('Set', $Static).Invoke($null, @([string](Join-Path $tmp 'data')))
+$tmpPlain = $filePath.GetValue($null)
+if (-not ([string]$tmpPlain).StartsWith($tmp)) { throw "The data folder could not be redirected; stopping before anything writes." }
+New-Item -ItemType Directory -Path (Split-Path $tmpPlain) -Force | Out-Null
+[IO.File]::WriteAllText($tmpPlain, "{`r`n  `"claude`": `"sk-ant-test-standing-entry`"`r`n}`r`n", (New-Object Text.UTF8Encoding $false))
 $realBefore = $storeGet.Invoke($null, [object[]]@('claude'))
 
 try {
@@ -145,21 +174,19 @@ try {
 
     # The whole file is rewritten on every Set, so the entries this harness never
     # named are the ones at risk.
-    Check ($storeGet.Invoke($null, [object[]]@('claude')) -eq $realBefore) `
+    Check ($realBefore -eq 'sk-ant-test-standing-entry' -and $storeGet.Invoke($null, [object[]]@('claude')) -eq $realBefore) `
         "a write for one provider leaves the others alone"
+
+    # Core's step 1: every save is also locked, to the redirected locked file.
+    Check ((Test-Path -LiteralPath $tmpLocked) -and -not ([IO.File]::ReadAllText($tmpLocked)).Contains('second-value')) `
+        "the saves went to the redirected locked file too, locked rather than in clear text"
 }
 finally {
-    # Unconditionally, and before anything else can fail: this is the user's own
-    # key file, and there is no second copy of it anywhere.
-    if ($null -ne $snapshot) { [IO.File]::WriteAllBytes($path, $snapshot) }
-    elseif (Test-Path $path) { Remove-Item $path -Force }
+    Remove-Item -LiteralPath $tmp -Recurse -Force -ErrorAction SilentlyContinue
 }
 
-$restored = if (Test-Path $path) { [IO.File]::ReadAllBytes($path) } else { $null }
-$intact = if ($null -eq $snapshot -and $null -eq $restored) { $true }
-          elseif ($null -eq $snapshot -or $null -eq $restored) { $false }
-          else { -not (Compare-Object $snapshot $restored) }
-Check $intact "the key file is byte-identical to how the harness found it"
+Check ((Stamp $path) -ceq $plainBefore) "the real plain key file and its neighbours are untouched ($path)"
+Check ((Stamp $realLocked) -ceq $lockedBefore) "the real locked key file and its neighbours are untouched ($realLocked)"
 
 Write-Host ''
 Write-Host "API KEYS TEST COMPLETE - $fails failure(s)"

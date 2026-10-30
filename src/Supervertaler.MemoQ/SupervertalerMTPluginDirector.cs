@@ -52,6 +52,11 @@ namespace Supervertaler.MemoQ
             Core.TermbaseDb.ErrorSink = PluginLog.Write;
             Core.TermbaseSelection.ErrorSink = PluginLog.Write;
 
+            // What core does not show the translator about the key files: an entry
+            // Windows will not unlock and its error code, a damaged file set aside,
+            // a locked write that failed. Never a key.
+            global::Supervertaler.Core.ApiKeyStore.Log = PluginLog.Write;
+
             _moduleEnvironment = environment;
             _activated = true;
             PluginLog.Write("Initialize: settings directory = "

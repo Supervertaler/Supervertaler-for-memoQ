@@ -17,10 +17,8 @@ namespace Supervertaler.PromptEditor
     /// through Project home and a right-click on a provider in a list of thirty.
     /// This window is a program you can pin to the taskbar.
     ///
-    /// The API key is deliberately absent. memoQ keeps it in its own encrypted
-    /// settings, and moving it here means either putting a key in a plain text
-    /// file or encrypting it ourselves, which is a decision to take on its own
-    /// rather than as a side effect of tidying a dialog.
+    /// The API key box reads and writes the keys every Supervertaler product
+    /// shares (see <see cref="ApiKeys"/>), exactly as memoQ's own dialog does.
     /// </summary>
     internal sealed class SettingsForm : Form
     {
@@ -43,8 +41,36 @@ namespace Supervertaler.PromptEditor
         private readonly TextBox _apiKey = new TextBox();
         private Label _apiKeySource;
 
+        /// <summary>
+        /// Core's note for each provider whose shared key this Windows account
+        /// cannot unlock, as it stood when the window opened. Shown under the key
+        /// box in place of where the key came from, since the box is then empty.
+        /// </summary>
+        private readonly Dictionary<string, string> _unreadable =
+            new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+
+        /// <summary>That a damaged locked key file was set aside (core's wording), once; else null.</summary>
+        private readonly string _syncNotice;
+
+        /// <summary>What to say under an empty key box for this provider, or null.</summary>
+        private string KeyProblem(string provider)
+        {
+            _unreadable.TryGetValue(provider, out var note);
+            if (note == null) return _syncNotice;
+            return _syncNotice == null ? note : note + Environment.NewLine + _syncNotice;
+        }
+
         public SettingsForm()
         {
+            // Before the layout, which makes room for them: what the start-up sync
+            // had to say, and each provider whose shared key cannot be read here.
+            _syncNotice = ApiKeys.TakeSyncNotice();
+            foreach (var provider in LlmProviders.All)
+            {
+                var note = ApiKeys.UnreadableNote(provider);
+                if (note != null) _unreadable[provider] = note;
+            }
+
             // The shell's own dialog font, before anything else is built: every
             // control created below inherits it. See Ui.Default.
             Font = Ui.Default;
@@ -358,7 +384,12 @@ namespace Supervertaler.PromptEditor
             _apiKey.TextChanged += (s, e) => ShowKeyShape();
             Controls.Add(_apiKey);
             y += 26;
-            _apiKeySource = Hint(string.Empty, fieldX, wide);
+            // Laid out at the height of the longest note it may have to show, so a
+            // key that cannot be read here is explained in full, not cut off; with
+            // none, one line as before.
+            var longest = LlmProviders.All.Select(KeyProblem).Where(p => p != null)
+                .OrderByDescending(p => p.Length).FirstOrDefault();
+            _apiKeySource = Hint(longest ?? string.Empty, fieldX, wide);
             y += 6;
             Hint("Leave it as it is to keep using the key shown. Supervertaler for Trados keeps its keys "
                 + "in the same data folder, so a key rotated there is picked up here.", fieldX, wide);
@@ -622,10 +653,20 @@ namespace Supervertaler.PromptEditor
             return typed;
         }
 
+        /// <summary>
+        /// The key typed, or the one in force. A stored key this computer cannot
+        /// unlock throws with core's note instead of being sent blank, which the
+        /// provider would answer as a wrong key; Fetch list shows the message.
+        /// </summary>
         private string ApiKeyInUse()
         {
             var typed = _apiKey.Text.Trim();
-            return typed.Length > 0 ? typed : ApiKeys.Resolve(Provider, null).Key;
+            if (typed.Length > 0) return typed;
+
+            var resolved = ApiKeys.Resolve(Provider, null);
+            if (resolved.Problem != null)
+                throw new InvalidOperationException(ApiKeys.UnreadableNote(Provider) ?? resolved.Problem);
+            return resolved.Key;
         }
 
         /// <summary>The provider the key box is currently showing a key for.</summary>
@@ -654,19 +695,25 @@ namespace Supervertaler.PromptEditor
             {
                 _apiKey.Text = typed;
                 _apiKeySource.Text = "Key typed here, in place of the one "
-                    + (inherited.HasKey ? inherited.Source : "that is not set");
+                    + (inherited.HasKey ? inherited.Source
+                        : inherited.Problem != null ? "that cannot be read on this computer" : "that is not set");
                 _apiKeySource.ForeColor = SystemColors.GrayText;
                 ShowKeyShape();
                 return;
             }
 
             _apiKey.Text = inherited.Key;
-            _apiKeySource.ForeColor = SystemColors.GrayText;
-            _apiKeySource.Text = inherited.HasKey
-                ? "Key in use: " + inherited.Source
-                : LlmProviders.NeedsKey(provider)
-                    ? "No API key is set for " + provider + "."
-                    : ProviderText.KeyNote(provider);
+
+            // An empty box over a key that cannot be read here says so, in core's
+            // words, rather than "not set": it is set, and is kept until replaced.
+            var problem = inherited.HasKey ? null : KeyProblem(provider);
+            _apiKeySource.ForeColor = problem != null ? Color.Firebrick : SystemColors.GrayText;
+            _apiKeySource.Text = problem
+                ?? (inherited.HasKey
+                    ? "Key in use: " + inherited.Source
+                    : LlmProviders.NeedsKey(provider)
+                        ? "No API key is set for " + provider + "."
+                        : ProviderText.KeyNote(provider));
 
             ShowKeyShape();
         }

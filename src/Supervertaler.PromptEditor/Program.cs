@@ -66,6 +66,10 @@ namespace Supervertaler.PromptEditor
                 // no rotation.
                 Supervertaler.MemoQ.Core.Licence.Start(EditorLog);
 
+                // The same for the key files: an entry Windows will not unlock, a
+                // damaged file set aside, a locked write that failed. Never a key.
+                Supervertaler.Core.ApiKeyStore.Log = EditorLog;
+
                 // Before the window is built, so the library it shows already
                 // has the built-in prompts in it (see DefaultPrompts).
                 Supervertaler.MemoQ.Core.DefaultPrompts.Ensure(EditorLog);

@@ -127,11 +127,21 @@ namespace Supervertaler.MemoQ.Core
 
         public SupervertalerSettings Settings { get; }
         /// <summary>
-        /// The API key in force, from whichever of the three sources has one.
-        /// Consumers ask for this rather than reaching into the secure settings,
-        /// which now hold only the last of those sources.
+        /// The API key in force for a provider, from whichever of the three sources
+        /// has one, or the sentence to show when there is none to use. Consumers ask
+        /// for this rather than reaching into the secure settings, which now hold
+        /// only the last of those sources.
         /// </summary>
-        public string ApiKey => ApiKeys.Resolve(General.Provider, Settings.SecureSettings?.ApiKey).Key;
+        public ApiKeys.Resolved ResolveApiKey(string provider) => ApiKeys.Resolve(provider, Settings.SecureSettings?.ApiKey);
+
+        /// <summary>
+        /// The key for a request about to go to <paramref name="provider"/>. Throws
+        /// with the sentence memoQ shows under the grid when that provider needs a
+        /// key and has none this computer can use, so a blank key never reaches it
+        /// (<see cref="ApiKeys.ForRequest"/>). Asked where the client is made, with
+        /// the provider of the settings that client is made from.
+        /// </summary>
+        public string ApiKeyFor(string provider) => ApiKeys.ForRequest(provider, Settings.SecureSettings?.ApiKey);
 
         public string SourceLangCode { get; }
         public string TargetLangCode { get; }
@@ -1035,7 +1045,7 @@ namespace Supervertaler.MemoQ.Core
             {
                 var general = General;
                 using (var cancel = new CancellationTokenSource(TimeSpan.FromSeconds(90)))
-                using (var client = LlmProviders.CreateClient(general.Provider, general.Model, ApiKey, general.Endpoint))
+                using (var client = LlmProviders.CreateClient(general.Provider, general.Model, ApiKeyFor(general.Provider), general.Endpoint))
                 {
                     var user = global::Supervertaler.Core.BankExtract.SelectionUserPrompt(request);
                     var system = global::Supervertaler.Core.BankExtract.SelectionSystemPrompt;

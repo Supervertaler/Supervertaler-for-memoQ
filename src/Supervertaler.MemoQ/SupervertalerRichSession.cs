@@ -152,7 +152,6 @@ namespace Supervertaler.MemoQ
             // Same plan as a batch takes (#7); one segment is one lookup in it.
             var structure = StructureMarkers.PlanFor(context);
             StructureMarkers.LogOnce(structure);
-            var apiKey = context.ApiKey;
 
             var taggedSource = TagBridge.ToTaggedText(bundle.Source);
 
@@ -249,7 +248,10 @@ namespace Supervertaler.MemoQ
 
             // Supervertaler.Core's client, shared with the Trados plugin: the same
             // provider handling, model catalogue, pricing and usage accounting,
-            // rather than the ~250-line stub this replaces.
+            // rather than the ~250-line stub this replaces. The key is asked for
+            // only now - a staged or cached translation needs none - and a missing
+            // or unreadable one is said under the grid instead of being sent blank.
+            var apiKey = context.ApiKeyFor(general.Provider);
             using (var client = LlmProviders.CreateClient(general.Provider, general.Model, apiKey, general.Endpoint))
             {
                 var reply = await AskAsync(general, client, prompt.User, prompt.System, structure, cancellationToken, turn)

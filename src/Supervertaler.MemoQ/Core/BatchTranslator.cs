@@ -425,7 +425,6 @@ namespace Supervertaler.MemoQ.Core
                 ? segmentsPrompt
                 : built.User + Environment.NewLine + Environment.NewLine + segmentsPrompt;
 
-            var apiKey = context.ApiKey;
             var cacheKey = TranslationCache.Key(
                 general.Provider, general.Model, general.Endpoint, system, userPrompt);
 
@@ -439,10 +438,12 @@ namespace Supervertaler.MemoQ.Core
             }
             else
             {
-                // Before the gate below, not inside it: this refuses an unknown
-                // provider or an address-less server by throwing, and a throw
-                // between taking the gate and the finally that opens it again
-                // would leave every other batch of the run waiting for good.
+                // Before the gate below, not inside it: these refuse a missing or
+                // unreadable key, an unknown provider or an address-less server by
+                // throwing, and a throw between taking the gate and the finally
+                // that opens it again would leave every other batch of the run
+                // waiting for good. After the cache: a cached batch needs no key.
+                var apiKey = context.ApiKeyFor(general.Provider);
                 using (var client = LlmProviders.CreateClient(general.Provider, general.Model, apiKey, general.Endpoint))
                 {
                     // The first request of a run goes out alone (#5). Everything

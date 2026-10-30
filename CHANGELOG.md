@@ -6,6 +6,22 @@ matches the Supervertaler for Trados changelog – one bold headline per bullet,
 a ★ on the things a release would be announced for – so the two read alike and
 any release tooling that buckets on these headings works for both.
 
+## [Unreleased]
+
+### Added
+
+- **Your API keys are now also kept on this computer, locked to your Windows sign-in.** Every key is also saved in `C:\Users\<you>\AppData\Roaming\Supervertaler\api-keys.locked.json`, where only your Windows account on this computer can unlock it. Nothing changes yet in how you enter keys: `api-keys.json` in your Supervertaler data folder is still kept and used exactly as before, so Supervertaler for Trados, memoQ and Sidekick versions that have not been updated yet keep working. The first time Supervertaler needs a key after the update, it copies the keys from that file into the locked one. A later release will stop keeping the plain-text copy in the data folder; this one prepares for that, so that nobody has to type a key in again then.
+
+### Changed
+
+- **A key that can't be read on this computer is now said so, not sent.** If Supervertaler finds a key it cannot unlock – one saved under another Windows sign-in, or before your Windows password was reset – the key box in the settings stays empty with a note under it saying so, and a translation shows *Can't use your Anthropic key – it can't be read on this computer …* under the grid. It never tries an older key from memoQ's own settings instead, which the provider would only answer with "invalid key". Paste the key in again to fix it; the unreadable one is kept until you do. **Test connection** and **Fetch list** say the same.
+- **With no API key set at all, memoQ now shows *No API key is set for Anthropic* under the grid** instead of sending the provider a request without a key and showing its "invalid key" error.
+- **Gemini 4 Argon replaces Gemini 3.1 Pro (Preview) as the top Gemini model.** Anyone with 3.1 Pro already chosen keeps it, costed as before and still thinking at its lowest setting.
+
+### Fixed
+
+- **The shared key file can no longer be left empty by a crash or power cut during a save.** `api-keys.json` is now written as a new file that replaces the old one in a single step, instead of being emptied and written again in place.
+
 ## [0.1.28] – 2026-10-29
 
 ### Fixed

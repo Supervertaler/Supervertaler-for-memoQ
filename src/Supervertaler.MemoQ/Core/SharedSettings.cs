@@ -100,13 +100,22 @@ namespace Supervertaler.MemoQ.Core
             try { sink(message, ex); } catch { }
         }
 
+        /// <summary>
+        /// A test points this somewhere disposable, before anything reads the file.
+        /// Nothing in the product sets it: the key tests write legacy keys into this
+        /// file, and the one copy they must never touch is the user's.
+        /// </summary>
+        internal static string DirectoryOverride { get; set; }
+
         internal static string Directory
         {
             get
             {
-                var dir = System.IO.Path.Combine(
-                    Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
-                    "Supervertaler.memoQ");
+                var dir = !string.IsNullOrEmpty(DirectoryOverride)
+                    ? DirectoryOverride
+                    : System.IO.Path.Combine(
+                        Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
+                        "Supervertaler.memoQ");
                 System.IO.Directory.CreateDirectory(dir);
                 return dir;
             }

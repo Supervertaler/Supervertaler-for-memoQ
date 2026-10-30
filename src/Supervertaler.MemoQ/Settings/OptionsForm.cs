@@ -61,8 +61,37 @@ namespace Supervertaler.MemoQ.Settings
         public OptionsForm(SupervertalerSettings current)
         {
             Result = current ?? new SupervertalerSettings();
+
+            // Before the layout, which makes room for them: what the start-up sync
+            // had to say, and each provider whose shared key cannot be read here.
+            _syncNotice = ApiKeys.TakeSyncNotice();
+            foreach (var provider in LlmProviders.All)
+            {
+                var note = ApiKeys.UnreadableNote(provider);
+                if (note != null) _unreadable[provider] = note;
+            }
+
             BuildLayout();
             LoadFrom(Result);
+        }
+
+        /// <summary>
+        /// Core's note for each provider whose shared key this Windows account
+        /// cannot unlock, as it stood when the dialog opened. Shown under the key
+        /// box while the box is empty, which it is for such a key.
+        /// </summary>
+        private readonly Dictionary<string, string> _unreadable =
+            new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+
+        /// <summary>That a damaged locked key file was set aside (core's wording), once; else null.</summary>
+        private readonly string _syncNotice;
+
+        /// <summary>What to say under an empty key box for this provider, or null.</summary>
+        private string KeyProblem(string provider)
+        {
+            _unreadable.TryGetValue(provider, out var note);
+            if (note == null) return _syncNotice;
+            return _syncNotice == null ? note : note + Environment.NewLine + _syncNotice;
         }
 
         private void BuildLayout()
@@ -198,7 +227,20 @@ namespace Supervertaler.MemoQ.Settings
                 AutoSize = false, AutoEllipsis = true, ForeColor = Color.Firebrick
             };
             Controls.Add(_apiKeyNote);
-            y += 24;
+
+            // One line, unless a key cannot be read on this computer: core's note
+            // then says why and what to do, and it is read in full or not at all.
+            // Room is made only when there is such a note, measured at the font in
+            // use, so the dialog is laid out once and otherwise unchanged.
+            foreach (var provider in LlmProviders.All)
+            {
+                var problem = KeyProblem(provider);
+                if (problem == null) continue;
+                _apiKeyNote.Text = problem;
+                _apiKeyNote.Height = Math.Max(_apiKeyNote.Height, _apiKeyNote.GetPreferredSize(new Size(fieldW, 0)).Height);
+            }
+            _apiKeyNote.Text = string.Empty;
+            y += 24 + (_apiKeyNote.Height - 17);
 
             Caption("Endpoint", y);
             _endpoint.Left = fieldX; _endpoint.Top = y; _endpoint.Width = fieldW;
@@ -558,8 +600,13 @@ namespace Supervertaler.MemoQ.Settings
                 {
                     // memoQ's copy stays the cloud key it was while a local
                     // provider is chosen: it is the last fallback for that
-                    // provider, and the box now holds no key or a local one.
-                    ApiKey = LlmProviders.NeedsKey(CurrentProvider) ? _apiKey.Text.Trim() : _resourceApiKey
+                    // provider, and the box now holds no key or a local one. The
+                    // same while the box is empty because the shared key cannot be
+                    // read here: memoQ's own store is left as it was, as core keeps
+                    // that key, and it is never used in the shared key's place.
+                    ApiKey = LlmProviders.NeedsKey(CurrentProvider) && !EmptyOverUnreadable()
+                        ? _apiKey.Text.Trim()
+                        : _resourceApiKey
                 });
         }
 
@@ -893,9 +940,13 @@ namespace Supervertaler.MemoQ.Settings
         {
             if (_apiKeyNote == null) return;
 
-            var wrong = ApiKeys.CheckShape(CurrentProvider, _apiKey.Text.Trim());
-            _apiKeyNote.ForeColor = wrong != null ? Color.Firebrick : SystemColors.GrayText;
-            _apiKeyNote.Text = wrong ?? ProviderText.KeyNote(CurrentProvider);
+            // An empty box over a key that cannot be read here says so, in core's
+            // words; pasting a key in its place is what the note asks for.
+            var typed = _apiKey.Text.Trim();
+            var problem = ApiKeys.CheckShape(CurrentProvider, typed)
+                ?? (typed.Length == 0 ? KeyProblem(CurrentProvider) : null);
+            _apiKeyNote.ForeColor = problem != null ? Color.Firebrick : SystemColors.GrayText;
+            _apiKeyNote.Text = problem ?? ProviderText.KeyNote(CurrentProvider);
         }
 
         /// <summary>
@@ -1133,11 +1184,27 @@ namespace Supervertaler.MemoQ.Settings
             return typed;
         }
 
-        /// <summary>The key this dialog would translate with, typed or inherited.</summary>
+        /// <summary>
+        /// The key this dialog would translate with, typed or inherited. A stored
+        /// key this computer cannot unlock throws with core's note instead of being
+        /// sent blank, which the provider would answer as a wrong key; Test
+        /// connection and Fetch list both show the message.
+        /// </summary>
         private string ApiKeyInUse()
         {
             var typed = _apiKey.Text.Trim();
-            return typed.Length > 0 ? typed : ApiKeys.Resolve(CurrentProvider, ResourceKeyFor(CurrentProvider)).Key;
+            if (typed.Length > 0) return typed;
+
+            var resolved = ApiKeys.Resolve(CurrentProvider, ResourceKeyFor(CurrentProvider));
+            if (resolved.Problem != null)
+                throw new InvalidOperationException(ApiKeys.UnreadableNote(CurrentProvider) ?? resolved.Problem);
+            return resolved.Key;
+        }
+
+        /// <summary>The key box is empty because the shared key cannot be read here.</summary>
+        private bool EmptyOverUnreadable()
+        {
+            return _apiKey.Text.Trim().Length == 0 && _unreadable.ContainsKey(CurrentProvider);
         }
 
         /// <summary>
