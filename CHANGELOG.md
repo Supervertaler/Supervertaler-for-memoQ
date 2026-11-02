@@ -6,11 +6,11 @@ matches the Supervertaler for Trados changelog – one bold headline per bullet,
 a ★ on the things a release would be announced for – so the two read alike and
 any release tooling that buckets on these headings works for both.
 
-## [Unreleased]
+## [0.1.29] – 2026-11-02
 
 ### Added
 
-- **Your API keys are now also kept on this computer, locked to your Windows sign-in.** Every key is also saved in `C:\Users\<you>\AppData\Roaming\Supervertaler\api-keys.locked.json`, where only your Windows account on this computer can unlock it. Nothing changes yet in how you enter keys: `api-keys.json` in your Supervertaler data folder is still kept and used exactly as before, so Supervertaler for Trados, memoQ and Sidekick versions that have not been updated yet keep working. The first time Supervertaler needs a key after the update, it copies the keys from that file into the locked one. A later release will stop keeping the plain-text copy in the data folder; this one prepares for that, so that nobody has to type a key in again then.
+- ★ **Your API keys are now also kept on this computer, locked to your Windows sign-in.** Every key is also saved in `C:\Users\<you>\AppData\Roaming\Supervertaler\api-keys.locked.json`, where only your Windows account on this computer can unlock it. Nothing changes yet in how you enter keys: `api-keys.json` in your Supervertaler data folder is still kept and used exactly as before, so Supervertaler for Trados, memoQ and Sidekick versions that have not been updated yet keep working. The first time Supervertaler needs a key after the update, it copies the keys from that file into the locked one. A later release will stop keeping the plain-text copy in the data folder; this one prepares for that, so that nobody has to type a key in again then.
 
 ### Changed
 
