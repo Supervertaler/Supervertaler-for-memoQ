@@ -6,6 +6,12 @@ matches the Supervertaler for Trados changelog – one bold headline per bullet,
 a ★ on the things a release would be announced for – so the two read alike and
 any release tooling that buckets on these headings works for both.
 
+## [Unreleased]
+
+### Fixed
+
+- **The Supervertaler logo in Translation results is sharp again.** memoQ shows an engine's logo 48 points high, and Supervertaler was handing it a 32-pixel picture, so memoQ enlarged it and the "Sv" went soft – more so on a screen scaled above 100%. It now gets the logo at exactly the size memoQ draws it, which also sharpens it in the MT and termbase settings lists.
+
 ## [0.1.29] – 2026-11-02
 
 ### Added
