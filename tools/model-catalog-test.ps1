@@ -80,7 +80,8 @@ foreach ($p in @($anthropic, $openai, $google)) {
 # assertion. This is the check that fails the release after the short list is
 # re-judged and one product is rebuilt without the other.
 $claude = Ids ($curated.Invoke($null, [object[]]@($anthropic)))
-Check ($claude -contains 'claude-fable-5-1') "Fable 5.1 is on the short list"
+Check ($claude -contains 'claude-fable-5-2') "Fable 5.2 is on the short list"
+Check ($claude -notcontains 'claude-fable-5-1') "Fable 5.1 is gone, superseded"
 Check ($claude -notcontains 'claude-fable-5') "Fable 5 is gone, superseded"
 $gpt = Ids ($curated.Invoke($null, [object[]]@($openai)))
 Check ($gpt -contains 'gpt-6.1-sol') "GPT-6.1 Sol is on the short list"

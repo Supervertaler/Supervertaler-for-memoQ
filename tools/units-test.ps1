@@ -95,9 +95,9 @@ function Changed($p, $m) { return [bool]$changed.Invoke($null, [object[]]@([stri
 
 Check ((Changed 'Anthropic' 'claude-opus-5')) "the first request of a session names its model"
 Check (-not (Changed 'Anthropic' 'claude-opus-5')) "the next request with the same model writes nothing - forty batches, one line"
-Check ((Changed 'Anthropic' 'claude-fable-5-1')) "switching models in the settings shows up on the very next request"
-Check (-not (Changed 'Anthropic' 'claude-fable-5-1')) "and only once"
-Check ((Changed 'OpenAI' 'claude-fable-5-1')) "a provider change counts as a change even with the model name unchanged"
+Check ((Changed 'Anthropic' 'claude-fable-5-2')) "switching models in the settings shows up on the very next request"
+Check (-not (Changed 'Anthropic' 'claude-fable-5-2')) "and only once"
+Check ((Changed 'OpenAI' 'claude-fable-5-2')) "a provider change counts as a change even with the model name unchanged"
 Check ((Changed 'Anthropic' ' claude-opus-5 ')) "whitespace around a name does not hide a real change back"
 Check (-not (Changed 'Anthropic' 'claude-opus-5')) "nor does it invent one"
 

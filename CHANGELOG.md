@@ -8,6 +8,10 @@ any release tooling that buckets on these headings works for both.
 
 ## [Unreleased]
 
+### Changed
+
+- **Claude Fable 5.2 replaces Claude Fable 5.1** in the Claude and OpenRouter model lists. Fable 5.2 is Anthropic's most capable model, released on 10 November 2026, and costs less than 5.1: $8/$40 per million tokens instead of $10/$50, still double Claude Opus 5.5. The cost estimate knows its prices. If you had Fable 5.1 chosen, it stays chosen and keeps working, and its runs are still costed; pick Fable 5.2 from the list to switch.
+
 ### Fixed
 
 - **The Supervertaler logo in Translation results is sharp again.** memoQ shows an engine's logo 48 points high, and Supervertaler was handing it a 32-pixel picture, so memoQ enlarged it and the "Sv" went soft – more so on a screen scaled above 100%. It now gets the logo at exactly the size memoQ draws it, which also sharpens it in the MT and termbase settings lists.
