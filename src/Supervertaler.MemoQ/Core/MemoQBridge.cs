@@ -459,7 +459,8 @@ namespace Supervertaler.MemoQ.Core
                         DocumentName = d.DocumentName,
                         LangPair = (d.SourceLangCode ?? "?") + "-" + (d.TargetLangCode ?? "?"),
                         Rows = PreviewStore.Count(d.DocumentGuid),
-                        ImportPath = d.ImportPath
+                        ImportPath = d.ImportPath,
+                        IsActive = d.DocumentGuid == PreviewStore.ActiveDocument()
                     }).ToArray()
                     : null,
                 // Where this process takes memory banks and prompts from, so the
@@ -1610,11 +1611,16 @@ namespace Supervertaler.MemoQ.Core
                 Guid chosen;
                 var wanted = Guid.TryParse(documentKey ?? "", out chosen) && chosen != Guid.Empty ? chosen : Guid.Empty;
 
+                // None chosen: the document the cursor is in, and only when
+                // memoQ has not said where the cursor is, the largest.
+                var cursor = PreviewStore.ActiveDocument();
+
                 var live = PreviewStore.Documents()
                     .Where(d => d != null)
                     .Where(d => wanted == Guid.Empty || d.DocumentGuid == wanted)
                     .Select(d => new { d.DocumentGuid, d.DocumentName, Rows = PreviewStore.Rows(d.DocumentGuid) })
-                    .OrderByDescending(d => d.Rows.Count)
+                    .OrderByDescending(d => cursor.HasValue && d.DocumentGuid == cursor.Value)
+                    .ThenByDescending(d => d.Rows.Count)
                     .FirstOrDefault();
 
                 // A document chosen by name has nothing captured to beat.
@@ -2001,7 +2007,16 @@ namespace Supervertaler.MemoQ.Core
         private void HandlePreviewIds(HttpListenerContext ctx)
         {
             var req = Read<PreviewIdsRequest>(ctx);
-            PreviewStore.SetOrder(req?.PartIds ?? new string[0]);
+
+            // A body that could not be read says nothing about what is open, and
+            // must not be taken for "nothing is": that would empty the live view.
+            if (req?.PartIds != null)
+            {
+                var dropped = PreviewStore.KeepOnly(req.PartIds);
+                if (dropped > 0)
+                    PluginLog.Write("Live view: " + dropped + " paragraph(s) of documents no longer open in memoQ dropped.");
+            }
+
             PreviewStore.NoteTool(true);
             TryWrite(ctx, 200, Json(new OkBody { Ok = true }));
         }
@@ -2566,6 +2581,9 @@ namespace Supervertaler.MemoQ.Core
             [DataMember(Name = "langPair")] public string LangPair { get; set; }
             [DataMember(Name = "rows")] public int Rows { get; set; }
             [DataMember(Name = "importPath", EmitDefaultValue = false)] public string ImportPath { get; set; }
+
+            /// <summary>The cursor is in this document: the one a tool uses when none is named.</summary>
+            [DataMember(Name = "isActive", EmitDefaultValue = false)] public bool IsActive { get; set; }
         }
 
         [DataContract]

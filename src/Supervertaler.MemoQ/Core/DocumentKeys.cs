@@ -223,9 +223,11 @@ namespace Supervertaler.MemoQ.Core
         /// told.
         ///
         /// <para>Measured 2026-11-13 in memoQ 12.6.28: the document id memoQ sends
-        /// with a translation request is not the DocumentGuid its live view
-        /// reports for the same document, and nothing in either says what the
-        /// other is. The text is what they share. Up to
+        /// with a translation request is not always the DocumentGuid its live
+        /// view reports for the same document (one document, same session: a
+        /// different id at first, the live view's own after its tab was closed
+        /// and opened again), and nothing in either says what the other is.
+        /// The text is what they share. Up to
         /// <see cref="MaxSamples"/> of the capture's segments, spread over it,
         /// are looked for inside the paragraphs of each open document of the
         /// same language pair (a live part is a paragraph, a captured row a

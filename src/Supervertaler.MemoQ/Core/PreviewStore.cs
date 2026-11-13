@@ -57,9 +57,6 @@ namespace Supervertaler.MemoQ.Core
         private static readonly object _lock = new object();
         private static readonly Dictionary<string, Part> _parts = new Dictionary<string, Part>(StringComparer.Ordinal);
 
-        /// <summary>Part ids in the order memoQ listed them, per document view guid. Canonical row order.</summary>
-        private static readonly Dictionary<string, List<string>> _order = new Dictionary<string, List<string>>(StringComparer.Ordinal);
-
         private static Active _active;
         private static bool _toolConnected;
         private static DateTime _toolSeenUtc;
@@ -84,14 +81,42 @@ namespace Supervertaler.MemoQ.Core
             }
         }
 
-        /// <summary>The id list memoQ sent for a document view. Replaces any earlier order for that view.</summary>
-        public static void SetOrder(IEnumerable<string> partIds)
+        /// <summary>
+        /// memoQ's list of part ids: what is open in memoQ now. Every paragraph
+        /// of a document that is not in it is dropped, and an empty list empties
+        /// the store. Returns how many paragraphs were dropped.
+        ///
+        /// <para>Measured 2026-11-13 in memoQ 12.6.28: with two documents open
+        /// the list held 137 ids (15 + 122); after one tab was closed, 15. The
+        /// Preview SDK has no "document closed" event, so this list is the only
+        /// thing that says a document has gone. Until 2026-11-13 it was stored
+        /// and never read, so a closed document stayed in the live view for the
+        /// rest of the memoQ session - listed, checked, and offered as the
+        /// default.</para>
+        ///
+        /// <para>By document view, not by part: a paragraph that arrived after
+        /// memoQ built the list stays as long as its document is listed. A
+        /// paragraph of a closed document that arrives late (a pull answered
+        /// after the tab closed) is stored again and goes with the next list;
+        /// the tool asks for one every 45 seconds.</para>
+        /// </summary>
+        public static int KeepOnly(IEnumerable<string> partIds)
         {
-            if (partIds == null) return;
+            if (partIds == null) return 0;
+
+            var open = new HashSet<string>(
+                partIds.Where(id => !string.IsNullOrEmpty(id)).Select(ViewKeyOf), StringComparer.Ordinal);
+
             lock (_lock)
             {
-                foreach (var group in partIds.Where(id => !string.IsNullOrEmpty(id)).GroupBy(ViewKeyOf))
-                    _order[group.Key] = group.ToList();
+                var gone = _parts.Keys.Where(id => !open.Contains(ViewKeyOf(id))).ToList();
+                foreach (var id in gone) _parts.Remove(id);
+
+                // The cursor was in a document that has closed: it is nowhere.
+                if (_active != null && (_active.PartId == null || !_parts.ContainsKey(_active.PartId)))
+                    _active = null;
+
+                return gone.Count;
             }
         }
 
@@ -120,15 +145,40 @@ namespace Supervertaler.MemoQ.Core
             lock (_lock) return partId != null && _parts.TryGetValue(partId, out var p) ? p : null;
         }
 
-        /// <summary>Documents seen, most recently updated first.</summary>
+        /// <summary>
+        /// The document the cursor is in, or null when memoQ has not said where
+        /// the cursor is (or it was in a document that has since closed).
+        /// </summary>
+        public static Guid? ActiveDocument()
+        {
+            lock (_lock) return ActiveDocumentLocked();
+        }
+
+        private static Guid? ActiveDocumentLocked()
+        {
+            return _active?.PartId != null && _parts.TryGetValue(_active.PartId, out var p) ? p.DocumentGuid : (Guid?)null;
+        }
+
+        /// <summary>
+        /// Open documents, one part each: the one the cursor is in first, then
+        /// most recently updated first.
+        ///
+        /// <para>The first is what a tool uses when no document is named. It
+        /// was "most recently updated" alone, and the preview tool re-pulls
+        /// every open document's text every 45 seconds, so with two documents
+        /// open the default was whichever memoQ's answer happened to end
+        /// with.</para>
+        /// </summary>
         public static List<Part> Documents()
         {
             lock (_lock)
             {
+                var active = ActiveDocumentLocked();
                 return _parts.Values
                     .GroupBy(p => p.DocumentGuid)
                     .Select(g => g.OrderByDescending(p => p.UpdatedUtc).First())
-                    .OrderByDescending(p => p.UpdatedUtc)
+                    .OrderByDescending(p => active.HasValue && p.DocumentGuid == active.Value)
+                    .ThenByDescending(p => p.UpdatedUtc)
                     .ToList();
             }
         }
@@ -236,7 +286,7 @@ namespace Supervertaler.MemoQ.Core
             lock (_lock)
             {
                 var n = _parts.Count;
-                _parts.Clear(); _order.Clear(); _active = null;
+                _parts.Clear(); _active = null;
                 return n;
             }
         }
