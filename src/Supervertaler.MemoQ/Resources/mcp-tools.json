@@ -41,7 +41,7 @@
               "string",
               "null"
             ],
-            "description": "Document key from get_project. Omit for the most recently active document.",
+            "description": "The documentGuid or key from get_project (either spelling), or the document's name. Omit for the most recently active document. A value that matches no document is an error that lists the documents there are.",
             "default": null
           },
           "offset": {
@@ -114,7 +114,7 @@
               "string",
               "null"
             ],
-            "description": "Document GUID or name when several are open. Omit for the most recently active.",
+            "description": "The documentGuid or key from get_project (either spelling), or the document's name. Omit for the most recently active document.",
             "default": null
           },
           "sourceStart": {
@@ -167,7 +167,7 @@
               "string",
               "null"
             ],
-            "description": "Document GUID or name when several are open.",
+            "description": "The documentGuid or key from get_project (either spelling), or the document's name. Omit for the most recently active document. A value that matches no document is an error that lists the open documents.",
             "default": null
           }
         }
@@ -203,7 +203,7 @@
               "string",
               "null"
             ],
-            "description": "Document GUID or name when several are open.",
+            "description": "The documentGuid or key from get_project (either spelling), or the document's name. Omit for the most recently active document. A value that matches no document is an error that lists the open documents.",
             "default": null
           }
         }
@@ -239,7 +239,7 @@
               "string",
               "null"
             ],
-            "description": "Document GUID or name when several are open.",
+            "description": "The documentGuid or key from get_project (either spelling), or the document's name. Omit for the most recently active document. A value that matches no document is an error that lists the open documents.",
             "default": null
           }
         }
@@ -275,7 +275,7 @@
               "string",
               "null"
             ],
-            "description": "Document GUID or name when several are open.",
+            "description": "The documentGuid or key from get_project (either spelling), or the document's name. Omit for the most recently active document. A value that matches no document is an error that lists the open documents.",
             "default": null
           }
         }
@@ -319,7 +319,7 @@
               "string",
               "null"
             ],
-            "description": "Document GUID or name when several are open.",
+            "description": "The documentGuid or key from get_project (either spelling), or the document's name. Omit for the most recently active document. A value that matches no document is an error that lists the open documents.",
             "default": null
           }
         }
@@ -346,7 +346,7 @@
               "string",
               "null"
             ],
-            "description": "Document key from get_project. Omit for the most recently active document.",
+            "description": "The documentGuid or key from get_project (either spelling), or the document's name. Omit for the most recently active document. A value that matches no document is an error that lists the documents there are.",
             "default": null
           },
           "limit": {
@@ -562,7 +562,7 @@
               "string",
               "null"
             ],
-            "description": "One document key from get_project; omit for the whole project.",
+            "description": "One document: The documentGuid or key from get_project (either spelling), or the document's name. Omit for the whole project. A value that matches no document is an error, never the whole project.",
             "default": null
           },
           "limit": {

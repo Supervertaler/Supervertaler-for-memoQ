@@ -479,21 +479,18 @@ namespace Supervertaler.MemoQ.Core
 
         private void HandleSegments(HttpListenerContext ctx)
         {
-            var key = ctx.Request.QueryString["document"];
-            var offset = ParseInt(ctx.Request.QueryString["offset"], 0);
-            var limit = Math.Min(500, ParseInt(ctx.Request.QueryString["limit"], 200));
+            var key = Query(ctx)["document"];
+            var offset = ParseInt(Query(ctx)["offset"], 0);
+            var limit = Math.Min(500, ParseInt(Query(ctx)["limit"], 200));
 
             // The preview view wins when it exists: it has target text, real
             // row order and the document's name, none of which the MT capture
             // has. The capture store remains the answer when the preview tool
             // is not running.
-            if (PreviewStore.ToolAlive)
+            var open = OpenDocuments();
+            if (open.Count > 0)
             {
-                var previewDoc = PreviewStore.Documents().FirstOrDefault(d =>
-                    string.IsNullOrEmpty(key)
-                    || d.DocumentGuid.ToString("D") == key
-                    || (key.StartsWith(d.DocumentGuid.ToString("N"), StringComparison.OrdinalIgnoreCase))
-                    || string.Equals(d.DocumentName, key, StringComparison.OrdinalIgnoreCase));
+                var previewDoc = DocumentKeys.Live(key, open, out _);
 
                 if (previewDoc != null)
                 {
@@ -535,7 +532,15 @@ namespace Supervertaler.MemoQ.Core
                 }
             }
 
-            var doc = CaptureStore.Get(key);
+            var doc = DocumentKeys.Captured(key, CaptureStore.Snapshot(), open, out var problem);
+            if (doc == null && problem != null)
+            {
+                // A key that names nothing is an error, never an empty document:
+                // "0 segments" reads as "nothing to translate".
+                TryWrite(ctx, 404, Json(new ErrorBody { Error = problem }));
+                return;
+            }
+
             if (doc == null)
             {
                 TryWrite(ctx, 200, Json(new SegmentsBody
@@ -580,10 +585,18 @@ namespace Supervertaler.MemoQ.Core
 
         private void HandleConfirmed(HttpListenerContext ctx)
         {
-            var key = ctx.Request.QueryString["document"];
-            var limit = Math.Min(500, ParseInt(ctx.Request.QueryString["limit"], 100));
+            var key = Query(ctx)["document"];
+            var limit = Math.Min(500, ParseInt(Query(ctx)["limit"], 100));
 
-            var doc = CaptureStore.Get(key);
+            var doc = DocumentKeys.Captured(key, CaptureStore.Snapshot(), OpenDocuments(), out var problem);
+            if (doc == null && problem != null)
+            {
+                // Until this said so, a GUID in the other spelling answered "no
+                // confirmed pairs", which is a statement about the translator's work.
+                TryWrite(ctx, 404, Json(new ErrorBody { Error = problem }));
+                return;
+            }
+
             var pairs = doc == null
                 ? new List<DocumentMemory.Pair>()
                 : DocumentMemory.GetAll(doc.Key, limit);
@@ -616,9 +629,20 @@ namespace Supervertaler.MemoQ.Core
         private static TermbaseSelection.Flags ProjectTermbase(Guid project) =>
             TermbaseSelection.ProjectTermbaseFor(project);
 
+        /// <summary>The request's query, read as UTF-8. See <see cref="BridgeQuery"/>.</summary>
+        private static System.Collections.Specialized.NameValueCollection Query(HttpListenerContext ctx) =>
+            BridgeQuery.Parse(ctx.Request.RawUrl);
+
+        /// <summary>
+        /// The live view's documents while the preview tool is connected, else
+        /// none: without the tool nothing says what is open.
+        /// </summary>
+        private static List<PreviewStore.Part> OpenDocuments() =>
+            PreviewStore.ToolAlive ? PreviewStore.Documents() : new List<PreviewStore.Part>();
+
         private void HandleTermLookup(HttpListenerContext ctx)
         {
-            var text = ctx.Request.QueryString["text"] ?? "";
+            var text = Query(ctx)["text"] ?? "";
             var matches = TermIndex.Find(TermbaseSelection.CurrentProject, text);
 
             TryWrite(ctx, 200, Json(new TermsBody
@@ -829,10 +853,19 @@ namespace Supervertaler.MemoQ.Core
         /// </summary>
         private void HandleStagedVerify(HttpListenerContext ctx)
         {
+            // One document when one is named. A key that names none is refused:
+            // it used to be ignored, and the answer then covered every document
+            // while reading as the answer for the one asked about.
             Guid? only = null;
-            if (Guid.TryParse(ctx.Request.QueryString["document"], out var g)) only = g;
+            var key = Query(ctx)["document"];
+            if (!string.IsNullOrWhiteSpace(key))
+            {
+                var doc = DocumentKeys.Live(key, PreviewStore.Documents(), out var problem);
+                if (doc == null) { TryWrite(ctx, 404, Json(new ErrorBody { Error = problem })); return; }
+                only = doc.DocumentGuid;
+            }
 
-            var max = Math.Min(500, Math.Max(1, ParseInt(ctx.Request.QueryString["limit"], 100)));
+            var max = Math.Min(500, Math.Max(1, ParseInt(Query(ctx)["limit"], 100)));
             var r = StagingVerdict.Build(only, max);
 
             TryWrite(ctx, 200, Json(new StagedVerifyBody
@@ -861,11 +894,11 @@ namespace Supervertaler.MemoQ.Core
 
         private void HandleStagedList(HttpListenerContext ctx)
         {
-            var offset = Math.Max(0, ParseInt(ctx.Request.QueryString["offset"], 0));
-            var limit = Math.Min(1000, Math.Max(1, ParseInt(ctx.Request.QueryString["limit"], 200)));
-            var compact = ctx.Request.QueryString["compact"] == "1" || ctx.Request.QueryString["compact"] == "true";
-            var neverServed = ctx.Request.QueryString["neverServed"] == "1" || ctx.Request.QueryString["neverServed"] == "true";
-            var contains = ctx.Request.QueryString["sourceContains"];
+            var offset = Math.Max(0, ParseInt(Query(ctx)["offset"], 0));
+            var limit = Math.Min(1000, Math.Max(1, ParseInt(Query(ctx)["limit"], 200)));
+            var compact = Query(ctx)["compact"] == "1" || Query(ctx)["compact"] == "true";
+            var neverServed = Query(ctx)["neverServed"] == "1" || Query(ctx)["neverServed"] == "true";
+            var contains = Query(ctx)["sourceContains"];
 
             var all = StagedTranslations.Snapshot(null);
             var total = all.Count;
@@ -922,7 +955,7 @@ namespace Supervertaler.MemoQ.Core
 
         private void HandlePromptGet(HttpListenerContext ctx)
         {
-            var rel = ctx.Request.QueryString["path"] ?? "";
+            var rel = Query(ctx)["path"] ?? "";
             var library = new global::Supervertaler.Core.PromptLibrary();
             var prompt = library.GetPromptByRelativePath(rel);
 
@@ -2015,7 +2048,7 @@ namespace Supervertaler.MemoQ.Core
         /// <summary>Long-poll: the tool asks, and waits up to ~25 s for something to do.</summary>
         private void HandlePreviewCommands(HttpListenerContext ctx)
         {
-            var wait = Math.Min(25, ParseInt(ctx.Request.QueryString["wait"], 20));
+            var wait = Math.Min(25, ParseInt(Query(ctx)["wait"], 20));
             PreviewStore.NoteTool(true);
             var commands = PreviewStore.TakeCommands(TimeSpan.FromSeconds(wait));
 
@@ -2100,13 +2133,11 @@ namespace Supervertaler.MemoQ.Core
             }
             else if (req.Index > 0)
             {
-                var doc = PreviewStore.Documents().FirstOrDefault(d =>
-                    string.IsNullOrEmpty(req.Document) || d.DocumentGuid.ToString("D") == req.Document || d.DocumentName == req.Document);
-                if (doc != null)
-                {
-                    var rows = PreviewStore.Rows(doc.DocumentGuid);
-                    if (req.Index <= rows.Count) target = rows[req.Index - 1];
-                }
+                var doc = DocumentKeys.Live(req.Document, PreviewStore.Documents(), out var problem);
+                if (doc == null) { TryWrite(ctx, 404, Json(new ErrorBody { Error = problem })); return; }
+
+                var rows = PreviewStore.Rows(doc.DocumentGuid);
+                if (req.Index <= rows.Count) target = rows[req.Index - 1];
             }
 
             if (target == null)
@@ -2236,14 +2267,8 @@ namespace Supervertaler.MemoQ.Core
                 return null;
             }
 
-            var key = ctx.Request.QueryString["document"];
-            doc = PreviewStore.Documents().FirstOrDefault(d =>
-                string.IsNullOrEmpty(key)
-                || d.DocumentGuid.ToString("D") == key
-                || string.Equals(d.DocumentName, key, StringComparison.OrdinalIgnoreCase));
-
-            if (doc == null) { problem = "No document has been seen yet. Open one in memoQ and click into a segment."; return null; }
-            return PreviewStore.Rows(doc.DocumentGuid);
+            doc = DocumentKeys.Live(Query(ctx)["document"], PreviewStore.Documents(), out problem);
+            return doc == null ? null : PreviewStore.Rows(doc.DocumentGuid);
         }
 
         // ── SuperMemory ──────────────────────────────────────────────
@@ -2263,7 +2288,7 @@ namespace Supervertaler.MemoQ.Core
 
         private void HandleSuperMemoryContext(HttpListenerContext ctx)
         {
-            var q = ctx.Request.QueryString;
+            var q = Query(ctx);
 
             // No bank named falls back to the one selected for this project,
             // which is normally nothing. It never falls back to "whichever was
@@ -2288,7 +2313,7 @@ namespace Supervertaler.MemoQ.Core
 
         private void HandleSuperMemorySearch(HttpListenerContext ctx)
         {
-            var q = ctx.Request.QueryString;
+            var q = Query(ctx);
 
             int limit;
             if (!int.TryParse(q["limit"], out limit)) limit = 0;
@@ -2327,7 +2352,7 @@ namespace Supervertaler.MemoQ.Core
 
         private void HandleQaCheck(HttpListenerContext ctx)
         {
-            var type = (ctx.Request.QueryString["type"] ?? "").ToLowerInvariant();
+            var type = (Query(ctx)["type"] ?? "").ToLowerInvariant();
             if (type != "numbers" && type != "tags" && type != "nbsp" && type != "terminology")
             {
                 TryWrite(ctx, 400, Json(new ErrorBody { Error = "missing or unknown 'type' – use numbers, tags, nbsp or terminology" }));
@@ -2337,7 +2362,7 @@ namespace Supervertaler.MemoQ.Core
             var rows = QaRows(ctx, out var problem, out var doc);
             if (rows == null) { TryWrite(ctx, 409, Json(new ErrorBody { Error = problem })); return; }
 
-            var limit = Math.Min(200, ParseInt(ctx.Request.QueryString["limit"], 50));
+            var limit = Math.Min(200, ParseInt(Query(ctx)["limit"], 50));
             var result = QaChecks.Run(type, rows, limit, TermbaseSelection.CurrentProject);
 
             TryWrite(ctx, 200, Json(new QaBody
@@ -2361,8 +2386,8 @@ namespace Supervertaler.MemoQ.Core
             var rows = QaRows(ctx, out var problem, out var doc);
             if (rows == null) { TryWrite(ctx, 409, Json(new ErrorBody { Error = problem })); return; }
 
-            var limit = Math.Min(500, ParseInt(ctx.Request.QueryString["limit"], 50));
-            var offset = ParseInt(ctx.Request.QueryString["offset"], 0);
+            var limit = Math.Min(500, ParseInt(Query(ctx)["limit"], 50));
+            var offset = ParseInt(Query(ctx)["offset"], 0);
             var groups = QaChecks.Inconsistencies(rows);
 
             TryWrite(ctx, 200, Json(new InconsistenciesBody
