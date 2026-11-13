@@ -222,7 +222,7 @@ namespace Supervertaler.MemoQ.Core
         /// The open document a capture belongs to, or null when that cannot be
         /// told.
         ///
-        /// <para>Measured 2026-11-13 in memoQ 12.5: the document id memoQ sends
+        /// <para>Measured 2026-11-13 in memoQ 12.6.28: the document id memoQ sends
         /// with a translation request is not the DocumentGuid its live view
         /// reports for the same document, and nothing in either says what the
         /// other is. The text is what they share. Up to

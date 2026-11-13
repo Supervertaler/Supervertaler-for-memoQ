@@ -283,7 +283,7 @@ $r = Call 'HandleConfirmed' 'GET' '/v1/confirmed'
 Check 'get_confirmed_pairs keeps its empty answer' ($r.Status -eq 200 -and $r.Body.Contains('"pairs":[]')) $r.Body
 
 # ---- one document, two ids --------------------------------------------------
-# Measured in memoQ 12.5 on 13 Nov 2026: the id memoQ sends with a translation
+# Measured in memoQ 12.6.28 on 13 Nov 2026: the id memoQ sends with a translation
 # request is NOT the documentGuid its live view reports for the same document.
 # So the key get_project lists for a captured document names no open document
 # by id, and the two are joined by their text. Everything above gave both sides
