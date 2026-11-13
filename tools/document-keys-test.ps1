@@ -407,5 +407,37 @@ $back = Captured $guidA.ToString('D') $bigCaps $openBig
 $sw.Stop()
 Check "40,000 paragraphs, 150,000 captured segments: both directions in $($sw.ElapsedMilliseconds) ms" ((IsDoc $hit $guidA) -and (IsCap $back (KeyOf $mtA)) -and $sw.ElapsedMilliseconds -lt 5000)
 
+# ---- values the caller left out ---------------------------------------------
+# The MCP server sends null for an optional value nobody gave. Null into a
+# plain bool or int failed the whole body: add_term answered "source and target
+# are required" with both given, and go_to_segment lost its index.
+Write-Host '--- a null for a value left out'
+TwoIds
+[void](TakeCommands)
+$r = Call 'HandleGoTo' 'POST' '/v1/goto' '{"index":2,"partId":null,"document":null,"sourceStart":null,"sourceLength":null}'
+$sent = TakeCommands
+Check 'go_to_segment with nulls for the rest: goes to row 2' ($r.Status -eq 200 -and $sent.Count -eq 1) $r.Body
+$r = Call 'HandleGoTo' 'POST' '/v1/goto' '{"index":null,"partId":null,"document":null,"sourceStart":null,"sourceLength":null}'
+Check 'go_to_segment with nothing but nulls: no such segment' ($r.Status -eq 404 -and $r.Body.Contains('No such segment') -and (TakeCommands).Count -eq 0) $r.Body
+$r = Call 'HandleGoTo' 'POST' '/v1/goto' '{"index":"two"}'
+Check 'go_to_segment with a word for a number: no such segment, nothing sent' ($r.Status -eq 404 -and (TakeCommands).Count -eq 0) $r.Body
+
+# This test's data folder has no termbase ticked Project, so a body that is
+# read gets as far as "No project termbase", and nothing is written anywhere.
+function PastTheBody($r) { $r.Status -eq 400 -and $r.Body.Contains('No project termbase') }
+$r = Call 'HandleTermAdd' 'POST' '/v1/terms' '{"source":"lampada","target":"lamp","forbidden":null}'
+Check 'add_term, forbidden null: the body is read' (PastTheBody $r) $r.Body
+$r = Call 'HandleTermAdd' 'POST' '/v1/terms' '{"source":"lampada","target":"lamp"}'
+Check 'add_term, forbidden absent: the body is read' (PastTheBody $r) $r.Body
+$r = Call 'HandleTermAdd' 'POST' '/v1/terms' '{"source":"lampada","target":"lamp","forbidden":true}'
+Check 'add_term, forbidden true: the body is read' (PastTheBody $r) $r.Body
+function Required($r) { $r.Status -eq 400 -and $r.Body.Contains('source and target are required') }
+$r = Call 'HandleTermAdd' 'POST' '/v1/terms' '{"source":null,"target":"lamp","forbidden":null}'
+Check 'add_term without a source: still refused for that' (Required $r) $r.Body
+$r = Call 'HandleTermAdd' 'POST' '/v1/terms' '{"source":"lampada","target":"   "}'
+Check 'add_term with a blank target: refused' (Required $r) $r.Body
+$r = Call 'HandleTermAdd' 'POST' '/v1/terms' 'not json at all'
+Check 'add_term with a garbled body: refused, not thrown on' (Required $r) $r.Body
+
 $docs.Clear(); ClearLive
 Finish

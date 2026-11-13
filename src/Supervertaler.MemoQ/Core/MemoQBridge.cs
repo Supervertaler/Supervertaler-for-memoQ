@@ -685,7 +685,7 @@ namespace Supervertaler.MemoQ.Core
 
             try
             {
-                TermbaseWriter.AddTerm(target.Id, req.Source, req.Target, req.Forbidden, null);
+                TermbaseWriter.AddTerm(target.Id, req.Source, req.Target, req.Forbidden ?? false, null);
             }
             catch (Exception ex)
             {
@@ -2131,13 +2131,13 @@ namespace Supervertaler.MemoQ.Core
             {
                 target = PreviewStore.GetPart(req.PartId);
             }
-            else if (req.Index > 0)
+            else if (req.Index.GetValueOrDefault() > 0)
             {
                 var doc = DocumentKeys.Live(req.Document, PreviewStore.Documents(), CaptureStore.Snapshot(), PreviewStore.Rows, out var problem);
                 if (doc == null) { TryWrite(ctx, 404, Json(new ErrorBody { Error = problem })); return; }
 
                 var rows = PreviewStore.Rows(doc.DocumentGuid);
-                if (req.Index <= rows.Count) target = rows[req.Index - 1];
+                if (req.Index.Value <= rows.Count) target = rows[req.Index.Value - 1];
             }
 
             if (target == null)
@@ -2148,8 +2148,9 @@ namespace Supervertaler.MemoQ.Core
 
             // A part is a paragraph. A range within it says which sentence —
             // memoQ's grid row — to land on; without one, the whole paragraph.
-            var start = Math.Max(0, req.SourceStart);
-            var length = req.SourceLength > 0 ? Math.Min(req.SourceLength, Math.Max(0, target.Source.Length - start)) : 0;
+            var start = Math.Max(0, req.SourceStart ?? 0);
+            var wanted = req.SourceLength ?? 0;
+            var length = wanted > 0 ? Math.Min(wanted, Math.Max(0, target.Source.Length - start)) : 0;
 
             PreviewStore.Enqueue(new PreviewStore.Command
             {
@@ -2247,11 +2248,12 @@ namespace Supervertaler.MemoQ.Core
         [DataContract]
         internal class GoToRequest
         {
-            [DataMember(Name = "index")] public int Index { get; set; }
+            // Nullable for the same reason as AddTermRequest.Forbidden.
+            [DataMember(Name = "index")] public int? Index { get; set; }
             [DataMember(Name = "partId")] public string PartId { get; set; }
             [DataMember(Name = "document")] public string Document { get; set; }
-            [DataMember(Name = "sourceStart")] public int SourceStart { get; set; }
-            [DataMember(Name = "sourceLength")] public int SourceLength { get; set; }
+            [DataMember(Name = "sourceStart")] public int? SourceStart { get; set; }
+            [DataMember(Name = "sourceLength")] public int? SourceLength { get; set; }
         }
 
         // ── QA over the live view ────────────────────────────────────────
@@ -2648,7 +2650,9 @@ namespace Supervertaler.MemoQ.Core
         {
             [DataMember(Name = "source")] public string Source { get; set; }
             [DataMember(Name = "target")] public string Target { get; set; }
-            [DataMember(Name = "forbidden")] public bool Forbidden { get; set; }
+            // Nullable: the MCP server sends null for a value the caller left out,
+            // and null into a plain bool fails the whole body.
+            [DataMember(Name = "forbidden")] public bool? Forbidden { get; set; }
         }
 
         [DataContract]
