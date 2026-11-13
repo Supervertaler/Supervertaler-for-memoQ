@@ -51,10 +51,16 @@ namespace Supervertaler.MemoQ.Core
         /// list (one part per document, in the caller's order). No key means the
         /// first of the list. Null with a <paramref name="problem"/> otherwise.
         /// </summary>
-        public static PreviewStore.Part Live(string key, IList<PreviewStore.Part> open, out string problem)
+        public static PreviewStore.Part Live(
+            string key,
+            IList<PreviewStore.Part> open,
+            IList<CaptureStore.DocumentCapture> captured,
+            Func<Guid, IList<PreviewStore.Part>> rowsOf,
+            out string problem)
         {
             problem = null;
             open = open ?? new PreviewStore.Part[0];
+            captured = captured ?? new CaptureStore.DocumentCapture[0];
 
             if (string.IsNullOrWhiteSpace(key))
             {
@@ -75,6 +81,24 @@ namespace Supervertaler.MemoQ.Core
             var byName = ByName(key, open, out problem);
             if (byName != null || problem != null) return byName;
 
+            // The key of a captured document. memoQ's translation side and its
+            // live view give one document two different ids, so the capture is
+            // recognised in the live view by its text.
+            var capture = captured.FirstOrDefault(d => string.Equals(d.Key, key, StringComparison.OrdinalIgnoreCase))
+                       ?? (guid.HasValue ? captured.FirstOrDefault(d => d.DocumentId == guid.Value) : null);
+
+            if (capture != null)
+            {
+                var same = LiveCounterpart(capture, open, rowsOf, new Dictionary<Guid, List<string>>());
+                if (same != null) return same;
+
+                problem = "\"" + Clip(key) + "\" is a key for what memoQ sent in translation requests, and its text could not be "
+                        + "matched to exactly one document open in the live view. This tool works on the live view: pass an "
+                        + "open document's documentGuid or name instead. "
+                        + (open.Count == 0 ? "No document is open in the live view." : "Open in memoQ now: " + ListedOpen(open) + ".");
+                return null;
+            }
+
             problem = NotFound(key, open, null);
             return null;
         }
@@ -89,6 +113,7 @@ namespace Supervertaler.MemoQ.Core
             string key,
             IList<CaptureStore.DocumentCapture> captured,
             IList<PreviewStore.Part> open,
+            Func<Guid, IList<PreviewStore.Part>> rowsOf,
             out string problem)
         {
             problem = null;
@@ -139,8 +164,24 @@ namespace Supervertaler.MemoQ.Core
                 if (byGuid != null) return byGuid;
 
                 var live = open.FirstOrDefault(d => d.DocumentGuid == guid.Value);
-                if (live != null || openName != null)
+                if (live != null)
                 {
+                    // Open, and captured under memoQ's other id for it.
+                    var cache = new Dictionary<Guid, List<string>>();
+                    var same = captured
+                        .Where(d => LiveCounterpart(d, open, rowsOf, cache)?.DocumentGuid == live.DocumentGuid)
+                        .ToList();
+
+                    if (same.Count == 1) return same[0];
+
+                    if (same.Count > 1)
+                    {
+                        problem = same.Count + " captured documents have the text of \"" + (live.DocumentName ?? key)
+                                + "\". Pass one's key from get_project instead: "
+                                + string.Join("; ", same.Take(MaxListed).Select(d => d.Key)) + ".";
+                        return null;
+                    }
+
                     problem = "\"" + (openName ?? live.DocumentName ?? key) + "\" is open in memoQ, but memoQ has not sent the plugin "
                             + "a translation request for it, so nothing is captured for it: no captured segments and no "
                             + "confirmed pairs. That needs Supervertaler as the MT provider (and as Self-learning MT for "
@@ -170,6 +211,93 @@ namespace Supervertaler.MemoQ.Core
                     + string.Join("; ", named.Take(MaxListed).Select(d => d.DocumentGuid.ToString("D"))) + ".";
             return null;
         }
+
+        /// <summary>How many of a capture's segments are looked for in the open documents.</summary>
+        private const int MaxSamples = 12;
+
+        /// <summary>A shorter segment ("Background", "Claims") is in too many documents to tell one by.</summary>
+        private const int MinSampleLength = 20;
+
+        /// <summary>
+        /// The open document a capture belongs to, or null when that cannot be
+        /// told.
+        ///
+        /// <para>Measured 2026-11-13 in memoQ 12.5: the document id memoQ sends
+        /// with a translation request is not the DocumentGuid its live view
+        /// reports for the same document, and nothing in either says what the
+        /// other is. The text is what they share. Up to
+        /// <see cref="MaxSamples"/> of the capture's segments, spread over it,
+        /// are looked for inside the paragraphs of each open document of the
+        /// same language pair (a live part is a paragraph, a captured row a
+        /// sentence of it). The answer is the one document that holds more
+        /// than half of them and more than any other; a tie - the same file
+        /// open twice - is no answer.</para>
+        ///
+        /// <para>Never for a bucket with no document of its own: those mix
+        /// documents. <paramref name="liveText"/> holds each open document's
+        /// text for the length of one call, so several captures are compared
+        /// without reading the live view again. Nothing is kept afterwards.</para>
+        /// </summary>
+        internal static PreviewStore.Part LiveCounterpart(
+            CaptureStore.DocumentCapture capture,
+            IList<PreviewStore.Part> open,
+            Func<Guid, IList<PreviewStore.Part>> rowsOf,
+            Dictionary<Guid, List<string>> liveText)
+        {
+            if (capture == null || capture.DocumentId == Guid.Empty || rowsOf == null || open == null || open.Count == 0)
+                return null;
+
+            var usable = (capture.Sources ?? new List<string>())
+                .Select(Plain)
+                .Where(s => s.Length >= MinSampleLength)
+                .Distinct(StringComparer.Ordinal)
+                .ToList();
+            if (usable.Count == 0) return null;
+
+            var samples = new List<string>();
+            var step = Math.Max(1, usable.Count / MaxSamples);
+            for (var i = 0; i < usable.Count && samples.Count < MaxSamples; i += step) samples.Add(usable[i]);
+
+            PreviewStore.Part best = null;
+            int bestHits = 0, secondHits = 0;
+
+            foreach (var doc in open)
+            {
+                if (!SamePair(capture, doc)) continue;
+
+                if (!liveText.TryGetValue(doc.DocumentGuid, out var paragraphs))
+                {
+                    paragraphs = (rowsOf(doc.DocumentGuid) ?? new PreviewStore.Part[0]).Select(p => Plain(p.Source)).ToList();
+                    liveText[doc.DocumentGuid] = paragraphs;
+                }
+
+                var hits = samples.Count(s => paragraphs.Any(p => p.IndexOf(s, StringComparison.Ordinal) >= 0));
+
+                if (hits > bestHits) { secondHits = bestHits; bestHits = hits; best = doc; }
+                else if (hits > secondHits) secondHits = hits;
+            }
+
+            return bestHits * 2 > samples.Count && bestHits > secondHits ? best : null;
+        }
+
+        /// <summary>Text as both sides have it: no tags, escapes undone, single spaces.</summary>
+        private static string Plain(string text)
+        {
+            var plain = StagedTranslations.Loose(text).Trim();
+            while (plain.Contains("  ")) plain = plain.Replace("  ", " ");
+            return plain;
+        }
+
+        private static bool SamePair(CaptureStore.DocumentCapture capture, PreviewStore.Part doc)
+        {
+            return (string.IsNullOrEmpty(doc.SourceLangCode) || string.IsNullOrEmpty(capture.SourceLangCode)
+                    || string.Equals(doc.SourceLangCode, capture.SourceLangCode, StringComparison.OrdinalIgnoreCase))
+                && (string.IsNullOrEmpty(doc.TargetLangCode) || string.IsNullOrEmpty(capture.TargetLangCode)
+                    || string.Equals(doc.TargetLangCode, capture.TargetLangCode, StringComparison.OrdinalIgnoreCase));
+        }
+
+        private static string ListedOpen(IList<PreviewStore.Part> open) =>
+            Listed(open.Select(d => "\"" + (d.DocumentName ?? "?") + "\" (" + d.DocumentGuid.ToString("D") + ")").ToList());
 
         private static string NameOnDisk(Guid documentId)
         {

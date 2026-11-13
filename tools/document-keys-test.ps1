@@ -29,10 +29,19 @@ function KeyOf([Guid]$g) { $g.ToString('N') + '_' + $pair }
 # ---- the resolver on its own ------------------------------------------------
 $guidOf = $keys.GetMethod('GuidOf', $Static)
 function GuidOf($key) { $a = [object[]]::new(1); $a[0] = $key; return $guidOf.Invoke($null, $a) }
-function Live($key, $parts) {
-    $a = [object[]]::new(3); $a[0] = $key; $a[1] = (PartList $parts).PSObject.BaseObject; $a[2] = $null
+function CaptureList($captures) {
+    $list = [Activator]::CreateInstance([System.Collections.Generic.List`1].MakeGenericType($capDocType))
+    foreach ($c in $captures) { $list.Add($c) }
+    return ,$list
+}
+# The live view's own row reader, as the bridge passes it.
+$rowsType = [Func`2].MakeGenericType([Guid], [System.Collections.Generic.IList`1].MakeGenericType($partType))
+$rowsOf = [Delegate]::CreateDelegate($rowsType, $previewType.GetMethod('Rows', $Static))
+function Live($key, $parts, $captures = @()) {
+    $a = [object[]]::new(5); $a[0] = $key; $a[1] = (PartList $parts).PSObject.BaseObject
+    $a[2] = (CaptureList $captures).PSObject.BaseObject; $a[3] = $rowsOf; $a[4] = $null
     $doc = $keys.GetMethod('Live', $Static).Invoke($null, $a)
-    return [pscustomobject]@{ Doc = $doc; Problem = $a[2] }
+    return [pscustomobject]@{ Doc = $doc; Problem = $a[4] }
 }
 function NewCapture([string]$key, [Guid]$doc) {
     $c = [Activator]::CreateInstance($capDocType, $true)
@@ -44,11 +53,10 @@ function NewCapture([string]$key, [Guid]$doc) {
     return $c
 }
 function Captured($key, $captures, $parts) {
-    $list = [Activator]::CreateInstance([System.Collections.Generic.List`1].MakeGenericType($capDocType))
-    foreach ($c in $captures) { $list.Add($c) }
-    $a = [object[]]::new(4); $a[0] = $key; $a[1] = $list.PSObject.BaseObject; $a[2] = (PartList $parts).PSObject.BaseObject; $a[3] = $null
+    $a = [object[]]::new(5); $a[0] = $key; $a[1] = (CaptureList $captures).PSObject.BaseObject; $a[2] = (PartList $parts).PSObject.BaseObject
+    $a[3] = $rowsOf; $a[4] = $null
     $doc = $keys.GetMethod('Captured', $Static).Invoke($null, $a)
-    return [pscustomobject]@{ Doc = $doc; Problem = $a[3] }
+    return [pscustomobject]@{ Doc = $doc; Problem = $a[4] }
 }
 function IsDoc($r, [Guid]$g) { $null -ne $r.Doc -and $r.Doc.DocumentGuid -eq $g -and $null -eq $r.Problem }
 
@@ -274,4 +282,130 @@ Check 'get_segments keeps its "nothing captured yet" answer' ($r.Status -eq 200 
 $r = Call 'HandleConfirmed' 'GET' '/v1/confirmed'
 Check 'get_confirmed_pairs keeps its empty answer' ($r.Status -eq 200 -and $r.Body.Contains('"pairs":[]')) $r.Body
 
+# ---- one document, two ids --------------------------------------------------
+# Measured in memoQ 12.5 on 13 Nov 2026: the id memoQ sends with a translation
+# request is NOT the documentGuid its live view reports for the same document.
+# So the key get_project lists for a captured document names no open document
+# by id, and the two are joined by their text. Everything above gave both sides
+# one id, which is why it passed while the real thing failed.
+Write-Host '--- one document, two ids: the resolver'
+$mtA   = [Guid]'aaaaaaaa-1111-4222-8333-0123456789ab'   # memoQ's translation-side id for document A
+$mtOld = [Guid]'bbbbbbbb-1111-4222-8333-0123456789ab'
+$s1 = 'La presente invenzione riguarda una <inline_tag id="0">lampada</inline_tag> per biciclette.'
+$s2 = 'Il prezzo &amp; la consegna sono indicati di seguito.'
+$s3 = 'Il fanale si accende quando la luce ambiente diminuisce.'
+$paraA = 'La presente invenzione riguarda una <b>lampada</b> per biciclette. Costa 12 euro. Il prezzo & la consegna sono indicati di seguito.'
+function TwoIds {
+    ClearLive
+    Upsert @(
+        (NewPart 'mQ-default-aaaa-1' $guidA $nameA 'Premessa' 'Background'),
+        (NewPart 'mQ-default-aaaa-2' $guidA $nameA $paraA 'The present invention relates to a bicycle lamp. It costs 21 euros. Price & delivery are given below.'),
+        (NewPart 'mQ-default-aaaa-3' $guidA $nameA $s3 'The lamp comes on when the ambient light falls.')
+    )
+    Start-Sleep -Milliseconds 30
+    Upsert @(
+        (NewPart 'mQ-default-bbbb-1' $guidB $nameB 'Premessa' 'Background'),
+        (NewPart 'mQ-default-bbbb-2' $guidB $nameB 'Questo manuale descrive la manutenzione ordinaria della macchina.' 'This manual describes routine maintenance of the machine.')
+    )
+    ToolConnected $true
+}
+function OpenNow { return @($previewType.GetMethod('Documents', $Static).Invoke($null, $null)) }
+function CaptureWith([Guid]$id, [string[]]$sources, [string]$key = $null) {
+    if (-not $key) { $key = KeyOf $id }
+    $c = NewCapture $key $id
+    foreach ($x in $sources) { $capDocType.GetField('Sources').GetValue($c).Add($x) }
+    return $c
+}
+TwoIds
+$open2 = OpenNow
+$capMt = CaptureWith $mtA @('<b>Premessa</b>', $s1, $s2)
+Check 'the capture''s key finds the open document'      (IsDoc (Live (KeyOf $mtA) $open2 @($capMt)) $guidA)
+Check 'its id with dashes too'                          (IsDoc (Live $mtA.ToString('D') $open2 @($capMt)) $guidA)
+Check 'the open document''s id finds the capture'       (IsCap (Captured $guidA.ToString('D') @($capMt) $open2) (KeyOf $mtA))
+Check 'so does its name'                                (IsCap (Captured $nameA @($capMt) $open2) (KeyOf $mtA))
+Check 'and its id in the key spelling'                  (IsCap (Captured (KeyOf $guidA) @($capMt) $open2) (KeyOf $mtA))
+
+Write-Host '--- one document, two ids: when the text does not settle it'
+function NotJoined($r) { $null -eq $r.Doc -and $r.Problem.Contains('could not be matched') -and $r.Problem.Contains($nameA) }
+$r = Live (KeyOf $mtA) $open2 @((CaptureWith $mtA @('Un testo che non si trova in nessun documento aperto.')))
+Check 'text in no open document: refused, open documents named' (NotJoined $r) $r.Problem
+$r = Live (KeyOf $mtA) $open2 @((CaptureWith $mtA @('<b>Premessa</b>', 'Costa 12.')))
+Check 'only a heading both documents have: refused'       (NotJoined $r) $r.Problem
+$r = Live (KeyOf $mtA) $open2 @((CaptureWith $mtA @()))
+Check 'an empty capture: refused'                         (NotJoined $r) $r.Problem
+$r = Live (KeyOf $mtA) $open2 @((CaptureWith $mtA @($s1, 'Una frase che non esiste da nessuna parte, uno.', 'Una frase che non esiste da nessuna parte, due.', 'Una frase che non esiste da nessuna parte, tre.')))
+Check 'one segment in four found: not enough, refused'    (NotJoined $r) $r.Problem
+$visited = CaptureWith ([Guid]::Empty) @($s1, $s2) 'visited_ita-IT-eng-GB'
+$r = Live 'visited_ita-IT-eng-GB' $open2 @($visited)
+Check 'the visited-rows bucket is never taken for a document' (NotJoined $r) $r.Problem
+$other = CaptureWith $mtA @($s1, $s2)
+$capDocType.GetField('TargetLangCode').SetValue($other, 'ger-DE')
+$r = Live (KeyOf $mtA) $open2 @($other)
+Check 'another language pair: refused'                    (NotJoined $r) $r.Problem
+$r = Captured $guidA.ToString('D') @($capMt, (CaptureWith $mtOld @($s1, $s2))) $open2
+Check 'two captures with this text: refused, both keys named' ($null -eq $r.Doc -and $r.Problem.Contains('2 captured documents') -and $r.Problem.Contains((KeyOf $mtA)) -and $r.Problem.Contains((KeyOf $mtOld))) $r.Problem
+$r = Captured $guidB.ToString('D') @($capMt) $open2
+Check 'the other open document still has nothing captured' ($null -eq $r.Doc -and $r.Problem.Contains('is open in memoQ, but')) $r.Problem
+# The same file open twice: the text is in both, so it is neither.
+Upsert @(
+    (NewPart 'mQ-default-cccc-2' $guidC $nameA $paraA ''),
+    (NewPart 'mQ-default-cccc-3' $guidC $nameA $s3 '')
+)
+$r = Live (KeyOf $mtA) (OpenNow) @($capMt)
+Check 'the same text open twice: refused, not guessed'    ($null -eq $r.Doc -and $r.Problem.Contains('could not be matched')) $r.Problem
+
+Write-Host '--- one document, two ids: the tools'
+TwoIds
+$docs.Clear()
+$stored = CaptureWith $mtA @('<b>Premessa</b>', $s1, $s2)
+$docs[$stored.Key] = $stored
+$mtKey = KeyOf $mtA
+foreach ($type in @('numbers', 'tags', 'nbsp', 'terminology')) {
+    $r = Call 'HandleQaCheck' 'GET' ("/v1/qa-check?type=$type&document=" + (Esc $mtKey))
+    Check "check_$type by the key get_project lists" ($r.Status -eq 200 -and $r.Body.Contains('PROJ-001')) $r.Body
+}
+$r = Call 'HandleQaCheck' 'GET' ('/v1/qa-check?type=numbers&document=' + (Esc $mtKey))
+Check 'check_numbers finds that document''s wrong number' ($r.Body.Contains('"found":1')) $r.Body
+$r = Call 'HandleInconsistencies' 'GET' ('/v1/inconsistencies?document=' + (Esc $mtKey))
+Check 'find_inconsistencies by that key' ($r.Status -eq 200) $r.Body
+$r = Call 'HandleStagedVerify' 'GET' ('/v1/staged/verify?document=' + (Esc $mtKey))
+Check 'compare_staged_to_grid by that key: that document only' ($r.Status -eq 200 -and $r.Body.Contains('PROJ-001') -and -not $r.Body.Contains('PROJ-002')) $r.Body
+[void](TakeCommands)
+$r = Call 'HandleGoTo' 'POST' '/v1/goto' ('{"index":2,"document":' + (ConvertTo-Json $mtKey) + '}')
+$sent = TakeCommands
+Check 'go_to_segment by that key' ($r.Status -eq 200 -and $sent.Count -eq 1 -and $sent[0].PartId -eq 'mQ-default-aaaa-2') $r.Body
+foreach ($spelling in @($guidA.ToString('D'), $nameA)) {
+    $r = Call 'HandleConfirmed' 'GET' ('/v1/confirmed?document=' + (Esc $spelling))
+    Check "get_confirmed_pairs by the open document ($spelling)" ($r.Status -eq 200 -and $r.Body.Contains('"documentKey":"' + $mtKey + '"')) $r.Body
+}
+$r = Call 'HandleSegments' 'GET' ('/v1/segments?document=' + (Esc $mtKey))
+Check 'get_segments by that key still shows what memoQ asked for' ($r.Status -eq 200 -and $r.Body.Contains('"documentKey":"' + $mtKey + '"') -and $r.Body.Contains('"total":3') -and $r.Body.Contains('inline_tag')) $r.Body
+$r = Call 'HandleQaCheck' 'GET' ('/v1/qa-check?type=numbers&document=' + (Esc (KeyOf $mtOld)))
+Check 'a key nothing was captured under is still refused' ($r.Status -ne 200 -and $r.Body.Contains('No document matches')) $r.Body
+
+Write-Host '--- one document, two ids: 100 times the size'
+# 40 open documents of 1,000 paragraphs and 30 captures of 5,000 segments; the
+# one being asked for is the last of each. A real job is a handful of documents
+# of a few hundred paragraphs.
+ClearLive
+$big = New-Object System.Collections.Generic.List[object]
+foreach ($d in 1..40) {
+    $g = if ($d -eq 40) { $guidA } else { [Guid]::NewGuid() }
+    $n = if ($d -eq 40) { $nameA } else { "Acme PROJ-$d big.docx" }
+    foreach ($row in 1..1000) { $big.Add((NewPart "mQ-default-$d-$row" $g $n "Documento $d, paragrafo numero $row del testo di prova." 't')) }
+}
+Upsert $big
+$bigCaps = @(1..30 | ForEach-Object {
+    $d = $_ + 10
+    $id = if ($d -eq 40) { $mtA } else { [Guid]::NewGuid() }
+    CaptureWith $id @(1..5000 | ForEach-Object { "Documento $d, paragrafo numero $(($_ % 1000) + 1) del testo di prova." })
+})
+$openBig = OpenNow
+$sw = [Diagnostics.Stopwatch]::StartNew()
+$hit = Live (KeyOf $mtA) $openBig $bigCaps
+$back = Captured $guidA.ToString('D') $bigCaps $openBig
+$sw.Stop()
+Check "40,000 paragraphs, 150,000 captured segments: both directions in $($sw.ElapsedMilliseconds) ms" ((IsDoc $hit $guidA) -and (IsCap $back (KeyOf $mtA)) -and $sw.ElapsedMilliseconds -lt 5000)
+
+$docs.Clear(); ClearLive
 Finish

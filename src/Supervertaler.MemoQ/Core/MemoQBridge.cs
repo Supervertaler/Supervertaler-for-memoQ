@@ -490,7 +490,7 @@ namespace Supervertaler.MemoQ.Core
             var open = OpenDocuments();
             if (open.Count > 0)
             {
-                var previewDoc = DocumentKeys.Live(key, open, out _);
+                var previewDoc = DocumentKeys.Live(key, open, null, null, out _);
 
                 if (previewDoc != null)
                 {
@@ -532,7 +532,7 @@ namespace Supervertaler.MemoQ.Core
                 }
             }
 
-            var doc = DocumentKeys.Captured(key, CaptureStore.Snapshot(), open, out var problem);
+            var doc = DocumentKeys.Captured(key, CaptureStore.Snapshot(), open, PreviewStore.Rows, out var problem);
             if (doc == null && problem != null)
             {
                 // A key that names nothing is an error, never an empty document:
@@ -588,7 +588,7 @@ namespace Supervertaler.MemoQ.Core
             var key = Query(ctx)["document"];
             var limit = Math.Min(500, ParseInt(Query(ctx)["limit"], 100));
 
-            var doc = DocumentKeys.Captured(key, CaptureStore.Snapshot(), OpenDocuments(), out var problem);
+            var doc = DocumentKeys.Captured(key, CaptureStore.Snapshot(), OpenDocuments(), PreviewStore.Rows, out var problem);
             if (doc == null && problem != null)
             {
                 // Until this said so, a GUID in the other spelling answered "no
@@ -860,7 +860,7 @@ namespace Supervertaler.MemoQ.Core
             var key = Query(ctx)["document"];
             if (!string.IsNullOrWhiteSpace(key))
             {
-                var doc = DocumentKeys.Live(key, PreviewStore.Documents(), out var problem);
+                var doc = DocumentKeys.Live(key, PreviewStore.Documents(), CaptureStore.Snapshot(), PreviewStore.Rows, out var problem);
                 if (doc == null) { TryWrite(ctx, 404, Json(new ErrorBody { Error = problem })); return; }
                 only = doc.DocumentGuid;
             }
@@ -2133,7 +2133,7 @@ namespace Supervertaler.MemoQ.Core
             }
             else if (req.Index > 0)
             {
-                var doc = DocumentKeys.Live(req.Document, PreviewStore.Documents(), out var problem);
+                var doc = DocumentKeys.Live(req.Document, PreviewStore.Documents(), CaptureStore.Snapshot(), PreviewStore.Rows, out var problem);
                 if (doc == null) { TryWrite(ctx, 404, Json(new ErrorBody { Error = problem })); return; }
 
                 var rows = PreviewStore.Rows(doc.DocumentGuid);
@@ -2267,7 +2267,7 @@ namespace Supervertaler.MemoQ.Core
                 return null;
             }
 
-            doc = DocumentKeys.Live(Query(ctx)["document"], PreviewStore.Documents(), out problem);
+            doc = DocumentKeys.Live(Query(ctx)["document"], PreviewStore.Documents(), CaptureStore.Snapshot(), PreviewStore.Rows, out problem);
             return doc == null ? null : PreviewStore.Rows(doc.DocumentGuid);
         }
 
