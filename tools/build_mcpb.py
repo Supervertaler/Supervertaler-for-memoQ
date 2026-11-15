@@ -116,7 +116,7 @@ def main() -> int:
             print(f"  (icon not found at {ICON} - skipped)")
 
     print(f"Done: {out}  ({out.stat().st_size / (1024 * 1024):.1f} MB)")
-    print("Install: Claude Desktop > Settings > Extensions > Advanced settings > Install extension…")
+    print("Install: Claude Desktop > Settings > Desktop app > Extensions > Manage > Advanced settings > Install extension")
     return 0
 
 

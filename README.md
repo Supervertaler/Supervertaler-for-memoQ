@@ -120,7 +120,8 @@ Then:
   plugin lookups while working in the translation grid* → **Supervertaler terms**
   → Options → choose a glossary → **Enable plugin**.
 - **Claude Desktop** – install `Supervertaler-for-memoQ-MCP-Server.mcpb`
-  (Settings → Extensions → Advanced settings → Install extension…). It is the
+  (Settings → Desktop app → Extensions → Manage, then Advanced settings →
+  Install extension). It is the
   same MCP server exe as the Trados extension with `SUPERVERTALER_HOST=memoq`
   set; build it with `python tools/build_mcpb.py`. Other MCP clients: run the
   exe with that variable set. Steps in the

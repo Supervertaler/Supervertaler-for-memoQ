@@ -185,7 +185,8 @@ namespace Supervertaler.PromptEditor
             // ordinary case read as a failure.
             Paragraph(
                 "Claude Desktop installs extensions from inside its own settings: Settings, " +
-                "Extensions, Advanced settings, Install extension. The button copies the " +
+                "Desktop app, Extensions, Manage, and on the page that opens, Advanced " +
+                "settings, Install extension. The button copies the " +
                 "extension's location so you can paste it there, and shows you the file. Nothing " +
                 "is downloaded – it came with Supervertaler.");
 
@@ -233,7 +234,7 @@ namespace Supervertaler.PromptEditor
 
         /// <summary>
         /// Puts the extension in front of the user, with its location on the
-        /// clipboard and the three steps to hand. Claude Desktop installs
+        /// clipboard and the steps to hand. Claude Desktop installs
         /// extensions from inside its own settings, so that is as far as
         /// anything out here can take them.
         /// </summary>
@@ -281,8 +282,9 @@ namespace Supervertaler.PromptEditor
             catch { /* the clipboard can be held by another program; not fatal */ }
 
             var message = new StringBuilder();
-            message.Append("In Claude Desktop, open Settings, then Extensions, then Advanced ");
-            message.Append("settings, then Install extension.").Append(Environment.NewLine);
+            message.Append("In Claude Desktop, open Settings, then Desktop app, then Extensions, ");
+            message.Append("then Manage. On the page that opens, choose Advanced settings, then ");
+            message.Append("Install extension.").Append(Environment.NewLine);
             message.Append(Environment.NewLine);
 
             if (copied)
