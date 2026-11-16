@@ -6,6 +6,13 @@ matches the Supervertaler for Trados changelog – one bold headline per bullet,
 a ★ on the things a release would be announced for – so the two read alike and
 any release tooling that buckets on these headings works for both.
 
+## [0.1.31] – Unreleased
+
+### Changed
+
+- ★ **The licence is now checked at licence.supervertaler.com.** Until now the plugin asked Lemon Squeezy, the company that takes the subscription payments, directly whether a licence key is valid. Lemon Squeezy is closing on 31 March 2027, so the plugin now asks an address of Supervertaler’s own, which passes the question on. Nothing changes for you: your key, your activations and your subscription stay as they are. Please install this version or a later one before the end of March 2027; earlier versions may stop recognising a paid licence after that date.
+- **The Claude Desktop setup steps name the Extensions page where it now is.** Claude Desktop moved it to Settings, Desktop app, Extensions, Manage; the setup window and the message its button shows now say so.
+
 ## [0.1.30] – 2026-11-13
 
 ### Fixed
