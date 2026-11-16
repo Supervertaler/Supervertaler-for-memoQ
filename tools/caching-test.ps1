@@ -132,7 +132,9 @@ Check ($usrOne.Contains('chemistry') -and -not $sysOne.Contains('chemistry')) 's
 $client = $plugin.GetType('Supervertaler.Core.LlmClient')
 $extract = $client.GetMethod('ExtractClaudeUsage', $Static)
 $usageT = $plugin.GetType('Supervertaler.Core.ApiUsage')
-function Usage($json) { return $extract.Invoke($null, [object[]]@([string]$json)) }
+# Core's parser gained a second parameter (did the request ask for the one-hour
+# cache?). memoQ does not ask for it, so false: the five-minute reading.
+function Usage($json) { return $extract.Invoke($null, [object[]]@([string]$json, $false)) }
 function Field($u, $name) { return $usageT.GetField($name).GetValue($u) }
 
 $flat = '{"usage":{"input_tokens":1041,"cache_creation_input_tokens":45870,"cache_read_input_tokens":0,"output_tokens":1233}}'
