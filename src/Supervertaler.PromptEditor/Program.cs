@@ -70,6 +70,11 @@ namespace Supervertaler.PromptEditor
                 // damaged file set aside, a locked write that failed. Never a key.
                 Supervertaler.Core.ApiKeyStore.Log = EditorLog;
 
+                // The editor shows memoQ's own prompt library (prompt_library\memoQ),
+                // as the plugin does. Not under a harness (see the plugin director).
+                if (!Supervertaler.MemoQ.Core.SharedSettings.InHarness)
+                    Supervertaler.Core.SupervertalerPaths.SetProduct("memoQ");
+
                 // Before the window is built, so the library it shows already
                 // has the built-in prompts in it (see DefaultPrompts).
                 Supervertaler.MemoQ.Core.DefaultPrompts.Ensure(EditorLog);

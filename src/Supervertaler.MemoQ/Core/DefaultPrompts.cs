@@ -3,8 +3,9 @@ using System;
 namespace Supervertaler.MemoQ.Core
 {
     /// <summary>
-    /// Puts Supervertaler's built-in prompts into the shared prompt library,
-    /// and keeps them current.
+    /// Puts Supervertaler's built-in prompts into memoQ's prompt library
+    /// (prompt_library\memoQ since 21 Nov 2026, filled once from the shared
+    /// folder first), and keeps them current.
     ///
     /// <para>Until 2026-09-24 only the Trados plugin ever did this. A translator
     /// with both products never noticed, because Trados had filled the shared
@@ -28,6 +29,15 @@ namespace Supervertaler.MemoQ.Core
 
             try
             {
+                // First the one-time copy into memoQ's own library, so the built-in
+                // prompts below land beside the translator's own, and its outcome
+                // is logged once (see core's ProductPromptLibrary).
+                var dir = global::Supervertaler.Core.SupervertalerPaths.PromptLibraryDir;
+                var copy = global::Supervertaler.Core.ProductPromptLibrary.LastResult;
+                if (copy != null)
+                    log?.Invoke("Own prompt library " + dir + ": " + copy +
+                                (copy.Failed.Count > 0 ? ". Failed: " + string.Join(" | ", copy.Failed) : ""));
+
                 new global::Supervertaler.Core.PromptLibrary().EnsureDefaultPrompts();
             }
             catch (Exception ex)

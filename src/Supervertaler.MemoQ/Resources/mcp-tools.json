@@ -601,7 +601,7 @@
     {
       "name": "list_prompts",
       "access": "read",
-      "description": "List the prompts in the shared Supervertaler prompt library (name, path, category, description). The same library the Trados plugin and the prompt editor use.",
+      "description": "List the prompts in Supervertaler for memoQ's prompt library (name, path, category, description): the library the prompt editor shows. Supervertaler for Trados keeps a separate one.",
       "inputSchema": {
         "type": "object",
         "properties": {}
@@ -639,7 +639,7 @@
     {
       "name": "save_prompt",
       "access": "write",
-      "description": "Create or update a prompt in the shared Supervertaler library. Use this to draft a project-specific translation prompt from what get_project, get_segments, get_confirmed_pairs and lookup_term tell you - then the user selects it in memoQ under Resources > Settings > MT > Supervertaler > Prompt. A prompt with the same name and category is updated in place. Use {{SOURCE_LANGUAGE}} and {{TARGET_LANGUAGE}} placeholders rather than naming languages.",
+      "description": "Create or update a prompt in Supervertaler for memoQ's prompt library. Use this to draft a project-specific translation prompt from what get_project, get_segments, get_confirmed_pairs and lookup_term tell you - then the user selects it in memoQ under Resources > Settings > MT > Supervertaler > Prompt. A prompt with the same name and category is updated in place. Use {{SOURCE_LANGUAGE}} and {{TARGET_LANGUAGE}} placeholders rather than naming languages.",
       "inputSchema": {
         "type": "object",
         "properties": {

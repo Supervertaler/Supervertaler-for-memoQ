@@ -6,6 +6,14 @@ matches the Supervertaler for Trados changelog – one bold headline per bullet,
 a ★ on the things a release would be announced for – so the two read alike and
 any release tooling that buckets on these headings works for both.
 
+## [0.1.32] – Unreleased
+
+### Changed
+
+- ★ **Supervertaler for memoQ has its own prompt library.** Your prompts are now in `prompt_library\memoQ` inside your Supervertaler data folder, instead of the folder memoQ used to share with Supervertaler for Trados and Workbench. The first time memoQ or the prompt editor starts with this version, the prompts meant for memoQ are copied there: those marked for memoQ and those not marked for any product. Nothing in the old folder is moved or deleted. The prompt you chose in memoQ's settings keeps pointing at the same prompt. From now on a prompt you change in memoQ no longer changes in Trados, and prompts made for Trados no longer appear in memoQ's list.
+- **Claude Haiku 5.5 is in the Claude model list.** It is Anthropic's smallest and cheapest model, at $0.10/$0.50 per million tokens, and comes first in the list. A new installation still starts on Claude Sonnet 5.5; a model you already chose stays chosen.
+- **AutoPrompt ranks your termbase and the document above translation memory.** The prompts it writes used to tell the AI that earlier translations came first, above the termbase. They now say what the translation requests themselves say: the termbase and the document take precedence, and a confirmed segment is a wording to check against them.
+
 ## [0.1.31] – 2026-11-21
 
 ### Changed

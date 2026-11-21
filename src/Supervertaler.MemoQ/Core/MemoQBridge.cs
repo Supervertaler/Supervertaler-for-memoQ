@@ -1067,11 +1067,9 @@ namespace Supervertaler.MemoQ.Core
             TryWrite(ctx, 200, Json(new OkBody
             {
                 Ok = true,
-                Message = "Saved to the shared prompt library as \"" + prompt.Name + "\" (" + prompt.RelativePath + "). "
-                        + "Recorded as drafted by the chat"
-                        + (string.Equals(prompt.App, "both", StringComparison.OrdinalIgnoreCase)
-                            ? " and available to both products. "
-                            : " and marked for " + prompt.App + " only, so it does not appear in the other product's list. ")
+                // memoQ's own library since 21 Nov 2026: Trados no longer sees it.
+                Message = "Saved to the memoQ prompt library as \"" + prompt.Name + "\" (" + prompt.RelativePath + "). "
+                        + "Recorded as drafted by the chat. "
                         + "Because it is a drafted prompt, the runtime sends its own locked terms rather than "
                         + "the translator's glossary as well - forbidden terms still go. "
                         + "The user selects it in memoQ under Resources > Settings > MT > Supervertaler > Prompt."
