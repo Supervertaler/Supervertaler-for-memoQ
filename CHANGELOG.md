@@ -12,6 +12,7 @@ any release tooling that buckets on these headings works for both.
 
 - ★ **The licence is now checked at licence.supervertaler.com.** Until now the plugin asked Lemon Squeezy, the company that takes the subscription payments, directly whether a licence key is valid. Lemon Squeezy is closing on 31 March 2027, so the plugin now asks an address of Supervertaler’s own, which passes the question on. Nothing changes for you: your key, your activations and your subscription stay as they are. Please install this version or a later one before the end of March 2027; earlier versions may stop recognising a paid licence after that date.
 - **The Claude Desktop setup steps name the Extensions page where it now is.** Claude Desktop moved it to Settings, Desktop app, Extensions, Manage; the setup window and the message its button shows now say so.
+- **Claude Fable 5.2 replaces Claude Fable 5.1** in the Claude and OpenRouter model lists. Fable 5.2 is Anthropic's most capable model, released on 10 November 2026, and costs less than 5.1: $8/$40 per million tokens instead of $10/$50, still double Claude Opus 5.5. The cost estimate knows its prices. If you had Fable 5.1 chosen, it stays chosen and keeps working, and its runs are still costed; pick Fable 5.2 from the list to switch.
 
 ## [0.1.30] – 2026-11-13
 
