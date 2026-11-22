@@ -4,7 +4,7 @@ namespace Supervertaler.MemoQ.Core
 {
     /// <summary>
     /// Puts Supervertaler's built-in prompts into memoQ's prompt library
-    /// (prompt_library\memoQ since 21 Nov 2026, filled once from the shared
+    /// (prompt_library_memoQ beside the shared folder since 22 Nov 2026, filled once from the shared
     /// folder first), and keeps them current.
     ///
     /// <para>Until 2026-09-24 only the Trados plugin ever did this. A translator

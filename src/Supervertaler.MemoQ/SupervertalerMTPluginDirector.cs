@@ -57,9 +57,9 @@ namespace Supervertaler.MemoQ
             // a locked write that failed. Never a key.
             global::Supervertaler.Core.ApiKeyStore.Log = PluginLog.Write;
 
-            // Supervertaler for memoQ keeps its prompts in prompt_library\memoQ, not
-            // the folder all products used to share (21 Nov 2026); the first start
-            // copies them there (DefaultPrompts.Ensure, in the background). Said
+            // Supervertaler for memoQ keeps its prompts in prompt_library_memoQ, beside
+            // the folder all products used to share (21-22 Nov 2026); the first start
+            // carries over a pre-release prompt_library\memoQ, or copies them there (DefaultPrompts.Ensure, in the background). Said
             // before anything reads a prompt; touches no disk. Not under a harness,
             // which reads the library directly and must not start a copy into the
             // translator's real data folder.
