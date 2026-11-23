@@ -252,6 +252,11 @@ namespace Supervertaler.PromptEditor
             {
                 ToolTipText = "Clean a memoQ XLIFF you exported, so that its rows no longer say they came from machine translation"
             });
+            memoqMenu.DropDownItems.Add(new ToolStripMenuItem("Remove MT marks from a &Trados return package…", null, async (s, e) => await RemoveTradosMtMarksAsync())
+            {
+                ToolTipText = "Clean the return package (.sdlrpx) memoQ made for a Trados package, so that Trados "
+                            + "no longer shows AT on its rows. Nothing in memoQ needs to change"
+            });
             memoqMenu.DropDownItems.Add(new ToolStripSeparator());
             memoqMenu.DropDownItems.Add(new ToolStripMenuItem("&Termbases…", null, (s, e) => ShowTermbases())
             {
@@ -2108,6 +2113,100 @@ namespace Supervertaler.PromptEditor
                     + "export it with Include skeleton and preview ticked, which saves an .mqxlz, and clean that.");
             }
 
+            text.AppendLine();
+            text.AppendLine("The ? in the title bar opens the full instructions.");
+            return text.ToString().TrimEnd();
+        }
+
+        private async Task RemoveTradosMtMarksAsync()
+        {
+            if (_removingMtMarks) return;
+
+            string[] paths;
+            using (var dialog = new OpenFileDialog
+            {
+                Title = "Remove MT marks from a Trados return package",
+                Filter = "Trados return package or SDLXLIFF (*.sdlrpx;*.sdlxliff)|*.sdlrpx;*.sdlxliff",
+                Multiselect = true,
+            })
+            {
+                if (dialog.ShowDialog(this) != DialogResult.OK) return;
+                paths = dialog.FileNames;
+            }
+
+            _removingMtMarks = true;
+            UseWaitCursor = true;
+            _status.Text = "Removing MT marks…";
+            try
+            {
+                var outcomes = await Task.Run(() => paths.Select(CleanTradosMtMarks).ToList());
+                var written = outcomes.Count(o => o.Result?.WrittenTo != null);
+                _status.Text = written == 0
+                    ? "No MT marks removed."
+                    : "MT marks removed: " + written + " clean cop" + (written == 1 ? "y" : "ies") + " written.";
+                using (var report = new ReportDialog("Remove MT marks", TradosMtMarksReport(outcomes), TradosMtMarksDocsUrl))
+                    report.ShowDialog(this);
+            }
+            finally
+            {
+                UseWaitCursor = false;
+                _removingMtMarks = false;
+            }
+        }
+
+        private static (string Path, MtMarks.Result Result, string Error) CleanTradosMtMarks(string path)
+        {
+            try
+            {
+                return (path, TradosMtMarks.Clean(path), null);
+            }
+            catch (Exception ex)
+            {
+                return (path, null, ex.Message);
+            }
+        }
+
+        internal const string TradosMtMarksDocsUrl = MtMarksDocsUrl + "#trados-return-packages";
+
+        /// <summary>What was cleaned, where the copies went, and that the copy is what to deliver.</summary>
+        internal static string TradosMtMarksReport(IList<(string Path, MtMarks.Result Result, string Error)> outcomes)
+        {
+            var text = new StringBuilder();
+            foreach (var o in outcomes)
+            {
+                var name = Path.GetFileName(o.Path);
+                if (o.Error != null)
+                {
+                    text.AppendLine(name + ": not cleaned. " + o.Error);
+                }
+                else if (o.Result.WrittenTo == null)
+                {
+                    text.AppendLine(name + ": no MT marks in it, so nothing was written.");
+                }
+                else
+                {
+                    // No breakdown by engine, unlike the memoQ XLIFF report: memoQ
+                    // names the engine only on rows edited after MT, so a count
+                    // per engine would split one engine's rows into two lines.
+                    text.AppendLine(name + ": " + o.Result.Removed + " MT mark" + (o.Result.Removed == 1 ? "" : "s") + " removed.");
+                }
+            }
+
+            var written = outcomes.Where(o => o.Result?.WrittenTo != null).ToList();
+            if (written.Count == 0)
+                return text.ToString().TrimEnd();
+
+            var folders = written.Select(o => Path.GetDirectoryName(o.Result.WrittenTo))
+                .Distinct(StringComparer.OrdinalIgnoreCase).ToList();
+            var one = written.Count == 1;
+            text.AppendLine();
+            text.AppendLine((one ? "The clean copy is in " : "The clean copies are in ") + string.Join(" and ", folders) + ".");
+            text.AppendLine();
+            text.AppendLine("Deliver the clean " + (one ? "copy" : "copies") + " instead of the original"
+                + (one ? "" : "s") + ". Every row now reads as your own translation: Trados shows no AT on it. "
+                + "Your translations, statuses and everything else are unchanged, and nothing in memoQ needs to change.");
+            text.AppendLine();
+            text.AppendLine("memoQ itself still shows the marks. If you export the return package again, clean the new one too.");
             text.AppendLine();
             text.AppendLine("The ? in the title bar opens the full instructions.");
             return text.ToString().TrimEnd();

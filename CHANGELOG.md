@@ -8,6 +8,10 @@ any release tooling that buckets on these headings works for both.
 
 ## [0.1.32] – Unreleased
 
+### Added
+
+- ★ **Remove MT marks from a Trados return package.** When a client sends a Trados package and you translate it in memoQ, the return package (.sdlrpx) tells the client's Trados which rows came from machine translation: Trados shows them as AT, even the ones you rewrote. In the Supervertaler editor, **memoQ → Remove MT marks from a Trados return package…** writes a clean copy of the return package into a Clean folder beside it, in which every row reads as your own translation. Nothing in memoQ needs to change: export the return package as usual, clean it, and deliver the clean copy. Your translations, statuses and the package's files and IDs stay exactly as they were; only the machine-translation origin goes. It works for a single .sdlxliff too, and for MT from any engine, including Trados's own neural and adaptive MT.
+
 ### Changed
 
 - ★ **Supervertaler for memoQ has its own prompt library.** Your prompts are now in `prompt_library_memoQ`, a folder in your Supervertaler data folder next to `prompt_library`, which memoQ used to share with Supervertaler for Trados and Workbench. It sits beside `prompt_library` rather than inside it so that older versions of Workbench and Trados, which read `prompt_library` with all its subfolders, never see memoQ's prompts or list them twice. The first time memoQ or the prompt editor starts with this version, the prompts meant for memoQ are copied there: those marked for memoQ and those not marked for any product. Nothing in the old folder is moved or deleted. The prompt you chose in memoQ's settings keeps pointing at the same prompt. From now on a prompt you change in memoQ no longer changes in Trados, and prompts made for Trados no longer appear in memoQ's list.
