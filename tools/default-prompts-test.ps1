@@ -21,7 +21,8 @@ $script:probed = @{}
     return $null
 })
 
-$plugin = [Reflection.Assembly]::LoadFrom('D:\SynologyDrive\Dev\Sv\Supervertaler-for-memoQ\src\Supervertaler.MemoQ\bin\Release\Supervertaler.MemoQ.dll')
+# The build beside this script, so a worktree tests its own build.
+$plugin = [Reflection.Assembly]::LoadFrom((Join-Path $PSScriptRoot '..\src\Supervertaler.MemoQ\bin\Release\Supervertaler.MemoQ.dll'))
 $Static = [Reflection.BindingFlags]'Public,NonPublic,Static'
 
 $fails = 0
@@ -82,9 +83,33 @@ try {
     $first = [IO.File]::ReadAllText($prompt)
     $ensure.Invoke($null, @($noLog))
     Check ([IO.File]::ReadAllText($prompt) -ceq $first) 'a second run leaves the file as the first wrote it'
+
+    # ---- 5. memoQ's own library gets no Trados-only built-ins ----------------
+    # 0.1.32 wrote ten of them into prompt_library_memoQ, shown greyed out.
+    $paths.GetMethod('SetProduct', $Static).Invoke($null, @('memoQ'))
+    $own = [string]$paths.GetProperty('PromptLibraryDir', $Static).GetValue($null)
+    if (-not $own.StartsWith($temp, [StringComparison]::OrdinalIgnoreCase)) { throw "memoQ's library is $own, not under the temporary folder" }
+    $ensure.Invoke($null, @($noLog))
+    $trados = @(Get-ChildItem -Path $own -Recurse -Filter *.md | Where-Object { [IO.File]::ReadAllText($_.FullName) -match 'app: "trados"' })
+    Check ($trados.Count -eq 0) "memoQ's library gets no Trados-only built-ins ($($trados.Count))"
+    Check (Test-Path (Join-Path $own 'Translate\Default\Default Translation Prompt.md')) '  but does get the untagged ones'
+
+    # ---- 6. one 0.1.32 wrote is removed and logged; an edited one stays ------
+    $ql = Join-Path $own 'QuickLauncher\Default'
+    $define = Join-Path $ql 'Define [Trados].md'
+    $brief = Join-Path $ql 'Generate project brief [Trados].md'
+    $shipped = "---`ntype: prompt`nname: `"Define`"`ncategory: `"QuickLauncher/Default`"`ndefault: true`nread_only: true`nquicklauncher: true`napp: `"trados`"`n---`n`nDefine `"{{SELECTION}}`" and give practical examples showing how it's used."
+    [IO.File]::WriteAllText($define, $shipped, (New-Object Text.UTF8Encoding $true))
+    [IO.File]::WriteAllText($brief, "---`ntype: prompt`ndefault: true`napp: `"trados`"`n---`n`nMy own brief prompt.")
+    $logged = New-Object System.Collections.Generic.List[string]
+    $ensure.Invoke($null, @([Action[string]]{ param($m) $logged.Add($m) }))
+    Check (-not (Test-Path -LiteralPath $define)) 'an untouched Trados built-in from 0.1.32 is removed'
+    Check (($logged -join ' ') -match 'Removed 1 built-in.*Define \[Trados\]\.md') "  and the log says so: $($logged -join ' / ')"
+    Check (Test-Path -LiteralPath $brief) 'an edited one stays'
 }
 finally {
     $env:SUPERVERTALER_HARNESS = $savedFlag
+    $paths.GetMethod('ClearProduct', $Static).Invoke($null, @())
     $paths.GetMethod('Reset', $Static).Invoke($null, @())
     Remove-Item -Recurse -Force $temp -ErrorAction SilentlyContinue
 }

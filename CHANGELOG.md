@@ -6,6 +6,12 @@ matches the Supervertaler for Trados changelog – one bold headline per bullet,
 a ★ on the things a release would be announced for – so the two read alike and
 any release tooling that buckets on these headings works for both.
 
+## [Unreleased]
+
+### Fixed
+
+- **The Trados-only QuickLauncher prompts no longer appear in memoQ's prompt library.** Version 0.1.32 still wrote ten built-in prompts made for Supervertaler for Trados into memoQ's own library (Define, the three Explain selection prompts, Show current filename, What file is this segment from?, Generate project brief, Assess how I translated the current segment, and the two Translate prompts), where the prompt editor showed them greyed out as "Trados only". memoQ no longer writes them, and the first start of this version removes the ones 0.1.32 wrote, but only while they are exactly as shipped: a copy you changed is left where it is. Supervertaler for Trados keeps its own copies.
+
 ## [0.1.32] – 2026-11-23
 
 ### Added

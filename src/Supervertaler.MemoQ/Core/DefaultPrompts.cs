@@ -38,7 +38,12 @@ namespace Supervertaler.MemoQ.Core
                     log?.Invoke("Own prompt library " + dir + ": " + copy +
                                 (copy.Failed.Count > 0 ? ". Failed: " + string.Join(" | ", copy.Failed) : ""));
 
-                new global::Supervertaler.Core.PromptLibrary().EnsureDefaultPrompts();
+                // Also removes Trados-only built-ins that 0.1.32 wrote into
+                // memoQ's library, while still exactly as shipped (see core).
+                var removed = new global::Supervertaler.Core.PromptLibrary().EnsureDefaultPrompts();
+                if (removed.Count > 0)
+                    log?.Invoke("Removed " + removed.Count + " built-in prompt(s) made for another product from " + dir +
+                                ": " + string.Join(" | ", removed));
             }
             catch (Exception ex)
             {
