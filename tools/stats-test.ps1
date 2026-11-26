@@ -18,7 +18,8 @@ $script:probed = @{}
     }
     return $null
 })
-$plugin = [Reflection.Assembly]::LoadFrom('D:\SynologyDrive\Dev\Sv\Supervertaler-for-memoQ\src\Supervertaler.MemoQ\bin\Release\Supervertaler.MemoQ.dll')
+# The build of the checkout this script is in (a worktree tests its own build).
+$plugin = [Reflection.Assembly]::LoadFrom((Join-Path (Split-Path -Parent $PSScriptRoot) 'src\Supervertaler.MemoQ\bin\Release\Supervertaler.MemoQ.dll'))
 $Static = [Reflection.BindingFlags]'Public,NonPublic,Static'
 $fails = 0
 function Check($ok, $label) { if (-not $ok) { $script:fails++ }; Write-Host "$(if ($ok) {'PASS'} else {'FAIL'}) $label" }
@@ -33,15 +34,17 @@ function Call($type, $name, [object[]]$argv) {
 function Keys($json) { return @(($json | ConvertFrom-Json).PSObject.Properties.Name) }
 
 # ---- 1. the usage ping carries exactly what the privacy policy lists ---------
-$a = New-Object object[] 5
+$a = New-Object object[] 7
 $a[0] = [string]'11111111-2222-3333-4444-555555555555'; $a[1] = [string]'0.1.1'; $a[2] = [string]'12.4.53'
 $a[3] = [string]'Microsoft Windows NT 10.0.26200.0'; $a[4] = [string]'en-GB'
+$a[5] = [string]'parallels'; $a[6] = [string]'arm64'
 $ping = [string](Call $stats 'PingJson' $a)
 $p = $ping | ConvertFrom-Json
 Check ($p.product -eq 'memoq') "the ping is filed under memoq: $($p.product)"
 Check ($p.trados_version -eq '12.4.53') 'the memoQ version goes in the host-version field the dashboard labels by product'
 Check ($p.plugin_version -eq '0.1.1' -and $p.locale -eq 'en-GB' -and $p.id.Length -eq 36) 'id, plugin version and locale are there'
-$allowed = @('id', 'product', 'plugin_version', 'trados_version', 'os_version', 'locale')
+Check ($p.vm -eq 'parallels' -and $p.arch -eq 'arm64') "the VM and processor type are there, as the server's vm and arch: $($p.vm), $($p.arch)"
+$allowed = @('id', 'product', 'plugin_version', 'trados_version', 'os_version', 'locale', 'vm', 'arch')
 $extra = @(Keys $ping | Where-Object { $allowed -notcontains $_ })
 Check ($extra.Count -eq 0) "nothing beyond the privacy policy's list (extra: $($extra -join ', '))"
 

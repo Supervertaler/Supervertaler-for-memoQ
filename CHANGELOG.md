@@ -8,6 +8,10 @@ any release tooling that buckets on these headings works for both.
 
 ## [Unreleased]
 
+### Changed
+
+- **The anonymous usage statistics now also say whether Windows runs in a virtual machine, and the processor type.** They show whether you run memoQ on a Mac (Parallels, or Windows for ARM on an Apple Silicon Mac), so problems that only happen there can be found and fixed. As before, they are sent only if you agreed to them, and never include your documents, translations or file names. The question when you first start the editor and the line under Settings now list both.
+
 ### Fixed
 
 - **The Trados-only QuickLauncher prompts no longer appear in memoQ's prompt library.** Version 0.1.32 still wrote ten built-in prompts made for Supervertaler for Trados into memoQ's own library (Define, the three Explain selection prompts, Show current filename, What file is this segment from?, Generate project brief, Assess how I translated the current segment, and the two Translate prompts), where the prompt editor showed them greyed out as "Trados only". memoQ no longer writes them, and the first start of this version removes the ones 0.1.32 wrote, but only while they are exactly as shipped: a copy you changed is left where it is. Supervertaler for Trados keeps its own copies.

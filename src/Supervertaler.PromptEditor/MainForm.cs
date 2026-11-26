@@ -822,7 +822,9 @@ namespace Supervertaler.PromptEditor
             var answer = MessageBox.Show(this,
                 "May Supervertaler for memoQ send anonymous usage statistics?\r\n\r\n" +
                 "If you agree, it sends one small message each time memoQ starts: a random ID, " +
-                "the plugin version, the Windows and memoQ versions and your system language. " +
+                "the plugin version, the Windows and memoQ versions, your system language, the " +
+                "processor type and whether Windows runs in a virtual machine (as with Parallels " +
+                "on a Mac). " +
                 "Never your documents, translations, terminology or file names.\r\n\r\n" +
                 "It shows me how many people use the memoQ plugin, and on which versions of memoQ. " +
                 "You can change your answer at any time under Settings, Translation settings. " +

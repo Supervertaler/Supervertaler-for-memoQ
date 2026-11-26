@@ -20,7 +20,10 @@ namespace Supervertaler.MemoQ.Core
     /// <para><b>The usage ping</b> is opt-in: nothing is sent unless the
     /// translator said yes in the editor (see SharedSettings.UsageStats). It
     /// carries only what the privacy policy lists - a random id, the plugin
-    /// version, the Windows version, the memoQ version and the system locale.
+    /// version, the Windows version, the memoQ version, the system locale, and,
+    /// from 0.1.33, the virtual machine Windows runs in, if any, and the
+    /// computer's processor type (Plugin Core's MachineInfo). Those two show who
+    /// runs memoQ on a Mac: "parallels", or "arm64" for Windows on ARM.
     /// The country is added by the server from the connection; no IP address is
     /// stored.</para>
     ///
@@ -75,7 +78,8 @@ namespace Supervertaler.MemoQ.Core
                 if (id.Length == 0) return;
 
                 var json = PingJson(id, PluginVersion(), MemoQVersion(), OsVersion(),
-                                    CultureInfo.CurrentUICulture.Name);
+                                    CultureInfo.CurrentUICulture.Name,
+                                    MachineInfo.VirtualizationHost(), MachineInfo.NativeArchitecture());
                 await PostAsync("/ping", json).ConfigureAwait(false);
             }
             catch { /* silent: statistics never cost the translator anything */ }
@@ -119,7 +123,7 @@ namespace Supervertaler.MemoQ.Core
             : "expired";
 
         internal static string PingJson(string id, string pluginVersion, string memoqVersion,
-                                        string osVersion, string locale) =>
+                                        string osVersion, string locale, string vm, string arch) =>
             Serialize(new Ping
             {
                 Id = id,
@@ -130,6 +134,8 @@ namespace Supervertaler.MemoQ.Core
                 HostVersion = memoqVersion,
                 OsVersion = osVersion,
                 Locale = locale,
+                Vm = vm,
+                Arch = arch,
             });
 
         internal static string TrialJson(string fingerprint, string pluginVersion, string memoqVersion,
@@ -193,6 +199,8 @@ namespace Supervertaler.MemoQ.Core
             [DataMember(Name = "trados_version", Order = 3)] public string HostVersion { get; set; }
             [DataMember(Name = "os_version", Order = 4)] public string OsVersion { get; set; }
             [DataMember(Name = "locale", Order = 5)] public string Locale { get; set; }
+            [DataMember(Name = "vm", Order = 6)] public string Vm { get; set; }
+            [DataMember(Name = "arch", Order = 7)] public string Arch { get; set; }
         }
 
         [DataContract]

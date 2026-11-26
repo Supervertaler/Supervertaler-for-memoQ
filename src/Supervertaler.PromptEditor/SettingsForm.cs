@@ -356,8 +356,8 @@ namespace Supervertaler.PromptEditor
             _usageStats.AutoSize = true;
             Controls.Add(_usageStats);
             y += 24;
-            Hint("A random ID, the plugin, Windows and memoQ versions and your system language - "
-                + "never your documents or translations.", fieldX, wide);
+            Hint("A random ID, the plugin, Windows and memoQ versions, your system language, the "
+                + "processor type and any virtual machine - never your documents or translations.", fieldX, wide);
             y += 14;
 
             // The team folder is set in Supervertaler for Trados and memoQ follows
